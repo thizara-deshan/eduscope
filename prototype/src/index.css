@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Unistream design tokens — merged design (PM palette)
+   Fixed light scheme: light grey app body, dark ("ink") header
+   and AI assistant card, white surface cards, red record accent.
+   Target: 13-inch in-room touch panel, landscape 1280×800.
+   ============================================================ */
+
+:root {
+  /* Light surfaces */
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --surface-2: #f4f6fb;
+  --surface-3: #e9edf4;
+  --border: #d8dee9;
+  --border-strong: #c2cad8;
+
+  /* Text on light */
+  --text: #1c2430;
+  --text-muted: #5b6675;
+  --text-faint: #8a94a3;
+
+  /* Dark "ink" surfaces (header, AI Studio card, insights, dark tiles) */
+  --ink: #101319;
+  --ink-2: #191d26;
+  --ink-3: #242a35;
+  --ink-border: #2c333f;
+  --on-ink: #f2f4f8;
+  --on-ink-muted: #9aa4b2;
+  --on-ink-faint: #6b7684;
+
+  /* Leaderboard medals */
+  --gold: #e0a530;
+  --silver: #7b828e;
+  --bronze: #b06a3a;
+
+  /* Brand / accent */
+  --accent: #2f6bed;
+  --accent-hover: #285cd0;
+  --accent-soft: rgba(138, 169, 236, 0.12);
+  --on-accent: #ffffff;
+  --brand-red: #e5231f;
+
+  /* Semantic */
+  --record: #e5342e;
+  --record-soft: rgba(229, 52, 46, 0.12);
+  --success: #1c9e6a;
+  --success-soft: rgba(28, 158, 106, 0.14);
+  --warning: #d98a12;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-md: 0 4px 10px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16);
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 24px;
+
+  --sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
+
+  color-scheme: light;
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Grey backdrop behind the kiosk panel (max 1280×800, centered).
+     The panel shrinks to fit smaller windows, so nothing ever scrolls. */
+  background: #d5d6d9;
+  color: var(--text);
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Consistent, visible focus for keyboard/switch users. */
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Utility animations */
+@keyframes pulse-rec {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

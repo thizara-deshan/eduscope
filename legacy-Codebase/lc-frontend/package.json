@@ -1,0 +1,68 @@
+{
+  "name": "lc-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@cycjimmy/jsmpeg-player": "^5.0.1",
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^11.2.7",
+    "@testing-library/user-event": "^12.8.3",
+    "antd": "^4.16.13",
+    "availity-reactstrap-validation": "^2.7.1",
+    "axios": "^0.21.4",
+    "bootstrap": "^5.1.1",
+    "jpeg-js": "^0.4.3",
+    "jwt-decode": "^3.1.2",
+    "list-react-files": "^0.2.0",
+    "md5": "^2.3.0",
+    "moment": "^2.29.1",
+    "moment-timezone": "^0.5.34",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-file-viewer": "^1.2.1",
+    "react-icons": "^4.4.0",
+    "react-infinite-scroll-component": "^6.1.0",
+    "react-player": "^2.9.0",
+    "react-router-dom": "^5.3.0",
+    "react-scripts": "4.0.3",
+    "react-simple-keyboard": "^3.4.39",
+    "react-timezone-select": "^1.1.13",
+    "reactstrap": "^8.10.0",
+    "sass": "^1.42.1",
+    "sass-loader": "^12.4.0",
+    "socket.io-client": "^4.4.0",
+    "web-vitals": "^1.1.2"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "cssnano": {
+    "preset": [
+      "default",
+      {
+        "calc": false
+      }
+    ]
+  }
+}

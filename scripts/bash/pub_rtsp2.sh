@@ -1,0 +1,9 @@
+#!/bin/bash
+rm -f /tmp/rtsp2.sock
+gst-launch-1.0 -e \
+  rtspsrc location=rtsp://172.16.65.25:554/stream/main latency=100 protocols=tcp ! \
+  rtph264depay ! h264parse config-interval=-1 ! \
+  video/x-h264,stream-format=byte-stream,alignment=au ! \
+  queue leaky=downstream max-size-buffers=200 ! \
+  shmsink socket-path=/tmp/rtsp2.sock shm-size=20000000 \
+          wait-for-connection=false sync=false

@@ -1,0 +1,33 @@
+#!/bin/bash
+# Proven working composite record (matches your original). RTSP decoded on VPU,
+# scaled on CPU (no rgaconvert available on this image). Audio from shm.
+gst-launch-1.0 -e \
+  shmsrc socket-path=/tmp/usb.sock is-live=true do-timestamp=true ! \
+    video/x-raw,format=NV12,width=1920,height=1080,framerate=60/1 ! \
+    queue max-size-buffers=6 leaky=downstream ! \
+    videorate drop-only=true ! video/x-raw,framerate=30/1 ! \
+    videoscale ! video/x-raw,width=960,height=540 ! \
+    queue ! comp.sink_0 \
+  \
+  shmsrc socket-path=/tmp/rtsp.sock is-live=true do-timestamp=true ! \
+    video/x-h264,stream-format=byte-stream,alignment=au,width=1920,height=1080,framerate=30/1 ! \
+    h264parse ! mppvideodec ! videoconvert ! \
+    queue max-size-buffers=6 leaky=downstream ! \
+    videorate drop-only=true ! video/x-raw,framerate=30/1 ! \
+    videoscale ! video/x-raw,width=960,height=540 ! \
+    queue ! comp.sink_1 \
+  \
+  compositor name=comp background=black \
+    sink_0::xpos=0   sink_0::ypos=270 \
+    sink_1::xpos=960 sink_1::ypos=270 ! \
+    video/x-raw,width=1920,height=1080,framerate=30/1 ! \
+    queue ! mpph264enc bps=4000000 rc-mode=cbr gop=30 profile=high ! \
+    h264parse config-interval=1 ! queue ! mux. \
+  \
+  shmsrc socket-path=/tmp/audio.sock is-live=true do-timestamp=true ! \
+    audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved ! \
+    queue ! audioconvert ! audioresample ! \
+    voaacenc bitrate=128000 ! aacparse ! \
+    queue ! mux. \
+  \
+  mpegtsmux name=mux alignment=7 ! filesink location=combined_hdmi_rtsp.ts
