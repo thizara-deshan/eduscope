@@ -17,7 +17,7 @@ improvisation.
 
 ## 2. Prototype usage (screens with coverage = full/partial)
 
-`/new-prototype` is a **behavioral and visual spec**, not a code source:
+`/prototype` is a **behavioral and visual spec**, not a code source:
 
 - **Reproduce:** layout, hierarchy, spacing, interaction behavior.
 - **MAY port:** markup structure, the `us-*` semantic-class approach, and the
@@ -57,5 +57,5 @@ improvisation.
 ## 6. Design tokens
 
 - Source of truth: the token sheet in `docs/design/screen-inventory.md`, ported
-  from `/new-prototype`. Screens without prototype coverage use the same token
+  from `/prototype`. Screens without prototype coverage use the same token
   system — no new ad-hoc colors, spacing, or type sizes.
