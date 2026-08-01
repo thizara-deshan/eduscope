@@ -995,6 +995,13 @@ confirmed against the NFR budgets on target hardware (PRD §6).
 
 ## 10. WS event catalog (emitter → consumer)
 
+> **Contract note (2026-07-30).** The authoritative, versioned catalog is now
+> [`contracts/events.md`](../../contracts/events.md) (v0.1.0) with zod schemas
+> in `packages/shared/src/schemas/events.ts`. It adopts this table verbatim
+> plus four additions this section lacked but screens require — listed at the
+> bottom of the table. "Anything not in §10 does not exist" now reads
+> "anything not in contracts/events.md does not exist."
+
 Server→client only; **clients send no WS messages** — commands go over REST
 (target-architecture §2.1). Every event carries `{event, at, seq, payload}`;
 `seq` is per-connection and monotonic so a gap forces a full resync (§5.5).
@@ -1022,6 +1029,15 @@ Server→client only; **clients send no WS messages** — commands go over REST
 | `quiz.question` | quiz-service | student app | publicationId, prompt, options[{id,label,text}], state | on Q-31/Q-33 |
 | `quiz.result` | quiz-service | student app | isCorrect, pointsAwarded, runningScore, **ownRank only** | on close + on reconnect |
 | `quiz.participant` | quiz-service | quiz-service clients | participantId, connectionState | on 4b transition |
+| `audio.control` *(contract-v0 addition)* | core-api | panel, admin | roleId, gain, muted, appliedState, lastError | on apply/fail of a mic-control change — INV-AC-1 needs a push of *actual* applied state |
+| `export.job` *(contract-v0 addition)* | core-api | requesting AuthSession only (B-38) | jobId, state, bytesCopied/Total, error | on ExportJob transition + progress ≥ 5 % (INV-EX-1) |
+| `usb.volumes` *(contract-v0 addition)* | core-api | sessions with the export flow open | volumes[] | on USB insert/remove (LP-11; domain model §10 UsbVolume) |
+| `firmware.state` *(contract-v0 addition)* | core-api | admin AD-5 | FirmwareUpdate read view | on FirmwareUpdate state change |
+
+*The contract-v0 additions cover ExportJob (§6.5) and FirmwareUpdate (§4.13),
+whose linear entity lifecycles deliberately have no machine section here, plus
+the AudioControl applied-state push and USB hotplug that LP-9/LP-11 screens
+need. Payload schemas and full emitter/consumer detail: contracts/events.md.*
 
 **Internal (not WebSocket, listed so no transition dangles):**
 

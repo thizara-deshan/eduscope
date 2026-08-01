@@ -1,0 +1,2995 @@
+openapi: 3.1.0
+info:
+  title: Eduscope core-api — public REST surface
+  version: 0.1.0
+  description: |
+    Contract v0 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
+    is built against this contract on a mock adapter before any backend exists
+    (PRD §9); the Phase-4 backend implements it unchanged or bumps the version.
+
+    Sources of truth: docs/design/domain-model.md (entity naming — every schema
+    below `$ref`s those names exactly), docs/design/state-machines.md
+    (transitions R-/RA-/CH-/Q-/U-/UP-/Z-/HL-xx cited throughout), docs/PRD.md
+    (screen needs LP-/AD-/QZ-/PF-xx), revamp-guide/reference/target-architecture.md §2.
+
+    ## Conventions
+
+    - **Commands never return final state synchronously** (single writer,
+      target-architecture §3.1; rule SM-R-2). Every state-machine command
+      returns `202 Accepted` + `CommandAccepted`; the resulting transition
+      arrives over the WS event channel (contracts/events.md). If no event
+      resolves the command within `resolveBySec` (T-CMD-RESOLVE, 10 s) the UI
+      renders a failure — never an indefinite spinner.
+    - **Refusals are named.** Class A refusals (state-machines §0.4) and all
+      other errors return `application/problem+json` (`Problem`) with a stable
+      machine `code` — never a silent no-op (R-04, INV-SB-3).
+    - **Ids are ULIDs** (INV-G-1/2, DM-13). **Instants are ISO-8601 with an
+      explicit offset, stored UTC** (INV-G-3).
+    - **Pagination** is cursor-based: `?cursor=&limit=` → `{ items, nextCursor }`.
+    - **Auth**: `Authorization: Bearer <accessToken>` (short-lived JWT, PF-17)
+      on every path except `/auth/login` and `/auth/refresh`. Authorization is
+      decided from `role` server-side on every request (INV-U-4); operations
+      marked `x-required-role: admin` reject lecturers with
+      `403 not-authorized`. While `mustResetPassword` is true, every surface
+      except `/auth/change-password` and `/auth/me` answers
+      `403 auth.password-reset-required` (INV-U-3).
+    - **Secrets never appear in any response**: stream keys, upload
+      credentials, RTSP passwords, password hashes (INV-ST-1, INV-U-1, PF-17).
+    - `x-decision: D-xx` marks paths/schemas whose SHAPE depends on an open
+      decision (docs/discovery/open-decisions.md); `P-1` is the open title
+      fact-check; `DM-Pn` are proposed register entries from the domain model.
+    - The zod mirror of every schema lives in `packages/shared/src/schemas/`
+      and is what the mock adapter and the future backend validate against.
+
+    ## Surfaces NOT in this file
+
+    - WS events + WebRTC preview signaling + the device↔quiz-server sync
+      stream: contracts/events.md.
+    - core-api ↔ pipeline-manager and ↔ AI services internal APIs
+      (target-architecture §2.2/§2.3): internal, localhost-only — Phase 3.
+    - The student-facing quiz-app REST surface (join, register, answer): owned
+      by quiz-service; its student events are catalogued in events.md §3, its
+      REST contract is an open item (see events.md "Open items").
+
+servers:
+  - url: /api/v1
+    description: core-api, single-origin with runtime config (PF-18, INV-NC-2)
+
+tags:
+  - name: auth
+    description: LP-1 unified login, LP-2 forced reset, PF-17 sessions
+  - name: recording
+    description: Machine 1a commands + cold-boot snapshot (LP-3…LP-6)
+  - name: channels
+    description: ChannelConfig + machine 1c toggles (LP-7, AD-1, AD-8)
+  - name: sources
+    description: SourceRole / PhysicalInput / SourceBinding / audio (LP-8, LP-9, AD-2)
+  - name: recordings
+    description: Library, playback, delete (LP-10) + USB export (LP-11)
+  - name: uploads
+    description: AD-9 upload queue
+  - name: provisioning
+    description: Read-only device identity (AD-10) + layouts + health
+  - name: storage
+    description: AD-4 local storage, volumes, retention policy
+  - name: settings
+    description: AD-2 network, AD-3 encoder, AD-8 stream targets
+  - name: firmware
+    description: AD-5 signed updates with rollback
+  - name: users
+    description: AD-6 user management + Excel bulk import
+  - name: ai
+    description: LP-16 question studio — sets, questions, publications
+  - name: quiz
+    description: LP-17 insights — responses, leaderboard, session projection
+  - name: logs
+    description: AD-7 system logs
+  - name: device
+    description: Alerts, power-off (LP-13)
+  - name: quiz-sync
+    description: |
+      Server-to-server, device → quiz-service (A-16, DM-P5). These paths are
+      HOSTED BY THE QUIZ SERVICE (see path-level `servers`); the device is the
+      client — every connection is device-initiated because the public quiz
+      zone cannot dial into the campus LAN. The stream half (answers,
+      participants, heartbeat) is events.md §4.
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ────────────────────────────── auth ──────────────────────────────
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Unified login for both roles (LP-1); creates an AuthSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated. `mustResetPassword` gates everything but the reset flow (INV-U-3).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: Rotate the token pair; rejected immediately after revocation (INV-AS-2)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: New token pair.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshResponse' }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current AuthSession (revokedReason=logout)
+      responses:
+        '204': { description: Session revoked. }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Current user (safe view — never a password hash, INV-U-1)
+      responses:
+        '200':
+          description: The authenticated User.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change password; also the forced first-login reset (LP-2), authenticated end-to-end (B-42 closed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Password changed; mustResetPassword cleared. }
+        '401': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  # ──────────────────────────── recording ────────────────────────────
+  /recording/state:
+    get:
+      tags: [recording]
+      operationId: getRecordingState
+      summary: Cold-boot snapshot of machine 1a (REST mirror of the recording.state event)
+      description: |
+        `state: idle` means no non-terminal LectureSession exists (domain model
+        §6.1). After this one read the panel follows WS events only; the WS
+        re-emits the same shape on subscribe (state-machines §5.5).
+      responses:
+        '200':
+          description: Current recording state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordingStateSnapshot' }
+
+  /recording/start:
+    post:
+      tags: [recording]
+      operationId: startRecording
+      summary: R-01 cmd.recording.start — one-tap start, no inputs (LP-3, A-07)
+      description: |
+        Class A refusals (state-machines §0.4) create NO session and return the
+        named code: `recorder.busy` (R-03, meta carries the owner's display name
+        + title for the LP-6 locked view), `storage.critical` (R-02, [D-15]),
+        `provisioning.incomplete` / `volume.unavailable` / `config.invalid`
+        (R-04, meta names the unbound role or invalid preset). Class B failures
+        happen AFTER acceptance and arrive as `recording.state{error}` within
+        5 s (R-06, PF-2).
+      x-decision: D-15
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /recording/pause:
+    post:
+      tags: [recording]
+      operationId: pauseRecording
+      summary: R-08 cmd.recording.pause — owner or admin only (G-AUTH-OWNER)
+      description: Splits files; segment bookkeeping per SEG-1. Resolution arrives as recording.state{paused}.
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /recording/resume:
+    post:
+      tags: [recording]
+      operationId: resumeRecording
+      summary: R-10 cmd.recording.resume — opens a new segment (A-12)
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /recording/stop:
+    post:
+      tags: [recording]
+      operationId: stopRecording
+      summary: R-11 cmd.recording.stop — "Saved" within 10 s (INT-5); merge continues async (PF-5)
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /recording/takeover:
+    post:
+      tags: [recording]
+      operationId: takeoverRecording
+      summary: R-21 cmd.recording.takeover — admin override of the recorder lock (LP-6)
+      x-required-role: admin
+      description: Audited (AuditLogEntry action=takeover); the prior owner's panel authority ends.
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ──────────────────────────── channels ────────────────────────────
+  /channels:
+    get:
+      tags: [channels]
+      operationId: listChannels
+      summary: The three ChannelConfig rows + runtime state (LP-7)
+      responses:
+        '200':
+          description: Exactly three entries (local / meeting / streaming).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [config, status]
+                      properties:
+                        config: { $ref: '#/components/schemas/ChannelConfig' }
+                        status: { $ref: '#/components/schemas/ChannelStatus' }
+
+  /channels/{channelId}:
+    put:
+      tags: [channels]
+      operationId: updateChannelConfig
+      summary: Save channel configuration (preset, ratio, defaults, stream targets)
+      description: |
+        Rejected with `config.invalid` + a named reason when the preset is not
+        in the channel's allowedChannels (INV-LP-1) or a requiredRole has no
+        enabled SourceBinding (INV-SB-3, INV-CC-3). `local.alwaysOn` cannot be
+        disabled (INV-CC-1). Lecturers may edit local + streaming layout (AD-1);
+        streamTargetIds require admin.
+      parameters: [{ $ref: '#/components/parameters/channelId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChannelConfigUpdate' }
+      responses:
+        '200':
+          description: Saved config.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelConfig' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /channels/{channelId}/enable:
+    post:
+      tags: [channels]
+      operationId: enableChannel
+      summary: CH-01/CH-04 cmd.channel.enable — start this consumer only (INV-CC-2)
+      description: |
+        Valid while a session is active; `local` is not toggleable (machine 1a
+        owns it). Streaming runs the preflight first (A-10). While idle, use
+        PUT `enabledByDefault` instead — this command answers 409
+        `session.not-active`. Resolution arrives as channel.state events.
+      parameters: [{ $ref: '#/components/parameters/channelId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /channels/{channelId}/disable:
+    post:
+      tags: [channels]
+      operationId: disableChannel
+      summary: CH-07 cmd.channel.disable — publishers and recording untouched (INV-CC-2)
+      parameters: [{ $ref: '#/components/parameters/channelId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /layouts:
+    get:
+      tags: [channels]
+      operationId: listLayoutPresets
+      summary: Seeded LayoutPreset reference data (geometry as data, DM-6)
+      responses:
+        '200':
+          description: The closed preset vocabulary (A-09 amended).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LayoutPreset' }
+
+  # ──────────────────────────── sources ────────────────────────────
+  /sources/roles:
+    get:
+      tags: [sources]
+      operationId: listSourceRoles
+      summary: Seeded SourceRole vocabulary (closed set, INV-SR-1)
+      responses:
+        '200':
+          description: The five roles; mic-room is not provisionable in V1 (DM-11).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SourceRole' }
+
+  /sources/status:
+    get:
+      tags: [sources]
+      operationId: getSourcesStatus
+      summary: Machine 5a per-role health snapshot (REST mirror of sources.status)
+      responses:
+        '200':
+          description: One row per role; stale telemetry reads unknown, never healthy (INV-DH-2).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SourceStatus' }
+
+  /sources/inputs:
+    get:
+      tags: [sources]
+      operationId: listPhysicalInputs
+      summary: PhysicalInput rows (AD-2 camera addresses live here — INV-PI-2)
+      x-required-role: admin
+      responses:
+        '200':
+          description: All physical inputs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PhysicalInput' }
+
+  /sources/inputs/{inputId}:
+    put:
+      tags: [sources]
+      operationId: updatePhysicalInput
+      summary: Edit a capture address (AD-2 camera IP edits write THIS row, once)
+      x-required-role: admin
+      parameters: [{ $ref: '#/components/parameters/inputId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PhysicalInputUpdate' }
+      responses:
+        '200':
+          description: Updated input; the role re-probes (HL-09).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhysicalInput' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /sources/bindings:
+    get:
+      tags: [sources]
+      operationId: listSourceBindings
+      summary: Role → input mapping (never per-session, INV-SB-2)
+      x-required-role: admin
+      responses:
+        '200':
+          description: At most one binding per role and per input (INV-SB-1).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SourceBinding' }
+
+  /sources/bindings/{roleId}:
+    put:
+      tags: [sources]
+      operationId: updateSourceBinding
+      summary: HL-09 cmd.admin.set_binding — a provisioning act
+      x-required-role: admin
+      description: mic-room must stay unbound in V1 (INV-SR-2) — binding it answers 422.
+      parameters: [{ $ref: '#/components/parameters/roleId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SourceBindingUpdate' }
+      responses:
+        '200':
+          description: Updated binding; the role re-probes as unknown (HL-09).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceBinding' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /audio/controls:
+    get:
+      tags: [sources]
+      operationId: listAudioControls
+      summary: AudioControl state — the verifiably effective mic control (LP-9)
+      responses:
+        '200':
+          description: mic-lecturer only in V1; appliedState is the truth the UI must show (INV-AC-1).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AudioControl' }
+
+  /audio/controls/{roleId}:
+    put:
+      tags: [sources]
+      operationId: updateAudioControl
+      summary: Set gain/mute; applied to real hardware, result pushed as audio.control
+      description: |
+        Room Controls master mute writes the same `muted` field — one control,
+        one truth (LP-14, [D-10]). 202 because application to the ALSA path is
+        asynchronous; the audio.control event carries appliedState
+        applied|failed (never assumed success — B-55/B-12 lessons).
+      x-decision: D-10
+      parameters: [{ $ref: '#/components/parameters/roleId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AudioControlUpdate' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  # ─────────────────────────── recordings ───────────────────────────
+  /recordings:
+    get:
+      tags: [recordings]
+      operationId: listRecordings
+      summary: Library list (LP-10) — ownership filtered SERVER-SIDE (INV-RC-5)
+      description: Lecturers see their own recordings; admins see all. Deleted recordings are excluded unless `includeDeleted` (admin).
+      parameters:
+        - { $ref: '#/components/parameters/cursor' }
+        - { $ref: '#/components/parameters/limit' }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/RecordingState' }
+        - name: includeDeleted
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Page of recordings with derived upload badges.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Recording' }
+                  nextCursor: { type: [string, 'null'] }
+
+  /recordings/{recordingId}:
+    get:
+      tags: [recordings]
+      operationId: getRecording
+      summary: Recording detail with segments and files
+      parameters: [{ $ref: '#/components/parameters/recordingId' }]
+      responses:
+        '200':
+          description: Detail; authorization-checked per request (INV-RC-6).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordingDetail' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [recordings]
+      operationId: deleteRecording
+      summary: RA-06 — admin-only, audited with a real actor (INV-RC-3, B-33 closed)
+      x-required-role: admin
+      description: |
+        202: deletion runs through machine 1b; recording.artifact{deleted} and
+        upload.job{cancelled} (U-10) follow. The LectureSession row survives
+        (INV-LS-7).
+      parameters: [{ $ref: '#/components/parameters/recordingId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /recordings/{recordingId}/files/{fileId}/media:
+    get:
+      tags: [recordings]
+      operationId: getRecordingMedia
+      summary: Authenticated playback/download (LP-10) — closes B-37's open media route
+      description: |
+        Supports HTTP Range for playback. `?download=1` adds a
+        Content-Disposition attachment header. Every request is
+        authenticated + authorization-checked (INV-RC-6, playbackAuthRequired).
+      parameters:
+        - { $ref: '#/components/parameters/recordingId' }
+        - { $ref: '#/components/parameters/fileId' }
+        - name: download
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Media bytes.
+          content:
+            video/mp4: { schema: { type: string, format: binary } }
+            video/mp2t: { schema: { type: string, format: binary } }
+        '206': { description: Partial content (Range). }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ─────────────────────────── USB export ───────────────────────────
+  /exports/targets:
+    get:
+      tags: [recordings]
+      operationId: listExportTargets
+      summary: Connected USB drives (LP-11); system + recordings volumes never listed (INV-EX-2)
+      description: Live insert/remove updates arrive as usb.volumes events scoped to this session (B-38 fix).
+      responses:
+        '200':
+          description: Candidate targets; the user picks — never "the first drive".
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/UsbVolume' }
+
+  /exports:
+    post:
+      tags: [recordings]
+      operationId: createExport
+      summary: Multi-select copy-to-USB with real transfer progress (LP-10, INV-EX-1)
+      description: 202 + ExportJob; progress arrives as export.job events scoped to the requesting AuthSession.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportCreateRequest' }
+      responses:
+        '202':
+          description: Export queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /exports/{exportId}:
+    get:
+      tags: [recordings]
+      operationId: getExport
+      summary: Export job state (REST mirror of export.job)
+      parameters: [{ $ref: '#/components/parameters/exportId' }]
+      responses:
+        '200':
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /exports/{exportId}/cancel:
+    post:
+      tags: [recordings]
+      operationId: cancelExport
+      summary: Cancel a queued/copying export — source files are never mutated (INV-EX-3)
+      parameters: [{ $ref: '#/components/parameters/exportId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ───────────────────────────── uploads ─────────────────────────────
+  /uploads:
+    get:
+      tags: [uploads]
+      operationId: listUploadJobs
+      summary: AD-9 queue — dead-letter always visible with its reason (INV-UJ-4)
+      x-required-role: admin
+      x-decision: D-02b
+      parameters:
+        - { $ref: '#/components/parameters/cursor' }
+        - { $ref: '#/components/parameters/limit' }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/UploadJobState' }
+      responses:
+        '200':
+          description: Page of jobs (one per Recording, INV-UJ-1).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/UploadJob' }
+                  nextCursor: { type: [string, 'null'] }
+
+  /uploads/{jobId}:
+    get:
+      tags: [uploads]
+      operationId: getUploadJob
+      summary: Job detail with per-file parts and retry history
+      x-required-role: admin
+      x-decision: D-02b
+      parameters: [{ $ref: '#/components/parameters/jobId' }]
+      responses:
+        '200':
+          description: Job + parts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadJobDetail' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /uploads/{jobId}/requeue:
+    post:
+      tags: [uploads]
+      operationId: requeueUploadJob
+      summary: U-09 cmd.upload.requeue — dead-letter → queued (B-35's successor)
+      x-required-role: admin
+      x-decision: D-13
+      description: Only dead-letter jobs are requeueable (`upload.not-requeueable` otherwise). Remote cleanup runs first if remoteLectureId is set (INV-UJ-6).
+      parameters: [{ $ref: '#/components/parameters/jobId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ──────────────────────── provisioning / device ────────────────────────
+  /provisioning:
+    get:
+      tags: [provisioning]
+      operationId: getProvisioning
+      summary: AD-10 read-only device identity — editing happens in the deploy layer
+      x-decision: D-20
+      description: core-api never writes this entity (INV-DP-1). Time/NTP ownership is [D-17]. Secret-bearing fields are never exposed.
+      responses:
+        '200':
+          description: The DeviceProvisioning read view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceProvisioning' }
+
+  /health:
+    get:
+      tags: [provisioning]
+      operationId: getDeviceHealth
+      summary: DeviceHealth snapshot (LP-12 inputs, AD-4, AD-10 NTP line)
+      responses:
+        '200':
+          description: Snapshot, not history (INV-DH-1); stale projections read unknown (INV-DH-2).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceHealth' }
+
+  /alerts:
+    get:
+      tags: [device]
+      operationId: listAlerts
+      summary: Active SystemAlerts (panel + admin alert surfaces; re-raised while true, INV-SA-1)
+      parameters:
+        - name: includeCleared
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Current conditions (the log is the history — INV-SA-2).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SystemAlert' }
+
+  /alerts/{alertId}/acknowledge:
+    post:
+      tags: [device]
+      operationId: acknowledgeAlert
+      summary: Acknowledge an alert — a still-true condition re-raises (INV-SA-1)
+      parameters: [{ $ref: '#/components/parameters/alertId' }]
+      responses:
+        '200':
+          description: The updated alert.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemAlert' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /device/power-off:
+    post:
+      tags: [device]
+      operationId: powerOffDevice
+      summary: LP-13 confirmed power-off — REFUSED server-side while a session is non-terminal (R-22)
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409':
+          description: poweroff.refused while recording (R-22, B-50 closed).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ───────────────────────────── storage ─────────────────────────────
+  /storage:
+    get:
+      tags: [storage]
+      operationId: getStorageOverview
+      summary: AD-4 Local Storage — capacity, SMART, volumes, retention policy
+      x-decision: D-15
+      description: The retention policy is included so warning text is GENERATED from real values (INV-RP-1, B-53 closed).
+      responses:
+        '200':
+          description: Storage overview.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorageOverview' }
+
+  /storage/volumes:
+    post:
+      tags: [storage]
+      operationId: registerStorageVolume
+      summary: AD-4 disk swap — register + mount; no restart, no nginx surgery (INV-SV-2)
+      x-required-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterVolumeRequest' }
+      responses:
+        '201':
+          description: Registered volume (state mounted or missing).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorageVolume' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /storage/volumes/{volumeId}/format:
+    post:
+      tags: [storage]
+      operationId: formatStorageVolume
+      summary: AD-4 danger zone — format + register as ONE guarded operation (B-52)
+      x-required-role: admin
+      description: |
+        `confirmText` must name the volume (label, or uuid when unlabelled) —
+        J-5 failure path. Refused with `format.refused` while any
+        LectureSession is non-terminal; a failed format leaves the previous
+        registration intact (INV-SV-3). Progress arrives via storage.status /
+        system.alert.
+      parameters: [{ $ref: '#/components/parameters/volumeId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FormatVolumeRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  # ───────────────────────────── settings ─────────────────────────────
+  /settings/network:
+    get:
+      tags: [settings]
+      operationId: listNetworkConfigs
+      summary: AD-2 LAN + vLAN rows (no Wi-Fi fields exist, INV-NC-1)
+      x-required-role: admin
+      x-decision: D-16
+      responses:
+        '200':
+          description: One row per interface; lastApplyError surfaced, not swallowed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/NetworkConfig' }
+
+  /settings/network/{networkConfigId}:
+    put:
+      tags: [settings]
+      operationId: updateNetworkConfig
+      summary: Save + apply network config via the allowlisted root helper
+      x-required-role: admin
+      description: |
+        202: applying can drop the admin's own connection. Never triggers a
+        frontend rebuild or changes a baked base URL (INV-NC-2, B-46/B-61).
+        Outcome is readable on the row (appliedAt / lastApplyError) and a
+        failure raises a system.alert.
+      parameters: [{ $ref: '#/components/parameters/networkConfigId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NetworkConfigUpdate' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /settings/encoder:
+    get:
+      tags: [settings]
+      operationId: getEncoderSettings
+      summary: AD-3 encoder profile + capability-probed option sets
+      x-required-role: admin
+      description: The UI renders ONLY values present in capabilities — unsupported values are absent, not inert (INV-EP-1, B-56 closed).
+      responses:
+        '200':
+          description: Profile + capabilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile, capabilities]
+                properties:
+                  profile: { $ref: '#/components/schemas/EncodingProfile' }
+                  capabilities: { $ref: '#/components/schemas/EncoderCapabilities' }
+    put:
+      tags: [settings]
+      operationId: updateEncoderSettings
+      summary: Update the device-default EncodingProfile (per-channel scope is DM-P4)
+      x-required-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EncodingProfileUpdate' }
+      responses:
+        '200':
+          description: Saved profile (validated against capabilities).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EncodingProfile' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /settings/stream-targets:
+    get:
+      tags: [settings]
+      operationId: listStreamTargets
+      summary: AD-8 saved destinations — stream keys NEVER read back (INV-ST-1)
+      x-required-role: admin
+      x-decision: D-19
+      responses:
+        '200':
+          description: Targets with hasStreamKey flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/StreamTarget' }
+    post:
+      tags: [settings]
+      operationId: createStreamTarget
+      summary: Add a destination (YouTube / Facebook / Custom RTMP)
+      x-required-role: admin
+      x-decision: D-19
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StreamTargetCreate' }
+      responses:
+        '201':
+          description: Created (key stored in the secret store, PF-17).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StreamTarget' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /settings/stream-targets/{targetId}:
+    put:
+      tags: [settings]
+      operationId: updateStreamTarget
+      summary: Edit a destination — never interrupts local recording (INV-ST-3)
+      x-required-role: admin
+      parameters: [{ $ref: '#/components/parameters/targetId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StreamTargetUpdate' }
+      responses:
+        '200':
+          description: Updated target.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StreamTarget' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [settings]
+      operationId: deleteStreamTarget
+      summary: Remove a destination
+      x-required-role: admin
+      parameters: [{ $ref: '#/components/parameters/targetId' }]
+      responses:
+        '204': { description: Deleted. }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  # ───────────────────────────── firmware ─────────────────────────────
+  /firmware:
+    get:
+      tags: [firmware]
+      operationId: getFirmwareState
+      summary: AD-5 current version + update state (REST mirror of firmware.state)
+      x-required-role: admin
+      responses:
+        '200':
+          description: Current FirmwareUpdate record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FirmwareUpdate' }
+
+  /firmware/check:
+    post:
+      tags: [firmware]
+      operationId: checkFirmware
+      summary: Check the release channel for a signed artifact (INV-FU-1)
+      x-required-role: admin
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /firmware/apply:
+    post:
+      tags: [firmware]
+      operationId: applyFirmware
+      summary: Apply the available version — verified, with rollback (INV-FU-2, B-49 closed)
+      x-required-role: admin
+      description: Refused while a session is non-terminal. Progress arrives as firmware.state events; never rebuilds frontend config (INV-FU-3).
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ────────────────────────────── users ──────────────────────────────
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: AD-6 directory with pagination (INT-1)
+      x-required-role: admin
+      parameters:
+        - { $ref: '#/components/parameters/cursor' }
+        - { $ref: '#/components/parameters/limit' }
+        - name: q
+          in: query
+          description: Substring match on username/displayName.
+          schema: { type: string, maxLength: 128 }
+        - name: role
+          in: query
+          schema: { $ref: '#/components/schemas/UserRole' }
+      responses:
+        '200':
+          description: Page of users (safe views).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: Add a local user — hits forced reset on first login (LP-2)
+      x-required-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: Created user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /users/{userId}:
+    patch:
+      tags: [users]
+      operationId: updateUser
+      summary: Edit / disable a user (AD-6, INT-1)
+      x-required-role: admin
+      parameters: [{ $ref: '#/components/parameters/userId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [users]
+      operationId: deleteUser
+      summary: Delete a user — never deletes or orphans their recordings (INV-U-5)
+      x-required-role: admin
+      parameters: [{ $ref: '#/components/parameters/userId' }]
+      responses:
+        '204': { description: Deleted; recordings keep a tombstone owner reference. }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /users/import:
+    post:
+      tags: [users]
+      operationId: importUsers
+      summary: AD-6 Excel bulk import — all-or-nothing (INV-UI-1, B-44 contract)
+      x-required-role: admin
+      description: |
+        Validates synchronously. Any invalid row (null cell, in-file duplicate,
+        existing username) rejects the WHOLE batch with row-level reasons and
+        writes no users. The spreadsheet is not retained (INV-UI-3). Every
+        imported user gets mustResetPassword = true (INV-UI-2).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .xlsx roster file.
+      responses:
+        '201':
+          description: Batch applied — every row accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserImportBatch' }
+        '422':
+          description: Batch rejected — body carries the batch with row-level rejections.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserImportBatch' }
+
+  # ─────────────────────────────── ai ───────────────────────────────
+  /ai/countdown:
+    get:
+      tags: [ai]
+      operationId: getAiCountdown
+      summary: Machine 2a snapshot (REST mirror of ai.countdown)
+      responses:
+        '200':
+          description: unavailable when the room flag is off or llmEndpoint is null (LP-18).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiCountdownSnapshot' }
+
+  /ai/interval:
+    put:
+      tags: [ai]
+      operationId: setAiInterval
+      summary: Q-10 cmd.ai.set_interval — resets remainingMs to the new interval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetIntervalRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /ai/generate-now:
+    post:
+      tags: [ai]
+      operationId: generateNow
+      summary: Q-03 cmd.ai.generate_now — generates immediately AND resets the countdown (LP-16)
+      description: Only while the session is `recording` (a paused session has no new transcript). The modal's "Regenerate Questions" uses this same path.
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /ai/question-sets:
+    get:
+      tags: [ai]
+      operationId: listQuestionSets
+      summary: Generation batches for a session (machine 2b history)
+      parameters:
+        - { $ref: '#/components/parameters/sessionIdQuery' }
+      responses:
+        '200':
+          description: Sets, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/QuestionSet' }
+
+  /ai/question-sets/{setId}:
+    get:
+      tags: [ai]
+      operationId: getQuestionSet
+      summary: One batch with its questions
+      parameters: [{ $ref: '#/components/parameters/setId' }]
+      responses:
+        '200':
+          description: Set detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuestionSetDetail' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /ai/questions:
+    get:
+      tags: [ai]
+      operationId: listQuestions
+      summary: Question pool for a session (drafts drive the review modal; lecturer-authored have questionSetId = null)
+      parameters:
+        - { $ref: '#/components/parameters/sessionIdQuery' }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/QuestionState' }
+      responses:
+        '200':
+          description: Questions with options.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Question' }
+    post:
+      tags: [ai]
+      operationId: createQuestion
+      summary: Q-19 cmd.ai.add_question — lecturer-authored; survives batches and resets (INV-Q-3)
+      description: 202; the created question arrives as ai.question{draft, lecturer-authored} ("Yours" chip). Audited (INV-Q-5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuestionCreate' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /ai/questions/{questionId}:
+    patch:
+      tags: [ai]
+      operationId: editQuestion
+      summary: Q-20 cmd.ai.edit_question — drafts only (G-QUESTION-MUTABLE)
+      description: |
+        A question in sent/closed is immutable — answers reference it; the
+        rejection (409 question.immutable) is itself audited (INV-Q-4, §3.3).
+        Edits are audited with field-level before/after and set edited = true.
+      parameters: [{ $ref: '#/components/parameters/questionId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuestionUpdate' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /ai/questions/{questionId}/discard:
+    post:
+      tags: [ai]
+      operationId: discardQuestion
+      summary: Q-21 cmd.ai.discard_question — audited disposition, not deletion
+      parameters: [{ $ref: '#/components/parameters/questionId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /ai/questions/{questionId}/send-to-projector:
+    post:
+      tags: [ai]
+      operationId: sendToProjector
+      summary: Q-30 cmd.ai.send_to_projector — publish-before-project (DM-9, INV-QPUB-3)
+      description: |
+        Creates a QuestionPublication in `publishing`; the projector switches
+        ONLY after quiz-service acks (Q-31). Failure (Q-32) leaves the projector
+        on slides passthrough and the previous publication open — surfaced as
+        quiz.publication{failed} with retry. Refused with quiz.unavailable when
+        no quiz session is open (G-QUIZ-AVAILABLE, Z-03).
+      parameters: [{ $ref: '#/components/parameters/questionId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /ai/publications:
+    get:
+      tags: [ai]
+      operationId: listPublications
+      summary: LP-17 Previous Questions — sent questions with response tallies
+      parameters:
+        - { $ref: '#/components/parameters/sessionIdQuery' }
+      responses:
+        '200':
+          description: Publications with embedded questions and counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicationWithQuestion' }
+
+  /ai/publications/{publicationId}/close:
+    post:
+      tags: [ai]
+      operationId: closePublication
+      summary: Q-35 cmd.ai.close_question — closeReason=lecturer-closed
+      parameters: [{ $ref: '#/components/parameters/publicationId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /ai/projector:
+    put:
+      tags: [ai]
+      operationId: setProjector
+      summary: Q-36 cmd.ai.project — set-showing / withdraw; never reopens acceptance
+      description: |
+        Body { publicationId } re-projects (a CLOSED publication renders in
+        reveal mode); { publicationId: null } withdraws to slides passthrough.
+        projectorState is a projector mode, not an acceptance state. The
+        projector never receives leaderboard data (INV-QZ-3, INV-LB-3).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectorRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  # ─────────────────────────────── quiz ───────────────────────────────
+  /quiz/session:
+    get:
+      tags: [quiz]
+      operationId: getQuizSession
+      summary: Machine 4a device-side projection (join QR, joined count)
+      description: state=absent when unconfigured (quizServerBaseUrl null) or no session is recording (LP-18).
+      responses:
+        '200':
+          description: Projection with staleness surface (INV-G-8).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuizSessionProjection' }
+
+  /quiz/publications/{publicationId}/responses:
+    get:
+      tags: [quiz]
+      operationId: listPublicationResponses
+      summary: LP-17 drill-down — AnswerProjection rows (read-only, minimal PII, DM-14)
+      x-decision: D-21
+      parameters: [{ $ref: '#/components/parameters/publicationId' }]
+      responses:
+        '200':
+          description: Per-student answers; the panel marks them stale past the sync window (INV-AP-2).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, syncedAt, stale]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AnswerProjection' }
+                  syncedAt: { type: string, format: date-time }
+                  stale: { type: boolean }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /quiz/leaderboard:
+    get:
+      tags: [quiz]
+      operationId: getLeaderboard
+      summary: LP-17 leaderboard — derived, never stored (INV-LB-1); shared formula (DM-10)
+      description: points = 10 × correct (INT-2); dense ranking, ties share a rank. Panel-only — never projected (INV-LB-3).
+      parameters:
+        - { $ref: '#/components/parameters/sessionIdQuery' }
+      responses:
+        '200':
+          description: Ranked entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Leaderboard' }
+
+  # ─────────────────────────────── logs ───────────────────────────────
+  /logs:
+    get:
+      tags: [logs]
+      operationId: queryLogs
+      summary: AD-7 queryable log store (PF-15)
+      x-required-role: admin
+      parameters:
+        - name: level
+          in: query
+          schema: { $ref: '#/components/schemas/LogLevel' }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/LogCategory' }
+        - name: q
+          in: query
+          description: Free-text search over message.
+          schema: { type: string, maxLength: 256 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: sessionId
+          in: query
+          schema: { $ref: '#/components/schemas/Ulid' }
+        - { $ref: '#/components/parameters/cursor' }
+        - { $ref: '#/components/parameters/limit' }
+      responses:
+        '200':
+          description: Page of entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LogEntry' }
+                  nextCursor: { type: [string, 'null'] }
+
+  /logs/export:
+    get:
+      tags: [logs]
+      operationId: exportLogsCsv
+      summary: AD-7 CSV export — same filter set as the query
+      x-required-role: admin
+      parameters:
+        - name: level
+          in: query
+          schema: { $ref: '#/components/schemas/LogLevel' }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/LogCategory' }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 256 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: CSV stream.
+          content:
+            text/csv:
+              schema: { type: string }
+
+  # ─────────────────── quiz-sync (device → quiz-service) ───────────────────
+  # Hosted by the QUIZ SERVICE on the campus web server (A-16). The device is
+  # the only caller; auth is a provisioned device credential (DM-P5 — the
+  # scheme is an open item, see events.md). Correlation ids are ULIDs
+  # generatable offline on both sides (INV-G-2).
+
+  /device/v1/quiz-sessions:
+    servers:
+      - url: '{quizServerBaseUrl}'
+        description: DeviceProvisioning.quizServerBaseUrl
+        variables:
+          quizServerBaseUrl:
+            default: https://quiz.example.edu
+    post:
+      tags: [quiz-sync]
+      operationId: quizSyncCreateSession
+      summary: Z-01 — mint a QuizSession for a lecture (quiz-service owns joinCode/joinUrl, DM-15)
+      x-decision: DM-P5
+      security: [{ deviceAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuizSessionCreateRequest' }
+      responses:
+        '201':
+          description: Minted session (Z-02). Idempotent on lectureSessionId — at most one open session per lecture (INV-QZ-1).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuizSessionCreateResponse' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /device/v1/quiz-sessions/{quizSessionId}/close:
+    servers:
+      - url: '{quizServerBaseUrl}'
+        variables:
+          quizServerBaseUrl:
+            default: https://quiz.example.edu
+    post:
+      tags: [quiz-sync]
+      operationId: quizSyncCloseSession
+      summary: Z-05 — lecture ended; students see "session ended" (INV-QZ-2)
+      x-decision: DM-P5
+      security: [{ deviceAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/quizSessionId' }]
+      responses:
+        '204': { description: Closed (idempotent). }
+
+  /device/v1/publications:
+    servers:
+      - url: '{quizServerBaseUrl}'
+        variables:
+          quizServerBaseUrl:
+            default: https://quiz.example.edu
+    post:
+      tags: [quiz-sync]
+      operationId: quizSyncPublish
+      summary: sync.publication push (Q-30/Q-31) — the ack IS G-PUBLISH-ACK
+      x-decision: DM-P5
+      description: |
+        Must answer within T-PUBLISH-ACK (5 s, 1 retry at 2 s) or the device
+        marks the publication failed (Q-32) and the projector stays on slides.
+        Carries correctOptionId so quiz-service evaluates isCorrect at submit
+        time (Z-22) — server-to-server only; students never see correctness
+        before close. Idempotent on publicationId.
+      security: [{ deviceAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicationPush' }
+      responses:
+        '201': { description: Accepted — the device may now switch the projector (Q-31). }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /device/v1/publications/{publicationId}/close:
+    servers:
+      - url: '{quizServerBaseUrl}'
+        variables:
+          quizServerBaseUrl:
+            default: https://quiz.example.edu
+    post:
+      tags: [quiz-sync]
+      operationId: quizSyncClosePublication
+      summary: Q-33/Q-34/Q-35 close — closedAt authoritative on BOTH sides (INV-QPUB-4)
+      x-decision: DM-P5
+      description: A late answer is rejected by quiz-service against this closedAt even if the instruction arrived late; no grace window (SM-Q-6).
+      security: [{ deviceAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/publicationId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicationCloseRequest' }
+      responses:
+        '204': { description: Closed (idempotent). }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token (PF-17); refresh via /auth/refresh. Carries only user id + role (INV-AS-1).
+    deviceAuth:
+      type: http
+      scheme: bearer
+      description: Provisioned device credential for quiz-sync paths (DM-P5 — scheme open).
+
+  parameters:
+    cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    channelId:
+      name: channelId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ChannelId' }
+    roleId:
+      name: roleId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/SourceRoleId' }
+    inputId:
+      name: inputId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    recordingId:
+      name: recordingId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    fileId:
+      name: fileId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    exportId:
+      name: exportId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    jobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    volumeId:
+      name: volumeId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    networkConfigId:
+      name: networkConfigId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    targetId:
+      name: targetId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    alertId:
+      name: alertId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    setId:
+      name: setId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    questionId:
+      name: questionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    publicationId:
+      name: publicationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    quizSessionId:
+      name: quizSessionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    sessionIdQuery:
+      name: sessionId
+      in: query
+      required: true
+      description: LectureSession id (the correlation id across device, AI and quiz).
+      schema: { $ref: '#/components/schemas/Ulid' }
+
+  responses:
+    CommandAccepted:
+      description: |
+        Command accepted (rule SM-R-2): the state transition arrives over the
+        WS event channel; nothing final is returned here. If no event resolves
+        the command within resolveBySec, the UI shows a failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/CommandAccepted' }
+    Problem:
+      description: Named error (never a silent no-op — R-04, INV-SB-3).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ── primitives ──
+    Ulid:
+      type: string
+      pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+      description: Opaque ULID (INV-G-1/2, DM-13). No logic may depend on adjacency or ordering.
+    Instant:
+      type: string
+      format: date-time
+      description: ISO-8601 with explicit offset, stored UTC (INV-G-3).
+
+    CommandAccepted:
+      type: object
+      required: [commandId, acceptedAt, resolveBySec]
+      properties:
+        commandId: { $ref: '#/components/schemas/Ulid' }
+        acceptedAt: { $ref: '#/components/schemas/Instant' }
+        resolveBySec:
+          type: integer
+          description: T-CMD-RESOLVE — failure rendered after this many seconds without a resolving event.
+
+    Problem:
+      type: object
+      required: [status, code, title]
+      properties:
+        status: { type: integer }
+        code:
+          type: string
+          description: Stable machine code — see packages/shared ErrorCode for the closed list.
+          enum:
+            - auth.invalid-credentials
+            - auth.session-revoked
+            - auth.password-reset-required
+            - not-authorized
+            - not-found
+            - validation.invalid
+            - conflict
+            - recorder.busy
+            - storage.critical
+            - provisioning.incomplete
+            - volume.unavailable
+            - config.invalid
+            - session.not-active
+            - question.immutable
+            - quiz.unavailable
+            - ai.unavailable
+            - poweroff.refused
+            - format.refused
+            - export.invalid-target
+            - upload.not-requeueable
+            - import.rejected
+        title: { type: string }
+        detail: { type: string }
+        meta:
+          type: object
+          description: Named-reason detail (e.g. unbound roleId; recorder owner for LP-6). Never secrets (INV-ST-1).
+          additionalProperties: true
+
+    # ── enums (closed sets — adding a value is a contract bump) ──
+    SourceRoleId:
+      type: string
+      enum: [presentation, lecturer-cam, students-cam, mic-lecturer, mic-room]
+      description: Canonical vocabulary (domain model §4.5). mic-room reserved, unbound in V1 (INV-SR-2).
+    ChannelId:
+      type: string
+      enum: [local, meeting, streaming]
+    LayoutPresetId:
+      type: string
+      enum: [fifty-fifty, cams-fifty-fifty, side-by-side, cam-1, cam-2, pc-only, separate-files]
+    RecordingWireState:
+      type: string
+      enum: [idle, starting, recording, paused, stopping, finalizing, completed, error]
+      description: Machine 1a on the wire — idle is the absence of a non-terminal session, not a row.
+    StartReason:
+      type: string
+      enum: [initial, resume, recovery]
+    RecordingState:
+      type: string
+      enum: [capturing, finalizing, merging, ready, failed, deleted]
+    MergeState:
+      type: string
+      enum: [not-needed, pending, running, done, failed]
+    SegmentState:
+      type: string
+      enum: [capturing, finalizing, finalized, truncated, failed]
+    SegmentEndReason:
+      type: string
+      enum: [pause, stop, crash, error, takeover]
+    ChannelRuntimeState:
+      type: string
+      enum: [off, preflight, starting, on, stopping, failed]
+    SourceHealthState:
+      type: string
+      enum: [unknown, unbound, online, degraded, offline]
+    StoragePressure:
+      type: string
+      enum: [ok, warning, critical]
+    SmartStatus:
+      type: string
+      enum: [good, warning, failing, unknown]
+      description: unknown is legitimate — never hardcode "Good" (AD-4).
+    CaptureCardState:
+      type: string
+      enum: [present, absent, recovering, failed]
+    UploadJobState:
+      type: string
+      enum: [queued, uploading, completing, done, failed, dead-letter, cancelled]
+    UploadFilePartState:
+      type: string
+      enum: [pending, uploading, uploaded, missing, failed]
+    ExportJobState:
+      type: string
+      enum: [queued, copying, completed, failed, cancelled]
+    UserRole:
+      type: string
+      enum: [lecturer, admin]
+      description: dev-admin does not exist (DM-2, A-21).
+    UserSource:
+      type: string
+      enum: [local, institute]
+    LogLevel:
+      type: string
+      enum: [INFO, WARN, ERROR]
+    LogCategory:
+      type: string
+      enum: [Auth, System, Hardware, Session]
+    AiCountdownState:
+      type: string
+      enum: [unavailable, armed, generating, held, degraded]
+    QuestionSetState:
+      type: string
+      enum: [requested, generating, ready, failed, reviewed, discarded]
+    QuestionState:
+      type: string
+      enum: [draft, sent, closed, discarded]
+    PublicationState:
+      type: string
+      enum: [publishing, open, closed, failed]
+    PublicationCloseReason:
+      type: string
+      enum: [next-question, session-ended, lecturer-closed]
+    ProjectorState:
+      type: string
+      enum: [not-shown, showing, withdrawn]
+    QuizSyncState:
+      type: string
+      enum: [synced, stale, failed]
+    QuizSessionProjectionState:
+      type: string
+      enum: [absent, requesting, open, closed, failed]
+    FirmwareState:
+      type: string
+      enum: [idle, checking, downloading, verifying, applying, rolled-back, failed, done]
+    IntervalMinutes:
+      type: integer
+      enum: [10, 15, 20, 30]
+      description: A-14; default 20 (INT-11 — the prototype's 15 is drift).
+
+    # ── auth (Context B) ──
+    User:
+      type: object
+      description: Safe read view — passwordHash never leaves the data layer (INV-U-1).
+      required: [id, username, displayName, role, source, mustResetPassword, disabled, lastLoginAt, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        username: { type: string, maxLength: 128 }
+        displayName: { type: string, maxLength: 128 }
+        role: { $ref: '#/components/schemas/UserRole' }
+        source: { $ref: '#/components/schemas/UserSource' }
+        mustResetPassword: { type: boolean }
+        disabled: { type: boolean }
+        lastLoginAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        createdAt: { $ref: '#/components/schemas/Instant' }
+
+    LoginRequest:
+      type: object
+      required: [username, password, client]
+      properties:
+        username: { type: string, maxLength: 128 }
+        password: { type: string }
+        client: { type: string, enum: [panel, admin, api] }
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, expiresInSec]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresInSec: { type: integer }
+
+    LoginResponse:
+      type: object
+      required: [user, tokens, mustResetPassword]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+        mustResetPassword:
+          type: boolean
+          description: True ⇒ only /auth/change-password and /auth/me are reachable (INV-U-3).
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    RefreshResponse:
+      type: object
+      required: [tokens]
+      properties:
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string }
+        newPassword: { type: string, minLength: 8, maxLength: 256 }
+
+    # ── recording (Context C) ──
+    RecordingStateSnapshot:
+      type: object
+      description: REST mirror of the recording.state event (machine 1a).
+      required: [state, startReason, sessionId, title, ownerUserId, ownerDisplayName, startedAt, recordedDurationMs, segmentIndex, segmentCount, pauseCount, takeoverBy, errorCode, errorMessage]
+      properties:
+        state: { $ref: '#/components/schemas/RecordingWireState' }
+        startReason:
+          oneOf: [{ $ref: '#/components/schemas/StartReason' }, { type: 'null' }]
+        sessionId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        title: { type: [string, 'null'] }
+        ownerUserId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        ownerDisplayName: { type: [string, 'null'] }
+        startedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        recordedDurationMs:
+          type: [integer, 'null']
+          description: Sum of segment durations, pause gaps excluded — computed from persisted values only (B-08 fix).
+        segmentIndex: { type: [integer, 'null'] }
+        segmentCount: { type: [integer, 'null'] }
+        pauseCount: { type: [integer, 'null'] }
+        takeoverBy:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        errorCode: { type: [string, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        adopted:
+          type: boolean
+          description: BR-1 — core-api restarted alone and re-attached.
+
+    RecordingSegment:
+      type: object
+      required: [id, recordingId, index, startedAt, endedAt, durationMs, endReason, state]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        recordingId: { $ref: '#/components/schemas/Ulid' }
+        index:
+          type: integer
+          description: 0-based ordinal — ordering metadata, never id arithmetic (INV-RS-1).
+        startedAt: { $ref: '#/components/schemas/Instant' }
+        endedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        durationMs: { type: [integer, 'null'] }
+        endReason:
+          oneOf: [{ $ref: '#/components/schemas/SegmentEndReason' }, { type: 'null' }]
+        state: { $ref: '#/components/schemas/SegmentState' }
+
+    RecordingFile:
+      type: object
+      description: path is server-internal; media is fetched via the /media route. No consumer parses filenames (INV-RF-1).
+      required: [id, recordingId, segmentId, kind, streamKey, container, sizeBytes, durationMs, state, hasAudio, isUploadable]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        recordingId: { $ref: '#/components/schemas/Ulid' }
+        segmentId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        kind: { type: string, enum: [segment, merged, derived] }
+        streamKey:
+          type: string
+          maxLength: 32
+          description: From LayoutPreset.outputs — the ~1/~2 successor (B-02).
+        container: { type: string, enum: [mpegts, mp4] }
+        sizeBytes: { type: [integer, 'null'] }
+        durationMs: { type: [integer, 'null'] }
+        state: { type: string, enum: [writing, finalized, missing, deleted] }
+        hasAudio: { type: boolean }
+        isUploadable: { type: boolean }
+
+    Recording:
+      type: object
+      description: One lecture = one Recording (INV-RC-1). Library row (LP-10).
+      required: [id, sessionId, title, hallDisplayName, ownerUserId, ownerDisplayName, startedAt, endedAt, state, layoutPresetId, durationMs, totalBytes, segmentCount, mergeState, uploadState, retentionDeleteAfter, deletedAt, deleteReason]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        sessionId: { $ref: '#/components/schemas/Ulid' }
+        title: { type: string }
+        hallDisplayName: { type: string }
+        ownerUserId: { $ref: '#/components/schemas/Ulid' }
+        ownerDisplayName: { type: string }
+        startedAt: { $ref: '#/components/schemas/Instant' }
+        endedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        state: { $ref: '#/components/schemas/RecordingState' }
+        layoutPresetId: { $ref: '#/components/schemas/LayoutPresetId' }
+        durationMs: { type: [integer, 'null'] }
+        totalBytes: { type: [integer, 'null'] }
+        segmentCount: { type: integer, minimum: 1 }
+        mergeState: { $ref: '#/components/schemas/MergeState' }
+        uploadState:
+          oneOf: [{ $ref: '#/components/schemas/UploadJobState' }, { type: 'null' }]
+          description: '[derived] from UploadJob — the badge, never a second truth.'
+        retentionDeleteAfter:
+          $ref: '#/components/schemas/Instant'
+          description: endedAt + 14 days (A-20). [D-15]
+        deletedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        deleteReason:
+          oneOf:
+            - type: string
+              enum: [admin, retention, disk-pressure]
+            - type: 'null'
+          description: Real columns — replaces the deleted(<uid>) status string (B-33, INV-G-4).
+
+    RecordingDetail:
+      allOf:
+        - { $ref: '#/components/schemas/Recording' }
+        - type: object
+          required: [segments, files]
+          properties:
+            segments:
+              type: array
+              items: { $ref: '#/components/schemas/RecordingSegment' }
+            files:
+              type: array
+              items: { $ref: '#/components/schemas/RecordingFile' }
+
+    # ── channels & layouts (Context A) ──
+    Tile:
+      type: object
+      required: [roleId, x, y, w, h, z]
+      properties:
+        roleId: { $ref: '#/components/schemas/SourceRoleId' }
+        x: { type: integer }
+        y: { type: integer }
+        w: { type: integer }
+        h: { type: integer }
+        z: { type: integer }
+
+    OutputSpec:
+      type: object
+      required: [streamKey, roleIds, includeAudio]
+      properties:
+        streamKey: { type: string, maxLength: 32 }
+        roleIds:
+          type: array
+          items: { $ref: '#/components/schemas/SourceRoleId' }
+        includeAudio: { type: boolean }
+
+    LayoutPreset:
+      type: object
+      description: Seeded reference data — geometry as data (DM-6); never a pipeline string (INV-LP-2).
+      required: [id, displayName, description, allowedChannels, kind, canvas, tiles, parametric, outputs, passthroughEligible, requiredRoles]
+      properties:
+        id: { $ref: '#/components/schemas/LayoutPresetId' }
+        displayName: { type: string, maxLength: 48 }
+        description: { type: string, maxLength: 160 }
+        allowedChannels:
+          type: array
+          items: { $ref: '#/components/schemas/ChannelId' }
+          description: INV-LP-1 — the panel never renders the full list per channel.
+        kind: { type: string, enum: [single, composite, multi-file] }
+        canvas:
+          type: object
+          required: [width, height]
+          properties:
+            width: { type: integer }
+            height: { type: integer }
+        tiles:
+          type: array
+          items: { $ref: '#/components/schemas/Tile' }
+        parametric: { type: boolean }
+        outputs:
+          type: array
+          items: { $ref: '#/components/schemas/OutputSpec' }
+        passthroughEligible: { type: boolean }
+        requiredRoles:
+          type: array
+          items: { $ref: '#/components/schemas/SourceRoleId' }
+
+    ChannelConfig:
+      type: object
+      required: [channelId, alwaysOn, enabledByDefault, presetId, ratioA, ratioB, streamTargetIds, updatedAt]
+      properties:
+        channelId: { $ref: '#/components/schemas/ChannelId' }
+        alwaysOn:
+          type: boolean
+          description: true for local only; cannot be disabled (INV-CC-1).
+        enabledByDefault: { type: boolean }
+        presetId: { $ref: '#/components/schemas/LayoutPresetId' }
+        ratioA: { type: [integer, 'null'] }
+        ratioB: { type: [integer, 'null'] }
+        streamTargetIds:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Ulid' }
+          description: streaming only; ordered set of enabled targets.
+        updatedAt: { $ref: '#/components/schemas/Instant' }
+
+    ChannelConfigUpdate:
+      type: object
+      properties:
+        enabledByDefault: { type: boolean }
+        presetId: { $ref: '#/components/schemas/LayoutPresetId' }
+        ratioA: { type: [integer, 'null'] }
+        ratioB: { type: [integer, 'null'] }
+        streamTargetIds:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Ulid' }
+
+    ChannelStatus:
+      type: object
+      description: Machine 1c runtime view (CH-01…CH-10); local mirrors machine 1a.
+      required: [channelId, state, presetId, ratioA, ratioB, reason]
+      properties:
+        channelId: { $ref: '#/components/schemas/ChannelId' }
+        state: { $ref: '#/components/schemas/ChannelRuntimeState' }
+        presetId: { $ref: '#/components/schemas/LayoutPresetId' }
+        ratioA: { type: [integer, 'null'] }
+        ratioB: { type: [integer, 'null'] }
+        reason: { type: [string, 'null'] }
+
+    # ── sources & audio (Context A) ──
+    SourceRole:
+      type: object
+      required: [id, medium, displayLabel, requiredForStart, provisionable]
+      properties:
+        id: { $ref: '#/components/schemas/SourceRoleId' }
+        medium: { type: string, enum: [video, audio] }
+        displayLabel: { type: string, maxLength: 32 }
+        requiredForStart: { type: boolean, description: false for all in V1 (A-08). }
+        provisionable: { type: boolean, description: mic-room = false (A-08 amended). }
+
+    SourceStatus:
+      type: object
+      description: Machine 5a row (REST mirror of sources.status).
+      required: [roleId, state, detail, since, inputId]
+      properties:
+        roleId: { $ref: '#/components/schemas/SourceRoleId' }
+        state: { $ref: '#/components/schemas/SourceHealthState' }
+        detail: { type: [string, 'null'] }
+        since: { $ref: '#/components/schemas/Instant' }
+        inputId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+
+    PhysicalInput:
+      type: object
+      description: Reality; SourceRole is meaning (domain model §4.6). Credentials resolve through the secret store — never inline (PF-17).
+      required: [id, kind, address, credentialRef, transport, expectedCodec, stableIdentifier, presenceState, lastSeenAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        kind: { type: string, enum: [v4l2, rtsp, alsa] }
+        address: { type: string, maxLength: 512 }
+        credentialRef: { type: [string, 'null'], maxLength: 128 }
+        transport:
+          oneOf:
+            - type: string
+              enum: [tcp, udp]
+            - type: 'null'
+        expectedCodec:
+          oneOf:
+            - type: string
+              enum: [h264, raw-nv12, s16le]
+            - type: 'null'
+        stableIdentifier: { type: [string, 'null'], maxLength: 256 }
+        presenceState:
+          type: string
+          enum: [present, absent, error, unknown]
+          description: Telemetry-authored only — an operator cannot mark an input healthy (INV-PI-3).
+        lastSeenAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        updatedAt: { $ref: '#/components/schemas/Instant' }
+
+    PhysicalInputUpdate:
+      type: object
+      properties:
+        address: { type: string, minLength: 1, maxLength: 512 }
+        credentialRef: { type: [string, 'null'], maxLength: 128 }
+        transport:
+          oneOf:
+            - type: string
+              enum: [tcp, udp]
+            - type: 'null'
+
+    SourceBinding:
+      type: object
+      required: [roleId, physicalInputId, enabled, updatedAt]
+      properties:
+        roleId: { $ref: '#/components/schemas/SourceRoleId' }
+        physicalInputId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+          description: null = role deliberately unbound.
+        enabled: { type: boolean }
+        updatedAt: { $ref: '#/components/schemas/Instant' }
+
+    SourceBindingUpdate:
+      type: object
+      required: [physicalInputId, enabled]
+      properties:
+        physicalInputId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        enabled: { type: boolean }
+
+    AudioControl:
+      type: object
+      description: LP-9 — the placebo killer (B-55). appliedState is the truth the UI shows (INV-AC-1).
+      required: [roleId, gain, muted, appliedState, lastAppliedAt, lastError]
+      properties:
+        roleId: { $ref: '#/components/schemas/SourceRoleId' }
+        gain: { type: integer, minimum: 0, maximum: 100 }
+        muted: { type: boolean }
+        appliedState: { type: string, enum: [applied, pending, failed] }
+        lastAppliedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        lastError: { type: [string, 'null'] }
+
+    AudioControlUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        gain: { type: integer, minimum: 0, maximum: 100 }
+        muted: { type: boolean }
+
+    # ── exports (Context C) ──
+    UsbVolume:
+      type: object
+      required: [devicePath, mountPath, label, capacityBytes, freeBytes]
+      properties:
+        devicePath: { type: string, maxLength: 128 }
+        mountPath: { type: string, maxLength: 256 }
+        label: { type: [string, 'null'], maxLength: 64 }
+        capacityBytes: { type: integer }
+        freeBytes: { type: integer }
+
+    ExportJob:
+      type: object
+      description: Real transfer progress, never free-space arithmetic (INV-EX-1, B-32).
+      required: [id, requestedAt, targetVolume, recordingIds, bytesTotal, bytesCopied, state, error]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        requestedAt: { $ref: '#/components/schemas/Instant' }
+        targetVolume: { $ref: '#/components/schemas/UsbVolume' }
+        recordingIds:
+          type: array
+          items: { $ref: '#/components/schemas/Ulid' }
+        bytesTotal: { type: integer }
+        bytesCopied: { type: integer }
+        state: { $ref: '#/components/schemas/ExportJobState' }
+        error: { type: [string, 'null'] }
+
+    ExportCreateRequest:
+      type: object
+      required: [recordingIds, targetDevicePath]
+      properties:
+        recordingIds:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Ulid' }
+        targetDevicePath:
+          type: string
+          description: Chosen UsbVolume.devicePath from /exports/targets (B-38 — the user picks).
+
+    # ── uploads (Context D) ──
+    UploadMetadata:
+      type: object
+      description: Placeholder manifest until the institute spec lands.
+      x-decision: D-02b
+      required: [title, hallCode, startedAt, endedAt, recordedDurationMs, files]
+      properties:
+        title: { type: string, description: The A-07 generated title — the upload key (INV-LS-5). }
+        hallCode: { type: string }
+        startedAt: { $ref: '#/components/schemas/Instant' }
+        endedAt: { $ref: '#/components/schemas/Instant' }
+        recordedDurationMs: { type: integer }
+        files:
+          type: array
+          items:
+            type: object
+            required: [streamKey, sizeBytes, durationMs, checksum]
+            properties:
+              streamKey: { type: string }
+              sizeBytes: { type: integer }
+              durationMs: { type: [integer, 'null'] }
+              checksum: { type: [string, 'null'] }
+
+    UploadFilePart:
+      type: object
+      description: The resumable unit; addressed by recordingFileId, never position (INV-UP-1).
+      x-decision: D-02b
+      required: [id, uploadJobId, recordingFileId, streamKey, state, bytesTotal, bytesSent, attempt, lastError]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        uploadJobId: { $ref: '#/components/schemas/Ulid' }
+        recordingFileId: { $ref: '#/components/schemas/Ulid' }
+        streamKey: { type: string, maxLength: 32 }
+        state: { $ref: '#/components/schemas/UploadFilePartState' }
+        bytesTotal: { type: integer }
+        bytesSent: { type: integer }
+        attempt: { type: integer }
+        lastError: { type: [string, 'null'] }
+
+    UploadJob:
+      type: object
+      description: One job per Recording (INV-UJ-1, DM-3). AD-9 queue row.
+      x-decision: D-02b
+      required: [id, recordingId, recordingTitle, adapterId, state, attempt, nextAttemptAt, lastError, lastErrorAt, remoteLectureId, progressPct, blockedBy, enqueuedAt, startedAt, completedAt, requeuedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        recordingId: { $ref: '#/components/schemas/Ulid' }
+        recordingTitle: { type: string }
+        adapterId: { type: string, maxLength: 64, description: '"placeholder" until [D-02b] lands (A-19).' }
+        state: { $ref: '#/components/schemas/UploadJobState' }
+        attempt: { type: integer }
+        nextAttemptAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        lastError: { type: [string, 'null'] }
+        lastErrorAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        remoteLectureId: { type: [string, 'null'], maxLength: 128 }
+        progressPct: { type: number, minimum: 0, maximum: 100 }
+        blockedBy:
+          oneOf:
+            - type: string
+              enum: [merge]
+            - type: 'null'
+          description: merge ⇒ AD-9 renders "Preparing…" (SM-D-1).
+        enqueuedAt:
+          $ref: '#/components/schemas/Instant'
+          description: Immediate on recording ready [D-13] — no windows.
+        startedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        completedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        requeuedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+
+    UploadJobDetail:
+      allOf:
+        - { $ref: '#/components/schemas/UploadJob' }
+        - type: object
+          required: [parts, metadata]
+          properties:
+            parts:
+              type: array
+              items: { $ref: '#/components/schemas/UploadFilePart' }
+            metadata: { $ref: '#/components/schemas/UploadMetadata' }
+
+    # ── provisioning & health (Context A) ──
+    FeatureFlags:
+      type: object
+      required: [recordingEnabled, aiQuizEnabled, streamingEnabled]
+      properties:
+        recordingEnabled: { type: boolean }
+        aiQuizEnabled:
+          type: boolean
+          description: INT-10 — flipping off never affects recording (INV-DP-4).
+        streamingEnabled: { type: boolean }
+
+    DeviceProvisioning:
+      type: object
+      description: Read-only in Admin (AD-10); written only by the deploy flow (INV-DP-1). Secrets omitted.
+      x-decision: D-20
+      required: [deviceId, serialNumber, instituteProfileId, hallCode, hallDisplayName, titlePattern, timezone, ntpServers, expectedStorageVolumeUuid, featureFlags, quizServerBaseUrl, llmEndpoint, provisionedAt, provisionedBy]
+      properties:
+        deviceId: { $ref: '#/components/schemas/Ulid' }
+        serialNumber: { type: [string, 'null'], maxLength: 64 }
+        instituteProfileId: { type: string, maxLength: 64 }
+        hallCode:
+          type: string
+          maxLength: 32
+          description: Open fact-check P-1.
+        hallDisplayName: { type: string, maxLength: 128 }
+        titlePattern:
+          type: string
+          maxLength: 128
+          description: 'Default "{hall} – {date} {time}" — pattern is data, not code (A-07). P-1'
+        timezone:
+          type: string
+          maxLength: 64
+          description: IANA zone. [D-17]
+        ntpServers:
+          type: array
+          items: { type: string }
+          description: '[D-17]'
+        expectedStorageVolumeUuid: { type: [string, 'null'], maxLength: 64 }
+        featureFlags: { $ref: '#/components/schemas/FeatureFlags' }
+        quizServerBaseUrl:
+          type: [string, 'null']
+          description: null ⇒ quiz features unavailable (LP-18).
+        llmEndpoint:
+          type: [string, 'null']
+          description: null ⇒ AI studio unavailable (LP-18).
+        provisionedAt: { $ref: '#/components/schemas/Instant' }
+        provisionedBy: { type: [string, 'null'], maxLength: 128 }
+
+    PublisherState:
+      type: object
+      required: [status, lastErrorCode, since]
+      properties:
+        status: { type: string, enum: [running, starting, exited, failed, unknown] }
+        lastErrorCode: { type: [string, 'null'] }
+        since: { $ref: '#/components/schemas/Instant' }
+
+    DeviceHealth:
+      type: object
+      description: Snapshot, not history (INV-DH-1). Stale projections read unknown, never healthy (INV-DH-2).
+      required: [deviceId, observedAt, storageTotalBytes, storageFreeBytes, storagePressure, diskHealth, captureCardState, publisherStates, ntpSynced, clockOffsetMs, lastBootAt, cpuLoad1m, tempC]
+      properties:
+        deviceId: { $ref: '#/components/schemas/Ulid' }
+        observedAt: { $ref: '#/components/schemas/Instant' }
+        storageTotalBytes: { type: integer }
+        storageFreeBytes: { type: integer }
+        storagePressure:
+          $ref: '#/components/schemas/StoragePressure'
+          description: critical refuses new starts (INV-DH-3). [D-15]
+        diskHealth: { $ref: '#/components/schemas/SmartStatus' }
+        captureCardState: { $ref: '#/components/schemas/CaptureCardState' }
+        publisherStates:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/PublisherState' }
+          description: Keyed by SourceRoleId — projection of pipeline-manager truth (INV-G-8).
+        ntpSynced: { type: boolean }
+        clockOffsetMs: { type: [integer, 'null'] }
+        lastBootAt: { $ref: '#/components/schemas/Instant' }
+        cpuLoad1m: { type: [number, 'null'] }
+        tempC: { type: [number, 'null'] }
+
+    # ── storage (Contexts A + D) ──
+    StorageVolume:
+      type: object
+      required: [id, uuid, devicePath, mountPath, label, filesystem, capacityBytes, freeBytes, smartStatus, role, state, registeredAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        uuid: { type: string, maxLength: 64 }
+        devicePath: { type: string, maxLength: 128, description: Informational — never the join key (B-38). }
+        mountPath: { type: string, maxLength: 256, description: Resolved at runtime (B-51). }
+        label: { type: [string, 'null'], maxLength: 64 }
+        filesystem: { type: string, maxLength: 32 }
+        capacityBytes: { type: integer }
+        freeBytes: { type: integer }
+        smartStatus: { $ref: '#/components/schemas/SmartStatus' }
+        role: { type: string, enum: [recordings, system] }
+        state: { type: string, enum: [registered, mounted, missing, formatting, failed] }
+        registeredAt: { $ref: '#/components/schemas/Instant' }
+
+    RetentionPolicy:
+      type: object
+      description: Warning text is GENERATED from these values (INV-RP-1); the UI may not hardcode a threshold.
+      x-decision: D-15
+      required: [maxAgeDays, warningThresholdPct, criticalThresholdPct, earlyDeleteOrder, neverDeleteUnuploaded, refuseStartWhenCritical]
+      properties:
+        maxAgeDays: { type: integer, description: 14 (A-20). }
+        warningThresholdPct: { type: integer }
+        criticalThresholdPct: { type: integer }
+        earlyDeleteOrder: { type: string, enum: [uploaded-oldest-first] }
+        neverDeleteUnuploaded: { type: boolean, description: The explicit reversal of B-20. }
+        refuseStartWhenCritical: { type: boolean }
+
+    StorageOverview:
+      type: object
+      required: [pressure, totalBytes, freeBytes, volumes, policy]
+      properties:
+        pressure: { $ref: '#/components/schemas/StoragePressure' }
+        totalBytes: { type: integer }
+        freeBytes: { type: integer }
+        volumes:
+          type: array
+          items: { $ref: '#/components/schemas/StorageVolume' }
+        policy: { $ref: '#/components/schemas/RetentionPolicy' }
+
+    RegisterVolumeRequest:
+      type: object
+      required: [uuid]
+      properties:
+        uuid: { type: string, maxLength: 64 }
+        label: { type: string, maxLength: 64 }
+
+    FormatVolumeRequest:
+      type: object
+      required: [confirmText]
+      properties:
+        confirmText:
+          type: string
+          description: Must equal the volume's label (or uuid when unlabelled) — the confirm names the device (J-5).
+
+    # ── settings (Context A) ──
+    NetworkConfig:
+      type: object
+      description: No Wi-Fi fields exist [D-16] (INV-NC-1). Camera addresses live on PhysicalInput (INV-NC-3).
+      x-decision: D-16
+      required: [id, interfaceName, kind, vlanId, addressMode, ipv4Address, prefixLength, gateway, dnsServers, appliedAt, lastApplyError]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        interfaceName: { type: string, maxLength: 32 }
+        kind: { type: string, enum: [lan, vlan] }
+        vlanId: { type: [integer, 'null'], description: Required iff kind = vlan. }
+        addressMode: { type: string, enum: [dhcp, static] }
+        ipv4Address: { type: [string, 'null'], description: Required iff static. }
+        prefixLength: { type: [integer, 'null'] }
+        gateway: { type: [string, 'null'] }
+        dnsServers:
+          type: array
+          items: { type: string }
+        appliedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        lastApplyError: { type: [string, 'null'], description: 'Surfaced in Admin, not swallowed.' }
+
+    NetworkConfigUpdate:
+      type: object
+      properties:
+        kind: { type: string, enum: [lan, vlan] }
+        vlanId: { type: [integer, 'null'] }
+        addressMode: { type: string, enum: [dhcp, static] }
+        ipv4Address: { type: [string, 'null'] }
+        prefixLength: { type: [integer, 'null'] }
+        gateway: { type: [string, 'null'] }
+        dnsServers:
+          type: array
+          items: { type: string }
+
+    EncodingProfile:
+      type: object
+      description: Restricted to probed RK3588 mpph264enc capability (AD-3, INV-EP-1). Single-source layouts bypass it (INV-EP-2).
+      required: [id, scope, channelId, videoBitrateKbps, framerate, gop, rateControl, codec, container, audioCodec, audioBitrateKbps, capabilityVerifiedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        scope: { type: string, enum: [device-default, channel], description: Per-channel override is DM-P4 (open). }
+        channelId:
+          oneOf: [{ $ref: '#/components/schemas/ChannelId' }, { type: 'null' }]
+        videoBitrateKbps: { type: integer, minimum: 2000, maximum: 8000 }
+        framerate: { type: integer }
+        gop: { type: integer }
+        rateControl: { type: string, enum: [cbr, vbr] }
+        codec: { type: string, enum: [h264] }
+        container: { type: string, enum: [mpegts, mp4, flv] }
+        audioCodec: { type: string, enum: [aac] }
+        audioBitrateKbps: { type: integer }
+        capabilityVerifiedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+          description: null ⇒ values not yet probed on this hardware.
+
+    EncoderCapabilities:
+      type: object
+      description: The UI renders ONLY these values (B-56 lesson — unsupported values are absent, not inert).
+      required: [videoBitrateKbps, framerates, gops, rateControls, codecs, audioBitratesKbps]
+      properties:
+        videoBitrateKbps:
+          type: object
+          required: [min, max]
+          properties:
+            min: { type: integer }
+            max: { type: integer }
+        framerates:
+          type: array
+          items: { type: integer }
+        gops:
+          type: array
+          items: { type: integer }
+        rateControls:
+          type: array
+          items: { type: string, enum: [cbr, vbr] }
+        codecs:
+          type: array
+          items: { type: string, enum: [h264] }
+        audioBitratesKbps:
+          type: array
+          items: { type: integer }
+
+    EncodingProfileUpdate:
+      type: object
+      properties:
+        videoBitrateKbps: { type: integer, minimum: 2000, maximum: 8000 }
+        framerate: { type: integer }
+        gop: { type: integer }
+        rateControl: { type: string, enum: [cbr, vbr] }
+        audioBitrateKbps: { type: integer }
+
+    StreamTarget:
+      type: object
+      description: The stream key NEVER appears in any response, log or event (INV-ST-1, PF-17).
+      x-decision: D-19
+      required: [id, platform, displayName, ingestUrl, hasStreamKey, requiresTlsBridge, enabled, lastPreflightAt, lastPreflightResult]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        platform: { type: string, enum: [youtube, facebook, custom-rtmp] }
+        displayName: { type: string, maxLength: 64 }
+        ingestUrl: { type: string, maxLength: 512 }
+        hasStreamKey: { type: boolean, description: Write-only key is stored — this flag is all the UI learns. }
+        requiresTlsBridge: { type: boolean, description: RTMPS via stunnel4 (B-58). }
+        enabled: { type: boolean }
+        lastPreflightAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        lastPreflightResult:
+          oneOf:
+            - type: string
+              enum: [ok, failed]
+            - type: 'null'
+
+    StreamTargetCreate:
+      type: object
+      x-decision: D-19
+      required: [platform, displayName, ingestUrl, streamKey]
+      properties:
+        platform: { type: string, enum: [youtube, facebook, custom-rtmp] }
+        displayName: { type: string, minLength: 1, maxLength: 64 }
+        ingestUrl: { type: string, minLength: 1, maxLength: 512 }
+        streamKey: { type: string, minLength: 1, maxLength: 512, description: Write-only — stored in the secret store. }
+        enabled: { type: boolean, default: true }
+
+    StreamTargetUpdate:
+      type: object
+      properties:
+        platform: { type: string, enum: [youtube, facebook, custom-rtmp] }
+        displayName: { type: string, minLength: 1, maxLength: 64 }
+        ingestUrl: { type: string, minLength: 1, maxLength: 512 }
+        streamKey: { type: string, minLength: 1, maxLength: 512, description: Omitted ⇒ unchanged. }
+        enabled: { type: boolean }
+
+    # ── firmware (Context A) ──
+    FirmwareUpdate:
+      type: object
+      description: Signed artifacts only (INV-FU-1); failed update leaves the device on rollbackVersion (INV-FU-2).
+      required: [id, currentVersion, availableVersion, state, signatureVerified, rollbackVersion, startedAt, finishedAt, lastError]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        currentVersion: { type: string, maxLength: 32 }
+        availableVersion: { type: [string, 'null'], maxLength: 32 }
+        state: { $ref: '#/components/schemas/FirmwareState' }
+        signatureVerified: { type: boolean }
+        rollbackVersion: { type: [string, 'null'], maxLength: 32 }
+        startedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        finishedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        lastError: { type: [string, 'null'] }
+
+    # ── users (Context B) ──
+    UserCreate:
+      type: object
+      required: [username, displayName, role, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128 }
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        role: { $ref: '#/components/schemas/UserRole' }
+        password: { type: string, minLength: 8, maxLength: 256 }
+
+    UserUpdate:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        role: { $ref: '#/components/schemas/UserRole' }
+        disabled: { type: boolean }
+        password:
+          type: string
+          minLength: 8
+          maxLength: 256
+          description: Setting a password forces reset on next login.
+
+    UserImportBatch:
+      type: object
+      description: All-or-nothing (INV-UI-1); the spreadsheet is not retained (INV-UI-3).
+      required: [id, filename, uploadedAt, state, rowCount, acceptedCount, rejections]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        filename: { type: string, maxLength: 256 }
+        uploadedAt: { $ref: '#/components/schemas/Instant' }
+        state: { type: string, enum: [validating, rejected, applied] }
+        rowCount: { type: integer }
+        acceptedCount: { type: integer }
+        rejections:
+          type: array
+          description: Empty when applied.
+          items:
+            type: object
+            required: [row, column, reason]
+            properties:
+              row: { type: integer }
+              column: { type: string }
+              reason:
+                type: string
+                enum: [empty-cell, duplicate-username-in-file, username-exists, invalid-role, invalid-format]
+
+    # ── AI (Context E, device side) ──
+    QuestionOption:
+      type: object
+      description: Identified, not positional — answers reference this id (DM-7, INV-Q-2).
+      required: [id, questionId, label, text, position]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        questionId: { $ref: '#/components/schemas/Ulid' }
+        label: { type: string, enum: [A, B, C, D] }
+        text: { type: string, maxLength: 512 }
+        position: { type: integer, description: Display order; editable without invalidating answers. }
+
+    Question:
+      type: object
+      required: [id, sessionId, questionSetId, kind, prompt, options, correctOptionId, provenance, edited, state, createdAt, orderHint]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        sessionId: { $ref: '#/components/schemas/Ulid' }
+        questionSetId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+          description: null = lecturer-authored; outlives batches and resets (INV-Q-3).
+        kind: { type: string, enum: [mcq, short], description: V1 rejects anything but mcq (DM-12). }
+        prompt: { type: string }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items: { $ref: '#/components/schemas/QuestionOption' }
+        correctOptionId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+          description: An id, never an index (INV-Q-2).
+        provenance: { type: string, enum: [generated, lecturer-authored] }
+        edited: { type: boolean }
+        state: { $ref: '#/components/schemas/QuestionState' }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+        orderHint: { type: [integer, 'null'] }
+
+    QuestionCreate:
+      type: object
+      description: Option ids are minted server-side (INV-G-2); exactly one option carries isCorrect (INV-Q-1).
+      required: [prompt, options]
+      properties:
+        prompt: { type: string, minLength: 1 }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [text, isCorrect]
+            properties:
+              text: { type: string, minLength: 1, maxLength: 512 }
+              isCorrect: { type: boolean }
+
+    QuestionUpdate:
+      type: object
+      description: Drafts only (G-QUESTION-MUTABLE). options, when present, is a full replacement; entries with an id keep it.
+      properties:
+        prompt: { type: string, minLength: 1 }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [text, isCorrect]
+            properties:
+              id: { $ref: '#/components/schemas/Ulid' }
+              text: { type: string, minLength: 1, maxLength: 512 }
+              isCorrect: { type: boolean }
+
+    QuestionSet:
+      type: object
+      description: One generation batch (machine 2b). failed is a visible state with retry (J-2).
+      required: [id, sessionId, trigger, state, requestedAt, completedAt, intervalMinutesAtRequest, requestedCount, returnedCount, error]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        sessionId: { $ref: '#/components/schemas/Ulid' }
+        trigger: { type: string, enum: [countdown, manual] }
+        state: { $ref: '#/components/schemas/QuestionSetState' }
+        requestedAt: { $ref: '#/components/schemas/Instant' }
+        completedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        intervalMinutesAtRequest: { $ref: '#/components/schemas/IntervalMinutes' }
+        requestedCount: { type: integer, minimum: 3, maximum: 5, description: A-14. }
+        returnedCount: { type: [integer, 'null'] }
+        error: { type: [string, 'null'] }
+
+    QuestionSetDetail:
+      allOf:
+        - { $ref: '#/components/schemas/QuestionSet' }
+        - type: object
+          required: [questions]
+          properties:
+            questions:
+              type: array
+              items: { $ref: '#/components/schemas/Question' }
+
+    AiCountdownSnapshot:
+      type: object
+      description: REST mirror of ai.countdown (machine 2a). The panel ticks locally from nextAt (INV-G-7).
+      required: [state, remainingMs, nextAt, intervalMinutes]
+      properties:
+        state: { $ref: '#/components/schemas/AiCountdownState' }
+        remainingMs: { type: [integer, 'null'] }
+        nextAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        intervalMinutes: { $ref: '#/components/schemas/IntervalMinutes' }
+
+    SetIntervalRequest:
+      type: object
+      required: [intervalMinutes]
+      properties:
+        intervalMinutes: { $ref: '#/components/schemas/IntervalMinutes' }
+
+    QuestionPublication:
+      type: object
+      description: The send-to-projector act + answer-acceptance window (machine 2d, INT-3).
+      required: [id, questionId, quizSessionId, state, publishedAt, closedAt, closeReason, isShowing, projectorState, syncState]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        questionId: { $ref: '#/components/schemas/Ulid' }
+        quizSessionId: { $ref: '#/components/schemas/Ulid' }
+        state: { $ref: '#/components/schemas/PublicationState' }
+        publishedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+          description: The response-time zero point (INT-2).
+        closedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+          description: Authoritative for acceptance on BOTH sides (INV-QPUB-4).
+        closeReason:
+          oneOf: [{ $ref: '#/components/schemas/PublicationCloseReason' }, { type: 'null' }]
+        isShowing: { type: boolean, description: Exactly one true per quiz session (INV-QPUB-1). }
+        projectorState: { $ref: '#/components/schemas/ProjectorState' }
+        syncState: { $ref: '#/components/schemas/QuizSyncState' }
+
+    PublicationWithQuestion:
+      allOf:
+        - { $ref: '#/components/schemas/QuestionPublication' }
+        - type: object
+          required: [question, responseCount, correctCount, incorrectCount]
+          properties:
+            question: { $ref: '#/components/schemas/Question' }
+            responseCount: { type: integer }
+            correctCount: { type: integer }
+            incorrectCount: { type: integer }
+
+    ProjectorRequest:
+      type: object
+      required: [publicationId]
+      properties:
+        publicationId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+          description: null ⇒ withdraw to slides passthrough. A closed publication re-projects in reveal mode (Q-36).
+
+    # ── quiz (Context E, cross-zone) ──
+    QuizSessionProjection:
+      type: object
+      description: Machine 4a device-side projection (INV-G-8) — never authority.
+      required: [state, quizSessionId, lectureSessionId, joinUrl, joinCode, joinedCount, syncState]
+      properties:
+        state: { $ref: '#/components/schemas/QuizSessionProjectionState' }
+        quizSessionId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        lectureSessionId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        joinUrl: { type: [string, 'null'], description: Encoded in the projector QR (QZ-2). }
+        joinCode: { type: [string, 'null'], maxLength: 8 }
+        joinedCount: { type: integer }
+        syncState:
+          oneOf: [{ $ref: '#/components/schemas/QuizSyncState' }, { type: 'null' }]
+
+    AnswerProjection:
+      type: object
+      description: Device-side read model (INV-AP-1 — replaced, never edited). Minimal PII (DM-14).
+      x-decision: D-21
+      required: [id, publicationId, studentIdNumber, studentDisplayName, selectedOptionId, isCorrect, responseTimeMs, submittedAt, syncedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        publicationId: { $ref: '#/components/schemas/Ulid' }
+        studentIdNumber: { type: string, maxLength: 32 }
+        studentDisplayName: { type: string, maxLength: 128 }
+        selectedOptionId: { $ref: '#/components/schemas/Ulid' }
+        isCorrect: { type: boolean }
+        responseTimeMs: { type: integer, description: Insight only — never affects score (INT-2). }
+        submittedAt: { $ref: '#/components/schemas/Instant' }
+        syncedAt: { $ref: '#/components/schemas/Instant' }
+
+    LeaderboardEntry:
+      type: object
+      description: Derived, never stored (INV-LB-1). points = 10 × correct (INT-2); dense ranking, ties share a rank (INV-LB-2).
+      required: [studentIdNumber, displayName, answered, correct, points, accuracy, avgResponseMs, rank]
+      properties:
+        studentIdNumber: { type: string, maxLength: 32, description: The key (QZ-3). }
+        displayName: { type: string, maxLength: 128, description: Panel only — never projected (INV-LB-3). }
+        answered: { type: integer }
+        correct: { type: integer }
+        points: { type: integer }
+        accuracy: { type: number, minimum: 0, maximum: 1, description: correct/answered; 0 when answered = 0 (INV-QP-2). }
+        avgResponseMs: { type: integer }
+        rank: { type: integer, minimum: 1 }
+
+    Leaderboard:
+      type: object
+      required: [sessionId, entries, computedAt, stale]
+      properties:
+        sessionId: { $ref: '#/components/schemas/Ulid' }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/LeaderboardEntry' }
+        computedAt: { $ref: '#/components/schemas/Instant' }
+        stale: { type: boolean, description: Machine 4d ≥ stale (INV-AP-2). }
+
+    # ── quiz-sync payloads (server-to-server, DM-P5) ──
+    QuizSessionCreateRequest:
+      type: object
+      x-decision: DM-P5
+      required: [lectureSessionId, deviceId, hallDisplayName]
+      properties:
+        lectureSessionId: { $ref: '#/components/schemas/Ulid' }
+        deviceId: { $ref: '#/components/schemas/Ulid' }
+        hallDisplayName: { type: string, maxLength: 128 }
+
+    QuizSessionCreateResponse:
+      type: object
+      x-decision: DM-P5
+      required: [id, lectureSessionId, state, joinCode, joinUrl, openedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        lectureSessionId: { $ref: '#/components/schemas/Ulid' }
+        state: { type: string, enum: [open, closed] }
+        joinCode: { type: string, maxLength: 8 }
+        joinUrl: { type: string, maxLength: 256, description: Quiz-service owns its URL namespace (DM-15). }
+        openedAt: { $ref: '#/components/schemas/Instant' }
+
+    PublicationPush:
+      type: object
+      description: Server-to-server only — carries correctness so quiz-service evaluates at submit time (Z-22). Students never see it before close.
+      x-decision: DM-P5
+      required: [publicationId, quizSessionId, questionId, prompt, options, correctOptionId, publishedAt]
+      properties:
+        publicationId: { $ref: '#/components/schemas/Ulid' }
+        quizSessionId: { $ref: '#/components/schemas/Ulid' }
+        questionId: { $ref: '#/components/schemas/Ulid' }
+        prompt: { type: string }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [id, label, text]
+            properties:
+              id: { $ref: '#/components/schemas/Ulid' }
+              label: { type: string, enum: [A, B, C, D] }
+              text: { type: string, maxLength: 512 }
+        correctOptionId: { $ref: '#/components/schemas/Ulid' }
+        publishedAt: { $ref: '#/components/schemas/Instant' }
+
+    PublicationCloseRequest:
+      type: object
+      x-decision: DM-P5
+      required: [publicationId, closedAt, closeReason]
+      properties:
+        publicationId: { $ref: '#/components/schemas/Ulid' }
+        closedAt:
+          $ref: '#/components/schemas/Instant'
+          description: Authoritative for acceptance on both sides (INV-QPUB-4); no grace window (SM-Q-6).
+        closeReason: { $ref: '#/components/schemas/PublicationCloseReason' }
+
+    # ── observability (Context F) ──
+    LogEntry:
+      type: object
+      description: AD-7 row. Append-only (INV-LE-1); context never contains secrets (INV-ST-1).
+      required: [id, at, level, category, service, message, context, sessionId, userId]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        at: { $ref: '#/components/schemas/Instant' }
+        level: { $ref: '#/components/schemas/LogLevel' }
+        category: { $ref: '#/components/schemas/LogCategory' }
+        service: { type: string, enum: [core-api, pipeline-manager, ai, deploy, quiz-sync] }
+        message: { type: string }
+        context: { type: [object, 'null'], additionalProperties: true }
+        sessionId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        userId:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+
+    SystemAlert:
+      type: object
+      description: A current condition, distinct from the log (INV-SA-2). Cannot be cleared while still true (INV-SA-1).
+      required: [id, code, severity, category, title, detail, raisedAt, clearedAt, clearedReason, acknowledgedBy, context, relatedEntity]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        code: { type: string, maxLength: 64, description: 'Stable machine code, e.g. storage.critical, capture-card.absent.' }
+        severity: { type: string, enum: [info, warning, error, critical] }
+        category: { $ref: '#/components/schemas/LogCategory' }
+        title: { type: string, maxLength: 128, description: Plain language for a non-technical lecturer. }
+        detail: { type: [string, 'null'] }
+        raisedAt: { $ref: '#/components/schemas/Instant' }
+        clearedAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+        clearedReason:
+          oneOf:
+            - type: string
+              enum: [resolved, acknowledged, superseded]
+            - type: 'null'
+        acknowledgedBy:
+          oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        context: { type: [object, 'null'], additionalProperties: true }
+        relatedEntity:
+          oneOf:
+            - type: object
+              required: [type, id]
+              properties:
+                type: { type: string }
+                id: { type: string }
+            - type: 'null'
