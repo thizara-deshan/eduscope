@@ -93,8 +93,10 @@ describe('event catalog coverage', () => {
         lastBootAt: '2026-07-28T10:15:00Z',
       },
     });
-    expect(parsed.event).toBe('device.health');
-    expect(parsed.payload.publisherStates['lecturer-cam'].status).toBe('running');
+    if (parsed.event !== 'device.health') {
+      throw new Error(`expected device.health, got ${parsed.event}`);
+    }
+    expect(parsed.payload.publisherStates['lecturer-cam']?.status).toBe('running');
   });
 
   it('rejects studentIdNumber exceeding 32 chars (contracts/openapi.yaml AnswerProjection)', () => {
