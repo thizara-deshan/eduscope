@@ -11,12 +11,12 @@ import {
   zChannelRuntimeState,
   zExportJobState,
   zFirmwareUpdate,
-  zInstant,
   zLayoutPresetId,
   zLogEntry,
   zMergeState,
   zPublicationCloseReason,
   zProjectorState,
+  zPublisherState,
   zQuestionSetState,
   zQuestionState,
   zQuizSessionProjectionState,
@@ -36,6 +36,9 @@ import {
   zUsbVolume,
 } from './rest.js';
 
+// ── WS event envelope instant format: ISO 8601 with explicit offset ─────────
+const zEventInstant = z.string().datetime({ offset: true });
+
 // ── §2 payloads ────────────────────────────────────────────────────────────
 
 /** §2.1 — startedAt/recordedDurationMs drive a LOCAL tick; no per-second events. */
@@ -46,11 +49,11 @@ export const zRecordingStatePayload = z.object({
   title: z.string().nullable(),
   ownerUserId: zUlid.nullable(),
   ownerDisplayName: z.string().nullable(),
-  startedAt: zInstant.nullable(),
-  recordedDurationMs: z.number().int().nullable(),
-  segmentIndex: z.number().int().nullable(),
-  segmentCount: z.number().int().nullable(),
-  pauseCount: z.number().int().nullable(),
+  startedAt: zEventInstant.nullable(),
+  recordedDurationMs: z.number().int().nonnegative().nullable(),
+  segmentIndex: z.number().int().nonnegative().nullable(),
+  segmentCount: z.number().int().nonnegative().nullable(),
+  pauseCount: z.number().int().nonnegative().nullable(),
   takeoverBy: zUlid.nullable(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
@@ -62,10 +65,10 @@ export const zRecordingSegmentPayload = z.object({
   sessionId: zUlid,
   recordingId: zUlid,
   segmentId: zUlid,
-  index: z.number().int(),
+  index: z.number().int().nonnegative(),
   state: zSegmentState,
   endReason: zSegmentEndReason.nullable(),
-  durationMs: z.number().int().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
 });
 
 /** §2.3 */
@@ -74,8 +77,8 @@ export const zRecordingArtifactPayload = z.object({
   sessionId: zUlid,
   state: z.enum(['capturing', 'finalizing', 'merging', 'ready', 'failed', 'deleted']),
   mergeState: zMergeState,
-  durationMs: z.number().int().nullable(),
-  totalBytes: z.number().int().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  totalBytes: z.number().int().nonnegative().nullable(),
   deleteReason: z.string().nullable(),
 });
 
@@ -94,7 +97,7 @@ export const zSourcesStatusPayload = z.object({
   roleId: zSourceRoleId,
   state: zSourceHealthState,
   detail: z.string().nullable(),
-  since: zInstant,
+  since: zEventInstant,
   inputId: zUlid.nullable(),
 });
 
@@ -116,26 +119,26 @@ export const zAudioControlPayload = z.object({
 /** §2.8 — carries the full policy so warning text quotes real values (INV-RP-1). */
 export const zStorageStatusPayload = z.object({
   pressure: zStoragePressure,
-  freeBytes: z.number().int(),
-  totalBytes: z.number().int(),
+  freeBytes: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative(),
   policy: zRetentionPolicy,
 });
 
 /** §2.9 */
 export const zDeviceHealthPayload = z.object({
   captureCardState: zCaptureCardState,
-  publisherStates: z.array(z.object({ id: z.string(), state: z.string() })),
+  publisherStates: z.record(z.string(), zPublisherState),
   ntpSynced: z.boolean(),
   clockOffsetMs: z.number().int().nullable(),
   diskHealth: zSmartStatus,
-  lastBootAt: zInstant,
+  lastBootAt: zEventInstant,
 });
 
 /** §2.12 — nextAt is absolute; the panel ticks locally (INV-G-7). */
 export const zAiCountdownPayload = z.object({
   state: zAiCountdownState,
-  remainingMs: z.number().int().nullable(),
-  nextAt: zInstant.nullable(),
+  remainingMs: z.number().int().nonnegative().nullable(),
+  nextAt: zEventInstant.nullable(),
   intervalMinutes: z.union([z.literal(10), z.literal(15), z.literal(20), z.literal(30)]),
 });
 
@@ -145,9 +148,9 @@ export const zAiSetPayload = z.object({
   sessionId: zUlid,
   state: zQuestionSetState,
   trigger: z.enum(['countdown', 'manual']),
-  count: z.number().int().nullable(),
+  count: z.number().int().nonnegative().nullable(),
   error: z.enum(['timeout', 'unreachable', 'invalid-payload']).nullable(),
-  attempt: z.number().int(),
+  attempt: z.number().int().nonnegative(),
 });
 
 /** §2.14 — setId null = lecturer-authored ("Yours" chip). */
@@ -165,7 +168,7 @@ export const zQuizSessionPayload = z.object({
   quizSessionId: zUlid.nullable(),
   joinUrl: z.string().nullable(),
   joinCode: z.string().nullable(),
-  joinedCount: z.number().int(),
+  joinedCount: z.number().int().nonnegative(),
 });
 
 /** §2.16 — exactly one publication may carry isShowing (INV-QPUB-1). */
@@ -184,15 +187,15 @@ export const zQuizResponsesPayload = z.object({
   publicationId: zUlid,
   deltas: z.array(
     z.object({
-      studentIdNumber: z.string(),
-      displayName: z.string(),
+      studentIdNumber: z.string().max(32),
+      displayName: z.string().max(128),
       selectedOptionId: zUlid,
       isCorrect: z.boolean(),
-      responseTimeMs: z.number().int(),
-      submittedAt: zInstant,
+      responseTimeMs: z.number().int().nonnegative(),
+      submittedAt: zEventInstant,
     }),
   ),
-  syncedAt: zInstant,
+  syncedAt: zEventInstant,
   stale: z.boolean(),
 });
 
@@ -201,8 +204,8 @@ export const zUploadJobPayload = z.object({
   jobId: zUlid,
   recordingId: zUlid,
   state: zUploadJobState,
-  attempt: z.number().int(),
-  nextAttemptAt: zInstant.nullable(),
+  attempt: z.number().int().nonnegative(),
+  nextAttemptAt: zEventInstant.nullable(),
   progressPct: z.number().int().min(0).max(100),
   lastError: z.string().nullable(),
   blockedBy: z.string().nullable(),
@@ -214,16 +217,16 @@ export const zUploadPartPayload = z.object({
   jobId: zUlid,
   streamKey: z.string(),
   state: zUploadFilePartState,
-  bytesSent: z.number().int(),
-  bytesTotal: z.number().int(),
+  bytesSent: z.number().int().nonnegative(),
+  bytesTotal: z.number().int().nonnegative(),
 });
 
 /** §2.20 — real transfer bytes, never free-space arithmetic (INV-EX-1). */
 export const zExportJobPayload = z.object({
   jobId: zUlid,
   state: zExportJobState,
-  bytesCopied: z.number().int(),
-  bytesTotal: z.number().int(),
+  bytesCopied: z.number().int().nonnegative(),
+  bytesTotal: z.number().int().nonnegative(),
   error: z.string().nullable(),
 });
 
@@ -288,7 +291,7 @@ export const PANEL_EVENT_NAMES = [
 
 /** §1 envelope: `seq` is per-connection and monotonic; a gap forces a full resync. */
 export const zEventEnvelope = zPanelServerEvent.and(
-  z.object({ at: zInstant, seq: z.number().int().nonnegative() }),
+  z.object({ at: zEventInstant, seq: z.number().int().nonnegative() }),
 );
 export type EventEnvelope = z.infer<typeof zEventEnvelope>;
 
@@ -338,9 +341,9 @@ export const zQuizSyncClientMessage = z.discriminatedUnion('type', [
     type: z.literal('sync.hello'),
     deviceId: zUlid,
     quizSessionId: zUlid,
-    answerWatermark: z.number().int(),
+    answerWatermark: z.number().int().nonnegative(),
   }),
-  z.object({ type: z.literal('sync.heartbeat'), at: zInstant }),
+  z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
 ]);
 
 export const zQuizSyncServerMessage = z.discriminatedUnion('type', [
@@ -349,25 +352,25 @@ export const zQuizSyncServerMessage = z.discriminatedUnion('type', [
     quizSessionId: zUlid,
     answers: z.array(
       z.object({
-        seq: z.number().int(),
+        seq: z.number().int().nonnegative(),
         answerId: zUlid,
         publicationId: zUlid,
-        studentIdNumber: z.string(),
-        studentDisplayName: z.string(),
+        studentIdNumber: z.string().max(32),
+        studentDisplayName: z.string().max(128),
         selectedOptionId: zUlid,
         isCorrect: z.boolean(),
-        responseTimeMs: z.number().int(),
-        submittedAt: zInstant,
+        responseTimeMs: z.number().int().nonnegative(),
+        submittedAt: zEventInstant,
       }),
     ),
   }),
   z.object({
     type: z.literal('sync.participants'),
     quizSessionId: zUlid,
-    joinedCount: z.number().int(),
-    onlineCount: z.number().int(),
+    joinedCount: z.number().int().nonnegative(),
+    onlineCount: z.number().int().nonnegative(),
   }),
-  z.object({ type: z.literal('sync.heartbeat'), at: zInstant }),
+  z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
 ]);
 
 // ── §4 note: student-facing events, shared with apps/quiz ──────────────────
@@ -391,9 +394,9 @@ export const zStudentServerEvent = z.discriminatedUnion('event', [
       publicationId: zUlid,
       isCorrect: z.boolean().nullable(),
       correctOptionId: zUlid,
-      pointsAwarded: z.number().int(),
-      runningScore: z.number().int(),
-      ownRank: z.number().int().nullable(),
+      pointsAwarded: z.number().int().nonnegative(),
+      runningScore: z.number().int().nonnegative(),
+      ownRank: z.number().int().nonnegative().nullable(),
     }),
   }),
   z.object({
@@ -404,9 +407,9 @@ export const zStudentServerEvent = z.discriminatedUnion('event', [
     event: z.literal('quiz.session'),
     payload: z.object({
       state: z.enum(['open', 'closed']),
-      finalScore: z.number().int().nullable(),
-      finalRank: z.number().int().nullable(),
-      answeredCount: z.number().int().nullable(),
+      finalScore: z.number().int().nonnegative().nullable(),
+      finalRank: z.number().int().nonnegative().nullable(),
+      answeredCount: z.number().int().nonnegative().nullable(),
     }),
   }),
 ]);

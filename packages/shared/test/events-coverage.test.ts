@@ -77,4 +77,46 @@ describe('event catalog coverage', () => {
       }).type,
     ).toBe('error');
   });
+
+  it('accepts device.health event with publisherStates as a record (contracts/openapi.yaml DeviceHealth)', () => {
+    const parsed = zPanelServerEvent.parse({
+      event: 'device.health',
+      payload: {
+        captureCardState: 'present',
+        publisherStates: {
+          'lecturer-cam': { status: 'running', lastErrorCode: null, since: '2026-07-30T08:00:00Z' },
+          'screen-share': { status: 'exited', lastErrorCode: 'connection-lost', since: '2026-07-30T08:30:00Z' },
+        },
+        ntpSynced: true,
+        clockOffsetMs: null,
+        diskHealth: 'good',
+        lastBootAt: '2026-07-28T10:15:00Z',
+      },
+    });
+    expect(parsed.event).toBe('device.health');
+    expect(parsed.payload.publisherStates['lecturer-cam'].status).toBe('running');
+  });
+
+  it('rejects studentIdNumber exceeding 32 chars (contracts/openapi.yaml AnswerProjection)', () => {
+    expect(() =>
+      zPanelServerEvent.parse({
+        event: 'quiz.responses',
+        payload: {
+          publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+          deltas: [
+            {
+              studentIdNumber: 'a'.repeat(33),
+              displayName: 'Alice',
+              selectedOptionId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+              isCorrect: true,
+              responseTimeMs: 1000,
+              submittedAt: '2026-07-30T09:00:00Z',
+            },
+          ],
+          syncedAt: '2026-07-30T09:00:00Z',
+          stale: false,
+        },
+      }),
+    ).toThrow();
+  });
 });
