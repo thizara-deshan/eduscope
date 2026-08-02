@@ -68,4 +68,22 @@ describe('rest schema coverage', () => {
       nextCursor: null,
     });
   });
+
+  it('preserves unknown keys in open-ended fields (additionalProperties: true)', () => {
+    // openapi.yaml declares Problem.meta, LogEntry.context, and SystemAlert.context
+    // as `additionalProperties: true`. The generator renders these as bare
+    // `z.object({})`, whose default "strip" mode would silently discard real
+    // content. rest.ts overrides all three with `.catchall(z.unknown())`; this
+    // proves the override actually keeps the data instead of stripping it.
+    const problem = {
+      status: 409,
+      code: 'conflict',
+      title: 'Role already bound',
+      meta: { roleId: 'presentation', ownerUserId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D' },
+    };
+    expect(rest.zProblem.parse(problem).meta).toEqual({
+      roleId: 'presentation',
+      ownerUserId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+    });
+  });
 });

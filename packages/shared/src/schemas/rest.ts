@@ -7,6 +7,7 @@
  * test in test/rest-coverage.test.ts is the gate.
  */
 import { z } from 'zod';
+import * as generated from './generated/zod.gen.js';
 
 export * from './generated/zod.gen.js';
 export type * from './generated/types.gen.js';
@@ -16,3 +17,26 @@ export const zPage = <T extends z.ZodTypeAny>(item: T) =>
   z.object({ items: z.array(item), nextCursor: z.string().nullable() });
 
 export type Page<T> = { items: T[]; nextCursor: string | null };
+
+// ── behavior adapter: additionalProperties: true fields ────────────────────
+// contracts/openapi.yaml declares exactly three fields as open-ended objects
+// (`additionalProperties: true`): Problem.meta, LogEntry.context, and
+// SystemAlert.context. The generator renders these as bare `z.object({})`,
+// and zod's default object mode is "strip" — any keys a real payload puts in
+// `meta`/`context` would silently vanish on `.parse()`, contradicting
+// frontend-conventions.md §5's promise that validation preserves real
+// content. Override here (never in generated/zod.gen.ts): `.catchall()`
+// keeps unknown keys instead of stripping them.
+const zOpenObject = z.object({}).catchall(z.unknown());
+
+export const zProblem = generated.zProblem.extend({
+  meta: zOpenObject.optional(),
+});
+
+export const zLogEntry = generated.zLogEntry.extend({
+  context: zOpenObject.nullable(),
+});
+
+export const zSystemAlert = generated.zSystemAlert.extend({
+  context: zOpenObject.nullable(),
+});
