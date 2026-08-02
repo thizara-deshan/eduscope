@@ -7,6 +7,9 @@ export const TIMERS = {
   'T-SESSION-HEARTBEAT': 5_000,
   'T-RECOVERY-WINDOW': 600_000,
   'T-BOOT-RECOVERY': 20_000,
+  /** §9 — first step of the 1s/3s/8s backoff below; recording.ts falls back
+   * to the same 1s value via `?? 1_000` if this key were ever removed. */
+  'T-CONSUMER-RESTART': 1_000,
   'T-CHANNEL-START': 6_000,
   'T-STORAGE-PROBE-REC': 10_000,
   'T-STORAGE-PROBE-IDLE': 60_000,

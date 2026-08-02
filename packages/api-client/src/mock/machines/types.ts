@@ -6,11 +6,13 @@ export type MachineId =
   | `channel:${'meeting' | 'streaming'}`
   | 'ai.countdown'
   | 'ai.set'
+  | 'ai.question'
   | 'ai.publication'
   | 'quiz.session'
   | 'quiz.sync'
   | `source:${string}`
-  | 'storage';
+  | 'storage'
+  | 'capture-card';
 
 /** Stable ids from docs/design/state-machines.md — 'R-01', 'CH-05', 'Q-12', … */
 export type TransitionId = string;

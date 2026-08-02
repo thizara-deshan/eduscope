@@ -39,13 +39,18 @@ describe('MockWorld', () => {
     w.subscribeEvents((e) => seen.push(e));
     w.apply('R-01');
     w.apply('R-05');
-    expect(seen.map((e) => e.seq)).toEqual([0, 1]);
+    // R-01 emits recording.state (seq 0); R-05 emits recording.state and
+    // recording.segment (seq 1, 2). R-05 also re-broadcasts ai.countdown and
+    // quiz.session, but this suite registers only recordingMachine, so those
+    // builders (owned by ai.ts/quiz.ts) aren't registered and are skipped.
+    expect(seen.map((e) => e.seq)).toEqual([0, 1, 2]);
   });
 
   it('runs scheduled transitions only when the virtual clock advances', () => {
     const { w, clock } = world();
+    // R-01 itself schedules R-05 at T-START-CONFIRM-scale (1_200ms, see
+    // recording.ts) — no need to schedule it again here.
     w.apply('R-01');
-    w.schedule('R-05', 1_200);
     expect(w.state('recording')).toBe('starting');
     clock.advance(1_199);
     expect(w.state('recording')).toBe('starting');
