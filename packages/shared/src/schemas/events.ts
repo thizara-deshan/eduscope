@@ -7,7 +7,6 @@ import {
   ChannelRuntimeState,
   DeleteReason,
   ExportJobState,
-  FirmwareState,
   IntervalMinutes,
   LayoutPresetId,
   MergeState,

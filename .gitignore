@@ -7,3 +7,8 @@ revamp-guide/
 .agents/
 .claude/
 agent/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
