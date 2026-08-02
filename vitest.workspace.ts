@@ -12,20 +12,10 @@ import { defineWorkspace } from 'vitest/config';
  */
 export default defineWorkspace([
   'packages/*',
-  {
-    test: {
-      name: 'panel',
-      environment: 'jsdom',
-      include: ['apps/panel/**/*.test.tsx'],
-    },
-  },
-  {
-    test: {
-      name: 'quiz',
-      environment: 'jsdom',
-      include: ['apps/quiz/**/*.test.tsx'],
-    },
-  },
+  // apps/* delegates to each app's own vitest.config.ts — apps/panel and
+  // apps/quiz (added in Tasks 13/18) each set up their own jsdom
+  // environment and the React plugin there, not here.
+  'apps/*',
   {
     test: {
       name: 'tools',
