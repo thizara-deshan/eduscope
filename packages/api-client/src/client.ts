@@ -65,7 +65,7 @@ export interface EduscopeClient {
   listSourceBindings(): Promise<SourceBinding[]>;
   updateSourceBinding(roleId: SourceRoleId, body: SourceBindingUpdate): Promise<SourceBinding>;
   listAudioControls(): Promise<AudioControl[]>;
-  updateAudioControl(roleId: SourceRoleId, body: AudioControlUpdate): Promise<AudioControl>;
+  updateAudioControl(roleId: SourceRoleId, body: AudioControlUpdate): Promise<CommandAccepted>;
 
   // ── recordings & exports (machine 2/3) ──────────────────────────────────
   listRecordings(query?: {
@@ -98,8 +98,8 @@ export interface EduscopeClient {
   getDeviceHealth(): Promise<DeviceHealth>;
 
   // ── device: alerts & power ──────────────────────────────────────────────
-  listAlerts(query?: { acknowledged?: boolean }): Promise<Page<SystemAlert>>;
-  acknowledgeAlert(alertId: string): Promise<void>;
+  listAlerts(query?: { includeCleared?: boolean }): Promise<{ items: SystemAlert[] }>;
+  acknowledgeAlert(alertId: string): Promise<SystemAlert>;
   powerOffDevice(): Promise<CommandAccepted>;
 
   // ── storage ──────────────────────────────────────────────────────────────
