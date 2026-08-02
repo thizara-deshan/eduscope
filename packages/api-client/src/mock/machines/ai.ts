@@ -1,7 +1,7 @@
 import { TIMERS } from '@eduscope/shared';
 import { PAYLOAD_BUILDERS, nextUlid, type MockWorld } from '../world.js';
 import { alert, emit, fire, set, t } from './helpers.js';
-import type { MachineDef } from './types.js';
+import type { MachineDef, Transition } from './types.js';
 
 /**
  * Machine 2 — AI QUESTION FLOW is four coupled machines (state-machines.md §3):
@@ -90,12 +90,23 @@ PAYLOAD_BUILDERS['ai.countdown'] = (w: MockWorld) => {
 const M_SET = 'ai.set' as const;
 const citeB = (n: string) => `state-machines §3.2 ${n}`;
 
+/**
+ * A lecture produces many `QuestionSet`s (every countdown interval, or on
+ * manual generate_now) — `reviewed`/`discarded` end *one* set's lifecycle,
+ * not the machine's. `Q-11` (each new set's own creation, doc `Trigger:
+ * Q-02/Q-03`) must be able to fire again after a prior cycle finished, so it
+ * lists every state explicitly rather than `['requested']` alone — same
+ * "creation event, not an exit from a tracked prior state" reasoning as
+ * `Q-18`/`Q-19`/`Q-30` elsewhere in this file.
+ */
+const ANY_SET_STATE = ['requested', 'generating', 'ready', 'failed', 'reviewed', 'discarded'];
+
 export const aiSetMachine: MachineDef = {
   id: M_SET,
   initial: 'requested',
   terminal: ['reviewed', 'discarded'],
   transitions: [
-    t(M_SET, 'Q-11', ['requested'], 'generating', citeB('Q-11'),
+    t(M_SET, 'Q-11', ANY_SET_STATE, 'generating', citeB('Q-11'),
       set('ai.set.trigger', 'countdown'),
       set('ai.set.attempt', 0),
       emit('ai.set'),
@@ -171,13 +182,20 @@ export const aiQuestionMachine: MachineDef = {
   ],
 };
 
-PAYLOAD_BUILDERS['ai.question'] = (w: MockWorld) => ({
-  questionId: nextUlid(w),
-  setId: (w.data['ai.set.ulid'] as string | undefined) ?? null,
-  state: w.state(M_QUESTION),
-  provenance: (w.data['ai.question.provenance'] as 'generated' | 'lecturer-authored' | undefined) ?? 'generated',
-  edited: (w.data['ai.question.edited'] as boolean | undefined) ?? false,
-});
+/** Q-12 (2b) is the same doc-level creation event as Q-18 (its own row's trigger is literally "Q-12 (generated)"); Q-19 is the lecturer-authored equivalent. Every other id (edit/discard/send/close, plus 2d's re-broadcasts) mutates the *same* question, so it must keep the memoized id — otherwise a consumer can never correlate a question across its own lifecycle. */
+const QUESTION_CREATION_IDS = new Set(['Q-12', 'Q-18', 'Q-19']);
+
+PAYLOAD_BUILDERS['ai.question'] = (w: MockWorld, tr: Transition) => {
+  if (QUESTION_CREATION_IDS.has(tr.id)) w.data['ai.question.ulid'] = nextUlid(w);
+  const questionId = (w.data['ai.question.ulid'] as string | undefined) ?? nextUlid(w);
+  return {
+    questionId,
+    setId: (w.data['ai.set.ulid'] as string | undefined) ?? null,
+    state: w.state(M_QUESTION),
+    provenance: (w.data['ai.question.provenance'] as 'generated' | 'lecturer-authored' | undefined) ?? 'generated',
+    edited: (w.data['ai.question.edited'] as boolean | undefined) ?? false,
+  };
+};
 
 // ── 2d — QuestionPublication, the send-to-projector contract ───────────────
 
@@ -236,12 +254,29 @@ export const aiPublicationMachine: MachineDef = {
   ],
 };
 
-PAYLOAD_BUILDERS['quiz.publication'] = (w: MockWorld) => ({
-  publicationId: nextUlid(w),
-  questionId: (w.data['ai.publication.questionId'] as string | undefined) ?? nextUlid(w),
-  state: w.state(M_PUBLICATION),
-  isShowing: (w.data['ai.publication.isShowing'] as boolean | undefined) ?? false,
-  projectorState: (w.data['ai.publication.projectorState'] as string | undefined) ?? 'not-shown',
-  syncState: w.state('quiz.sync'),
-  closeReason: (w.data['ai.publication.closeReason'] as string | undefined) ?? null,
-});
+/**
+ * Q-30 is a fresh entity (see the comment above `ANY_PUBLICATION_STATE`), so
+ * it mints a new id; every later transition in the same cycle (Q-31, Q-33..
+ * Q-36, and 4d's syncState re-broadcasts) keeps it — matching recording.ts's
+ * `w.data['session.ulid'] ?? nextUlid(w)` memoization idiom, so a consumer
+ * keyed by `publicationId` can actually observe INV-QPUB-1 (exactly one
+ * `isShowing:true` publication) across the id staying constant. Simplification:
+ * Q-31's own "close the previous publication" emit (its first effect) also
+ * reports *this* id rather than the genuinely-different prior publication's —
+ * this mock tracks one "current" publication, not a full history.
+ */
+PAYLOAD_BUILDERS['quiz.publication'] = (w: MockWorld, tr: Transition) => {
+  if (tr.id === 'Q-30') {
+    w.data['ai.publication.ulid'] = nextUlid(w);
+    w.data['ai.publication.questionId'] = nextUlid(w);
+  }
+  return {
+    publicationId: (w.data['ai.publication.ulid'] as string | undefined) ?? nextUlid(w),
+    questionId: (w.data['ai.publication.questionId'] as string | undefined) ?? nextUlid(w),
+    state: w.state(M_PUBLICATION),
+    isShowing: (w.data['ai.publication.isShowing'] as boolean | undefined) ?? false,
+    projectorState: (w.data['ai.publication.projectorState'] as string | undefined) ?? 'not-shown',
+    syncState: w.state('quiz.sync'),
+    closeReason: (w.data['ai.publication.closeReason'] as string | undefined) ?? null,
+  };
+};

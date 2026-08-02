@@ -103,14 +103,7 @@ export class MockWorld {
         return;
       case 'emit': {
         const build = PAYLOAD_BUILDERS[effect.event];
-        // A machine's transitions may re-broadcast another machine's event as
-        // an informational snapshot (e.g. recording.ts's R-05 re-emits
-        // ai.countdown/quiz.session alongside its own state change). Tests
-        // that register a single machine in isolation (world.test.ts +
-        // recordingMachine) legitimately never load the module that owns
-        // that builder — skip rather than crash; createMockClient registers
-        // every machine (and therefore every builder) together in practice.
-        if (!build) return;
+        if (!build) throw new Error(`no payload builder registered for ${effect.event}`);
         this.emit(effect.event, { ...build(this, t), ...(effect.patch ?? {}) });
         return;
       }
@@ -138,10 +131,14 @@ export function buildAlert(
     category: 'System',
     title: code,
     detail: null,
-    raisedAt: w.clock.nowIso(),
-    acknowledgedAt: null,
+    // zSystemAlert.raisedAt is z.string().datetime() (Z-only, no offset), but
+    // Clock.nowIso() always returns a "+00:00"-suffixed instant — normalize.
+    raisedAt: w.clock.nowIso().replace('+00:00', 'Z'),
     clearedAt: null,
     clearedReason: null,
+    acknowledgedBy: null,
+    context: null,
+    relatedEntity: null,
   };
 }
 

@@ -1,20 +1,15 @@
 import type { SourceRoleId } from '@eduscope/shared';
 import { PAYLOAD_BUILDERS, type MockWorld } from '../world.js';
 import { alert, emit, fire, t } from './helpers.js';
-import type { MachineDef, MachineId, Transition } from './types.js';
+import type { MachineDef, MachineId, Transition, TransitionId } from './types.js';
 
 /**
  * Machine 5 — DEVICE / SOURCE HEALTH: 5a per-`SourceRole` health (one
- * `MachineDef` instance per bound role, factory-style like `sourceMachine`
- * below), 5b storage pressure, and 5c the capture-card watchdog. The brief's
- * Step 5 only names 5a/5b explicitly, but state-machines §6.4's `HL-20`…`HL-23`
- * carry the same `HL-` prefix the test enforces, so they need a home too —
- * modeled here as a fourth, standalone `captureCardMachine` (id
- * `'capture-card'`) rather than folded into `storageMachine`, since the two
- * are unrelated subsystems (`DeviceHealth.captureCardState` vs. disk
- * pressure) that happen to share an emitted event name (`device.health`
- * covers the capture card; storage pressure is `storage.status`, per
- * events.md §2.8/§2.9).
+ * `MachineDef` instance per bound role, factory-style), 5b storage pressure,
+ * and 5c the capture-card watchdog (a fourth, standalone `captureCardMachine`
+ * — see index.ts's module comment for why it exists and for the `HL-xx` id
+ * scheme this factory uses; use `sourceTransitionId()` below rather than
+ * hand-building ids).
  */
 
 // ── 5a — per-SourceRole health ──────────────────────────────────────────────
@@ -23,25 +18,24 @@ const citeA = (n: string) => `state-machines §6.1 ${n}`;
 
 /**
  * V1 binds four roles; `mic-room` stays `unbound` forever (INV-SR-2, A-08
- * amended) — see index.ts's `BOUND_SOURCE_ROLES`.
- *
- * `HL-01`…`HL-09` are transition ids global to the whole registry (world.ts
- * keys them in one flat map; machines.test.ts asserts no duplicates), but
- * this factory is called once per bound role to produce four independent
- * `MachineDef`s. Only the first-called role keeps the bare doc ids (this
- * satisfies "every documented HL-xx transition is implemented" with the
- * literal id the doc uses); every other role gets its own id namespace via
- * an `@<roleId>` suffix, each citing the same doc row it reimplements — the
- * same id-uniqueness constraint documented in channel.ts. `presentation` is
- * the canonical role (deterministic by id, not call order) since it is
- * `BOUND_SOURCE_ROLES[0]` in index.ts.
+ * amended) — see index.ts's `BOUND_SOURCE_ROLES`. `presentation` is the
+ * canonical role (`BOUND_SOURCE_ROLES[0]`) and keeps the bare `HL-xx` ids;
+ * see `sourceTransitionId()` and index.ts's module comment for the scheme.
  */
-const CANONICAL_ROLE: SourceRoleId = 'presentation';
+export const CANONICAL_SOURCE_ROLE: SourceRoleId = 'presentation';
+
+/**
+ * Resolve a *bare* doc id (`'HL-02'`) to the id actually registered for a
+ * given role — `'HL-02'` for `presentation`, `'HL-02@lecturer-cam'` for
+ * every other bound role.
+ */
+export function sourceTransitionId(roleId: SourceRoleId, bareId: string): TransitionId {
+  return roleId === CANONICAL_SOURCE_ROLE ? bareId : `${bareId}@${roleId}`;
+}
 
 export function sourceMachine(roleId: SourceRoleId): MachineDef {
   const id: MachineId = `source:${roleId}`;
-  const isCanonical = roleId === CANONICAL_ROLE;
-  const hlId = (n: string) => (isCanonical ? n : `${n}@${roleId}`);
+  const hlId = (n: string) => sourceTransitionId(roleId, n);
 
   return {
     id,

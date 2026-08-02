@@ -3,11 +3,20 @@ import { zEventEnvelope } from '@eduscope/shared';
 import { createVirtualClock } from '../../src/mock/clock.js';
 import { MockWorld } from '../../src/mock/world.js';
 import { recordingMachine } from '../../src/mock/machines/recording.js';
+// Side-effect imports: register the ai.countdown/quiz.session payload
+// builders that recording.ts's R-05 re-broadcasts. world.ts's missing-builder
+// case throws (by design — a silent skip previously hid a real bug, see
+// task-7-report.md I1), so any world that applies R-05 needs these machines
+// registered too, not just recordingMachine.
+import { aiCountdownMachine } from '../../src/mock/machines/ai.js';
+import { quizSessionMachine } from '../../src/mock/machines/quiz.js';
 
 function world() {
   const clock = createVirtualClock('2026-07-30T09:00:00.000+00:00');
   const w = new MockWorld({ clock });
   w.registerMachine(recordingMachine);
+  w.registerMachine(aiCountdownMachine);
+  w.registerMachine(quizSessionMachine);
   return { w, clock };
 }
 
@@ -39,11 +48,11 @@ describe('MockWorld', () => {
     w.subscribeEvents((e) => seen.push(e));
     w.apply('R-01');
     w.apply('R-05');
-    // R-01 emits recording.state (seq 0); R-05 emits recording.state and
-    // recording.segment (seq 1, 2). R-05 also re-broadcasts ai.countdown and
-    // quiz.session, but this suite registers only recordingMachine, so those
-    // builders (owned by ai.ts/quiz.ts) aren't registered and are skipped.
-    expect(seen.map((e) => e.seq)).toEqual([0, 1, 2]);
+    // R-01 emits recording.state (seq 0). R-05 emits recording.state,
+    // recording.segment, and re-broadcasts ai.countdown and quiz.session
+    // (seq 1..4) — all four builders are registered via aiCountdownMachine/
+    // quizSessionMachine above.
+    expect(seen.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('runs scheduled transitions only when the virtual clock advances', () => {

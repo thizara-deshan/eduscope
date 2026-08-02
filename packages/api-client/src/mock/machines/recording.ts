@@ -154,3 +154,20 @@ PAYLOAD_BUILDERS['recording.segment'] = (w: MockWorld, tr: Transition) => ({
   durationMs: null,
   __cite: tr.cite,
 });
+
+/**
+ * Stub for machine 1b (RA-01..07, state-machines.md §2) — full merge
+ * supervision, upload-job creation, and retention are out of scope for this
+ * scaffold and deferred to a future phase. This exists only so R-14/R-15
+ * (which the verbatim machine 1a table above already emits
+ * `recording.artifact` from) don't crash the mock for lack of a builder.
+ */
+PAYLOAD_BUILDERS['recording.artifact'] = (w: MockWorld) => ({
+  recordingId: (w.data['recording.ulid'] as string | undefined) ?? nextUlid(w),
+  sessionId: (w.data['session.ulid'] as string | undefined) ?? nextUlid(w),
+  state: w.state(M) === 'completed' ? 'ready' : 'failed',
+  mergeState: w.state(M) === 'completed' ? 'done' : 'failed',
+  durationMs: null,
+  totalBytes: null,
+  deleteReason: null,
+});

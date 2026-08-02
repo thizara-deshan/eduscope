@@ -1,6 +1,6 @@
 import { PAYLOAD_BUILDERS, type MockWorld } from '../world.js';
 import { alert, emit, fire, t } from './helpers.js';
-import type { MachineDef, Transition } from './types.js';
+import type { MachineDef, Transition, TransitionId } from './types.js';
 
 const cite = (n: string) => `state-machines §2.2 ${n}`;
 
@@ -9,15 +9,10 @@ const cite = (n: string) => `state-machines §2.2 ${n}`;
  * consumer (machine 1a); toggling meeting/streaming starts/stops only that
  * consumer, and publishers/the record consumer are untouched (INV-CC-2).
  *
- * The doc's transition table (CH-01…CH-10) is written once, generically, for
- * "the channel consumer" — but this mock keeps one singleton `MachineDef`
- * (and one runtime state) per channel id, and transition ids must be globally
- * unique (world.ts keys them in one flat map; machines.test.ts asserts no
- * duplicates). CH-04's own doc row already wires `fire('CH-05', 700)`, which
- * fixes canonical CH-05…CH-10 to `channel:meeting`. `channel:streaming`
- * mirrors that same shared tail under distinct ids (`CH-05S`…`CH-10S`) so a
- * demo can toggle streaming through a full on/off cycle too; each mirror
- * cites the doc row it reimplements.
+ * `channel:meeting` owns the canonical CH-04..CH-10 ids; `channel:streaming`
+ * reimplements the shared CH-05..CH-10 tail under `CH-05S`..`CH-10S` — see
+ * index.ts's module comment for why, and use `channelTransitionId()` below
+ * rather than hand-building ids.
  */
 export const meetingChannelMachine: MachineDef = {
   id: 'channel:meeting',
@@ -94,6 +89,23 @@ export const streamingChannelMachine: MachineDef = {
       emit('channel.state')),
   ],
 };
+
+/** CH-01..CH-03 are streaming-only entry states; every other bare id is owned by `channel:meeting`. */
+const STREAMING_OWN_BARE_IDS = new Set(['CH-01', 'CH-02', 'CH-03']);
+
+/**
+ * Resolve a *bare* doc id (`'CH-05'`) to the id actually registered for a
+ * given channel — `'CH-05'` for `meeting`, `'CH-05S'` for `streaming`. Use
+ * this instead of hand-building ids so callers don't have to know which
+ * channel owns the canonical string.
+ */
+export function channelTransitionId(
+  channelId: 'meeting' | 'streaming',
+  bareId: string,
+): TransitionId {
+  if (channelId === 'meeting' || STREAMING_OWN_BARE_IDS.has(bareId)) return bareId;
+  return `${bareId}S`;
+}
 
 PAYLOAD_BUILDERS['channel.state'] = (w: MockWorld, tr: Transition) => {
   const channelId = tr.machine === 'channel:streaming' ? 'streaming' : 'meeting';

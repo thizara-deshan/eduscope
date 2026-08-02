@@ -1,7 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ALL_MACHINES } from '../../src/mock/machines/index.js';
+import { zEventEnvelope, zSystemAlert, type EventEnvelope } from '@eduscope/shared';
+import { createVirtualClock } from '../../src/mock/clock.js';
+import { MockWorld } from '../../src/mock/world.js';
+import {
+  ALL_MACHINES,
+  aiCountdownMachine,
+  aiPublicationMachine,
+  aiQuestionMachine,
+  aiSetMachine,
+  captureCardMachine,
+  channelTransitionId,
+  quizSessionMachine,
+  quizSyncMachine,
+  recordingMachine,
+  sourceMachine,
+  sourceTransitionId,
+  storageMachine,
+  streamingChannelMachine,
+} from '../../src/mock/machines/index.js';
 
 const doc = readFileSync(
   resolve(__dirname, '../../../../docs/design/state-machines.md'),
@@ -71,5 +89,135 @@ describe('machine definitions mirror state-machines.md', () => {
         }
       }
     }
+  });
+});
+
+/**
+ * Execution-level regressions from the round-1 review: static structure was
+ * clean, but actually *running* transitions through a real MockWorld turned
+ * up a `buildAlert` schema bug, a silently-skipped machine-1b gap, and two
+ * id-lifecycle bugs the id-set/citation checks above can't see.
+ */
+function freshWorld(...machines: Parameters<MockWorld['registerMachine']>[0][]): MockWorld {
+  const clock = createVirtualClock('2026-08-03T09:00:00.000+00:00');
+  const w = new MockWorld({ clock });
+  for (const m of machines) w.registerMachine(m);
+  return w;
+}
+
+function payloadOf(e: EventEnvelope): Record<string, unknown> {
+  return e.payload as Record<string, unknown>;
+}
+
+describe('machine execution (real MockWorld, not just static analysis)', () => {
+  it('an alert() effect produces a zSystemAlert-valid payload (C1 regression)', () => {
+    const w = freshWorld(storageMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+    expect(() => w.apply('HL-10')).not.toThrow();
+    const alertEvt = seen.find((e) => e.event === 'system.alert');
+    expect(alertEvt).toBeDefined();
+    expect(() => zEventEnvelope.parse(alertEvt)).not.toThrow();
+    expect(zSystemAlert.safeParse(payloadOf(alertEvt!)).success).toBe(true);
+  });
+
+  it("recording.ts's own alert() effects are schema-valid too (R-04, verbatim machine 1a)", () => {
+    const w = freshWorld(recordingMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+    expect(() => w.apply('R-04')).not.toThrow();
+    const alertEvt = seen.find((e) => e.event === 'system.alert');
+    expect(zSystemAlert.safeParse(payloadOf(alertEvt!)).success).toBe(true);
+  });
+
+  it('a full recording lifecycle reaches completed and emits a schema-valid recording.artifact (machine-1b stub)', () => {
+    const w = freshWorld(recordingMachine, aiCountdownMachine, quizSessionMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+    w.apply('R-01');
+    w.apply('R-05');
+    w.apply('R-11');
+    w.apply('R-12');
+    expect(() => w.apply('R-14')).not.toThrow();
+    expect(w.state('recording')).toBe('completed');
+    const artifactEvt = seen.find((e) => e.event === 'recording.artifact');
+    expect(artifactEvt).toBeDefined();
+    expect(() => zEventEnvelope.parse(artifactEvt)).not.toThrow();
+  });
+
+  it('channelTransitionId/sourceTransitionId resolve to the ids actually registered (I2)', () => {
+    expect(channelTransitionId('meeting', 'CH-05')).toBe('CH-05');
+    expect(channelTransitionId('streaming', 'CH-01')).toBe('CH-01');
+    expect(channelTransitionId('streaming', 'CH-05')).toBe('CH-05S');
+    expect(sourceTransitionId('presentation', 'HL-02')).toBe('HL-02');
+    expect(sourceTransitionId('lecturer-cam', 'HL-02')).toBe('HL-02@lecturer-cam');
+
+    const lecturerCam = sourceMachine('lecturer-cam');
+    const w1 = freshWorld(lecturerCam);
+    expect(() => w1.apply(sourceTransitionId('lecturer-cam', 'HL-02'))).not.toThrow();
+    expect(w1.state(lecturerCam.id)).toBe('online');
+
+    const w2 = freshWorld(streamingChannelMachine);
+    w2.apply('CH-01');
+    w2.apply(channelTransitionId('streaming', 'CH-02'));
+    expect(() => w2.apply(channelTransitionId('streaming', 'CH-05'))).not.toThrow();
+    expect(w2.state('channel:streaming')).toBe('on');
+  });
+
+  it('a publication keeps one publicationId across its own lifecycle (I3, makes INV-QPUB-1 observable)', () => {
+    // Q-31 re-broadcasts ai.question{sent}, so aiQuestionMachine must be registered too.
+    const w = freshWorld(aiPublicationMachine, quizSyncMachine, aiQuestionMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+
+    w.apply('Q-30');
+    const createdId = payloadOf(seen.find((e) => e.event === 'quiz.publication')!).publicationId;
+    expect(typeof createdId).toBe('string');
+
+    w.apply('Q-31');
+    const openEvt = seen.filter((e) => e.event === 'quiz.publication').at(-1)!;
+    expect(payloadOf(openEvt).isShowing).toBe(true);
+    expect(payloadOf(openEvt).publicationId).toBe(createdId);
+
+    w.apply('Q-33');
+    const closeEvt = seen.filter((e) => e.event === 'quiz.publication').at(-1)!;
+    expect(payloadOf(closeEvt).publicationId).toBe(createdId);
+  });
+
+  it('a question keeps one questionId across its own lifecycle (I3)', () => {
+    const w = freshWorld(aiQuestionMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+
+    w.apply('Q-18');
+    const createdId = payloadOf(seen.at(-1)!).questionId;
+    expect(typeof createdId).toBe('string');
+
+    w.apply('Q-20');
+    expect(payloadOf(seen.at(-1)!).questionId).toBe(createdId);
+    w.apply('Q-22');
+    expect(payloadOf(seen.at(-1)!).questionId).toBe(createdId);
+    w.apply('Q-23');
+    expect(payloadOf(seen.at(-1)!).questionId).toBe(createdId);
+  });
+
+  it('aiSetMachine supports a second generation cycle after reviewed (I4 regression)', () => {
+    // Q-12 re-broadcasts ai.question{draft}, so aiQuestionMachine must be registered too.
+    const w = freshWorld(aiSetMachine, aiQuestionMachine);
+    w.apply('Q-11');
+    w.apply('Q-12');
+    w.apply('Q-15');
+    expect(w.state('ai.set')).toBe('reviewed');
+    expect(() => w.apply('Q-11')).not.toThrow();
+    expect(w.state('ai.set')).toBe('generating');
+  });
+
+  it('the capture-card watchdog also raises a schema-valid alert (C1, second machine)', () => {
+    const w = freshWorld(captureCardMachine);
+    const seen: EventEnvelope[] = [];
+    w.subscribeEvents((e) => seen.push(e));
+    expect(() => w.apply('HL-20')).not.toThrow();
+    const alertEvt = seen.find((e) => e.event === 'system.alert');
+    expect(zSystemAlert.safeParse(payloadOf(alertEvt!)).success).toBe(true);
   });
 });
