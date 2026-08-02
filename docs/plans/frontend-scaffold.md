@@ -160,13 +160,15 @@ tools/eslint-rules/no-direct-network.test.ts
 ## Task 1: Workspace foundation
 
 **Files:**
-- Create: `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `.nvmrc`, `.npmrc`
+- Create: `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `.nvmrc`, `.npmrc`, `vitest.workspace.ts`, `eslint.config.js`
 - Modify: `.gitignore`
 - Test: `tools/workspace.test.ts`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the workspace globs `packages/*` and `apps/*`; root scripts `typecheck`, `lint`, `test`, `e2e`; the `tsconfig.base.json` every package extends (`strict: true`, `noUncheckedIndexedAccess: true`, `verbatimModuleSyntax: true`, `moduleResolution: "bundler"`).
+- Produces: the workspace globs `packages/*` and `apps/*`; root scripts `typecheck`, `lint`, `test`, `e2e`; the `tsconfig.base.json` every package extends (`strict: true`, `noUncheckedIndexedAccess: true`, `verbatimModuleSyntax: true`, `moduleResolution: "bundler"`); `vitest.workspace.ts` giving the app projects a `jsdom` environment and the React plugin; the **base** `eslint.config.js` (Task 17 adds the boundary block to it).
+
+> **Why the lint and test configs land here and not later.** `pnpm lint` and `pnpm test` are declared as root scripts in this task, so they must work from this task. A root `vitest run` with no workspace file picks up `apps/**/*.test.tsx` under the default Node environment with no JSX transform, and every app suite fails — which would also make CI's `test` job (Task 20) and Gate 4 meaningless.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -202,11 +204,25 @@ describe('workspace foundation', () => {
     expect(base.compilerOptions.verbatimModuleSyntax).toBe(true);
   });
 
-  it('exposes the four root scripts CI runs', () => {
+  it('exposes the five root scripts CI runs', () => {
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
-    for (const s of ['typecheck', 'lint', 'test', 'e2e']) {
+    for (const s of ['typecheck', 'lint', 'test', 'build', 'e2e']) {
       expect(pkg.scripts[s], `missing root script: ${s}`).toBeTruthy();
     }
+  });
+
+  it('gives the app test projects a DOM environment', () => {
+    const ws = read('vitest.workspace.ts');
+    expect(ws).toContain('jsdom');
+    expect(ws).toContain('apps/panel');
+    expect(ws).toContain('apps/quiz');
+  });
+
+  it('lints from task 1 — the root script must not be dead for 16 tasks', () => {
+    const config = read('eslint.config.js');
+    // The a11y and hooks guardrails are cheapest to add before any screen exists.
+    expect(config).toContain('react-hooks');
+    expect(config).toContain('jsx-a11y');
   });
 });
 ```
@@ -252,6 +268,7 @@ packages:
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint .",
     "test": "vitest run",
+    "build": "pnpm -r --filter \"./apps/*\" build",
     "e2e": "pnpm --filter @eduscope/panel e2e",
     "dev:panel": "pnpm --filter @eduscope/panel dev",
     "dev:quiz": "pnpm --filter @eduscope/quiz dev"
@@ -259,13 +276,102 @@ packages:
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/node": "^22.9.0",
+    "@vitejs/plugin-react": "^4.3.3",
     "eslint": "^9.14.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.12.0",
+    "jsdom": "^25.0.1",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.14.0",
     "vitest": "^3.0.0"
   }
 }
+```
+
+`vitest.workspace.ts`:
+
+```ts
+import { defineWorkspace } from 'vitest/config';
+
+/**
+ * Without this, a root `vitest run` executes the app suites (.test.tsx) under
+ * the default Node environment with no JSX transform and they all fail — which
+ * would make CI's `test` job and Gate 4 meaningless.
+ *
+ * The two globs delegate to each package's own vitest config, so
+ * `pnpm --filter @eduscope/panel test` (used throughout this plan) and a root
+ * `pnpm test` run byte-identical settings. Only the root-level `tools/` suite,
+ * which belongs to no package, is configured inline.
+ */
+export default defineWorkspace([
+  'packages/*',
+  'apps/*',
+  {
+    test: {
+      name: 'tools',
+      environment: 'node',
+      include: ['tools/**/*.test.ts'],
+    },
+  },
+]);
+```
+
+Each package therefore needs a vitest config. `packages/shared/vitest.config.ts` and `packages/api-client/vitest.config.ts` are both:
+
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: { environment: 'node', include: ['test/**/*.test.ts'] },
+});
+```
+
+`eslint.config.js` — the **base**. Task 17 appends the client-boundary block to this same file:
+
+```js
+import js from '@eslint/js';
+import globals from 'globals';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  {
+    ignores: [
+      '**/dist/**', '**/build/**', '**/.next/**', '**/node_modules/**',
+      '**/coverage/**', '**/playwright-report/**', '**/test-results/**',
+      'packages/shared/src/schemas/generated/**', // codegen output
+      'prototype/**', 'legacy-Codebase/**',
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+  {
+    files: ['apps/**/*.tsx'],
+    plugins: { 'react-hooks': reactHooks, 'jsx-a11y': jsxA11y },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      // The scaffold's central risk is re-render discipline (Task 15).
+      'react-hooks/exhaustive-deps': 'error',
+      // frontend-conventions §3: aria-label on every icon-only control. The
+      // panel is a touch kiosk with no keyboard and no screen reader to fall
+      // back on, so this is enforced from before the first screen exists.
+      'jsx-a11y/alt-text': 'error',
+      'jsx-a11y/anchor-has-content': 'error',
+      'jsx-a11y/aria-props': 'error',
+      'jsx-a11y/aria-role': 'error',
+      'jsx-a11y/control-has-associated-label': 'error',
+      'jsx-a11y/label-has-associated-control': 'error',
+      'jsx-a11y/no-autofocus': 'error',
+      'jsx-a11y/role-has-required-aria-props': 'error',
+    },
+  },
+);
 ```
 
 `tsconfig.base.json`:
@@ -311,13 +417,16 @@ Run: `pnpm install`
 Expected: `Done in …` with no `ERR_PNPM_UNSUPPORTED_ENGINE`.
 
 Run: `pnpm test tools/workspace.test.ts`
-Expected: PASS — `Test Files 1 passed`, `Tests 4 passed`.
+Expected: PASS — `Test Files 1 passed`, `Tests 6 passed`.
+
+Run: `pnpm lint`
+Expected: exit 0 with no output. This is the assertion that matters — the root script must not be dead until Task 17.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pnpm-workspace.yaml package.json tsconfig.base.json .nvmrc .npmrc .gitignore tools/workspace.test.ts pnpm-lock.yaml
-git commit -m "chore: pnpm workspace foundation with strict TS base"
+git add pnpm-workspace.yaml package.json tsconfig.base.json vitest.workspace.ts eslint.config.js .nvmrc .npmrc .gitignore tools/workspace.test.ts pnpm-lock.yaml
+git commit -m "chore: pnpm workspace foundation with strict TS, lint and test configs"
 ```
 
 ---
@@ -460,7 +569,10 @@ import { defineConfig } from '@hey-api/openapi-ts';
 
 export default defineConfig({
   input: '../../contracts/openapi.yaml',
-  output: { path: 'src/schemas/generated', format: 'prettier' },
+  // No `format:` option — that would pull in prettier, which this workspace does
+  // not use. `generated/` is ESLint-ignored and never hand-read; the coverage
+  // test, not its formatting, is what makes it trustworthy.
+  output: { path: 'src/schemas/generated' },
   plugins: [
     { name: '@hey-api/typescript', exportInlineEnums: true },
     { name: 'zod', exportFromIndex: false },
@@ -3402,27 +3514,36 @@ const FALLBACK_JPEG_BASE64 =
  * returned with the sequence number appended to the URI fragment so successive
  * frames still differ.
  */
+const FRAME_W = 480;
+const FRAME_H = 270;
+
+/** One canvas for the life of the module — never one per frame (see the note). */
+let frameCanvas: HTMLCanvasElement | null = null;
+
 export function generateFrame(roleId: SourceRoleId, seq: number): string {
   if (typeof document === 'undefined') {
     return `data:image/jpeg;base64,${FALLBACK_JPEG_BASE64}#${seq}`;
   }
-  const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 360;
-  const ctx = canvas.getContext('2d');
+  if (!frameCanvas) {
+    frameCanvas = document.createElement('canvas');
+    frameCanvas.width = FRAME_W;
+    frameCanvas.height = FRAME_H;
+  }
+  const ctx = frameCanvas.getContext('2d');
   if (!ctx) return `data:image/jpeg;base64,${FALLBACK_JPEG_BASE64}#${seq}`;
 
   ctx.fillStyle = '#242a35'; // --ink-3
-  ctx.fillRect(0, 0, 640, 360);
+  ctx.fillRect(0, 0, FRAME_W, FRAME_H);
   ctx.fillStyle = '#2f6bed'; // --accent
-  const x = (seq * 7) % 600;
-  ctx.fillRect(x, 150, 40, 60);
+  ctx.fillRect((seq * 7) % (FRAME_W - 40), 120, 40, 60);
   ctx.fillStyle = '#f2f4f8'; // --on-ink
-  ctx.font = '20px system-ui';
-  ctx.fillText(`${roleId} · mock preview · frame ${seq}`, 20, 40);
-  return canvas.toDataURL('image/jpeg', 0.6);
+  ctx.font = '16px system-ui';
+  ctx.fillText(`${roleId} · mock preview · frame ${seq}`, 16, 32);
+  return frameCanvas.toDataURL('image/jpeg', 0.5);
 }
 ```
+
+> **Cost note (RK3588).** `toDataURL` is a synchronous main-thread JPEG encode plus a base64 string allocation, on a board concurrently running capture pipelines. Three things keep it cheap: the canvas is allocated **once** rather than per frame, the frame is 480×270 at quality 0.5 (≈8 KB, not ≈30 KB), and `PREVIEW_FPS` below is **8**, not 12. A preview is on screen only while the S-10 lightbox is open — one at a time — and Wave 8 replaces this entire path with a WebRTC `MediaStream`, so this is a bounded, temporary cost and is not worth an `OffscreenCanvas` worker. It is worth not allocating a canvas 8 times a second.
 
 Add `subscriberCount()` to `MockWorld` (it already holds the emitter):
 
@@ -3435,7 +3556,7 @@ Add `subscriberCount()` to `MockWorld` (it already holds the emitter):
 - [ ] **Step 4: Write the preview channel and connection controller**
 
 `events/preview.ts` — `createPreviewChannel(world)` returns a `PreviewChannel` that:
-- on `offer`: if the role's machine 5a state is not `online`, replies `error{code:'source-offline'}`; if a negotiation is already open, `error{code:'busy'}`; otherwise replies `answer` after ~300 ms (INT-8's < 1 s budget) and starts a 12 fps `generateFrame` loop delivered to the consumer via `messages$`;
+- on `offer`: if the role's machine 5a state is not `online`, replies `error{code:'source-offline'}`; if a negotiation is already open, `error{code:'busy'}`; otherwise replies `answer` after ~300 ms (INT-8's < 1 s budget) and starts a `PREVIEW_FPS = 8` `generateFrame` loop delivered to the consumer via `messages$`;
 - on a second `offer`: implicitly closes the previous negotiation (events.md §3);
 - on `close`: stops the frame loop. **Preview death never touches recording** — nothing in this module reaches machine 1a.
 
@@ -3725,7 +3846,7 @@ git commit -m "feat(api-client): createMockClient assembling world, scenarios an
 - Test: `apps/panel/src/styles/tokens.test.ts`, `apps/panel/src/App.test.tsx`
 
 **Interfaces:**
-- Consumes: nothing from the packages yet — this task is the frame.
+- Consumes: nothing from the packages yet — this task is the frame. (Task 1 already supplies the jsdom test project and the base lint config.)
 - Produces: the `@eduscope/panel` app; `<Stage>` (grey backdrop, `.us-panel` capped at 1280×800, `position: relative` so overlays are `absolute` inside it); `tokens.css` exporting every custom property from screen-inventory §8.
 
 > **Token port decision.** screen-inventory §8.6 offers a choice: rename `--radius-lg` from 24 px to 14 px in one commit at scaffold time, or keep the prototype's three names and add only the new ones. **This plan takes the rename** — it happens here, in Wave 0, in one commit, exactly as §8.6 permits ("Do the rename in one commit at scaffold time (Wave 0)"). Doing it later would silently change the meaning mid-build, which §8.6 forbids.
@@ -3849,7 +3970,7 @@ Expected: FAIL — `Cannot find module './App.js'` / `ENOENT … tokens.css`
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b --noEmit && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -3908,19 +4029,41 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react()],
   test: {
+    name: 'panel',
     environment: 'jsdom',
     globals: false,
     setupFiles: ['./src/test-setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     css: true, // tokens.css must be applied for the computed-style assertions
   },
 });
 ```
+
+`apps/quiz` gets the equivalent (`name: 'quiz'`, `include: ['{app,src}/**/*.test.{ts,tsx}']`, `setupFiles: ['./src/test-setup.ts']`) in Task 18. The root `vitest.workspace.ts` from Task 1 delegates to both, so root and per-app runs cannot drift.
 
 `apps/panel/src/test-setup.ts`:
 
 ```ts
 import '@testing-library/jest-dom/vitest';
 ```
+
+`apps/panel/src/vite-env.d.ts` — without this, `import.meta.env.VITE_*` is untyped and `exactOptionalPropertyTypes` turns the client-provider read in Task 15 into a typecheck error:
+
+```ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  /** '1' selects createRealClient. Anything else uses the mock adapter. */
+  readonly VITE_EDUSCOPE_REAL_API?: string;
+  readonly VITE_EDUSCOPE_API_URL?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+```
+
+> `react-simple-keyboard` is in the dependency list because frontend-conventions §3 makes the on-screen keyboard mandatory for every panel text field. The **host** that owns its open/closed state and reports its height ships with **S-01 in Wave 1**, not here: its one hard requirement — "must not cover the submit button at 1280×800; reserve the lower 380 px" (screen-inventory S-01) — is a screen-layout decision, and there is no text input in this scaffold to host it for.
 
 `apps/panel/index.html`:
 
@@ -4170,17 +4313,27 @@ git commit -m "feat(panel): kiosk shell and design tokens ported from the protot
 ## Task 14: apps/panel — router skeleton, auth context, role gating
 
 **Files:**
-- Create: `apps/panel/src/auth/auth-context.tsx`, `src/auth/require-role.tsx`, `src/routes/router.tsx`, `src/routes/screens.tsx`
+- Create: `apps/panel/src/auth/auth-context.tsx`, `src/auth/require-role.tsx`, `src/routes/router.tsx`, `src/routes/screens.tsx`, `src/routes/panel-shell.tsx`, `src/routes/route-error.tsx`, `src/overlays/overlay-host.tsx`
 - Modify: `apps/panel/src/App.tsx`
-- Test: `apps/panel/src/routes/router.test.tsx`, `apps/panel/src/auth/require-role.test.tsx`
+- Test: `apps/panel/src/routes/router.test.tsx`, `apps/panel/src/auth/require-role.test.tsx`, `apps/panel/src/overlays/overlay-host.test.tsx`
 
 **Interfaces:**
 - Consumes: `EduscopeClient` (via Task 15's provider — for this task the tests inject a stub), `User`, `UserRole`.
 - Produces:
-  - `AuthProvider`, `useAuth(): { user: User | null; role: UserRole | null; mustResetPassword: boolean; signIn(...); signOut() }`
+  - `AuthProvider`, `useAuth(): { user: User | null; role: UserRole | null; mustResetPassword: boolean; setUser(...) }`
   - `<RequireRole role="admin">` — renders children, or redirects, per U-6.
-  - `createRouter(): ReturnType<typeof createBrowserRouter>` covering every route in the screen-inventory §1.1 nav map.
-  - `SCREEN_PLACEHOLDERS` — one component per screen id, rendering `<h1 data-screen="S-04">Dashboard — Idle</h1>` and nothing else.
+  - `<PanelShell>` — the **layout route element**: always-mounted chrome + `<Outlet/>` + `<OverlayHost/>`. This is where S-03 lands in Wave 1.
+  - `<RouteError>` — the layout route's `errorElement`.
+  - `createRouter()` / `routeObjects` — one layout route with 16 children plus a catch-all, covering the screen-inventory §1.1 nav map.
+  - `OverlayProvider`, `useOverlays(): { open(node): id; close(id): void; stack: OverlayEntry[] }`, `<OverlayHost/>`.
+
+> **Why a layout route, and why the overlay host is scaffold.**
+>
+> **S-03** is *"the always-mounted frame … owns more failure states than any real screen and must be built first"* and is specified as `(panel, all routes)`. With a flat sibling array it has nowhere to live except outside `RouterProvider`, where it cannot call `useLocation`/`useNavigate` — so nav highlighting and route-aware chrome would have to duplicate router state by hand. A layout route is the difference between S-03 being buildable in Wave 1 and being a workaround.
+>
+> **Overlays** are UI-local and correctly have no route (SI-D-2), but ten of them (S-10, S-12, S-14, S-15, S-18, S-19, S-20, S-23, S-24, S-33) still need somewhere to mount, and two binding rules constrain it: overlays are `position: absolute` inside `.us-panel`, **never** `position: fixed` (frontend-conventions §3); and *"`Modal` and `Drawer` portal into `.us-panel`, so dialogs opened from the dark scope render light — that is intentional and must be preserved"* (screen-inventory §8.3). S-15 opens on top of S-14, so this is a **stack**, not a boolean. Ten screens each inventing their own scrim, focus trap and escape handling is the most predictable duplication in this plan.
+>
+> The host is the mount point and the stack — **not** a styled `Modal`. `Modal`, `Drawer`, `Toggle` and `Stepper` are component work and stay in prompt 09.
 
 **Routes** (screen-inventory §1.1; overlays are UI-local and get **no** route, per SI-D-2):
 
@@ -4267,6 +4420,42 @@ describe('panel router (screen-inventory §1.1)', () => {
     renderAt('/advanced/users', 'admin');
     expect(screen.getByTestId('screen').dataset.screen).toBe('S-32');
   });
+
+  it('mounts every route inside ONE layout route — S-03 is (panel, all routes)', () => {
+    expect(routeObjects).toHaveLength(1);
+    expect(routeObjects[0]!.children).toHaveLength(ROUTES.length + 1); // + catch-all
+  });
+
+  it('gives the shell an overlay host on every route', () => {
+    renderAt('/library');
+    expect(screen.getByTestId('overlay-host')).toBeTruthy();
+    renderAt('/advanced');
+    expect(screen.getByTestId('overlay-host')).toBeTruthy();
+  });
+
+  it('catches an unknown path instead of rendering blank', () => {
+    renderAt('/nope/not/a/route');
+    expect(screen.getByTestId('screen').dataset.screen).toBe('not-found');
+  });
+
+  it('renders an error card instead of a white screen when a route throws', () => {
+    const boom: typeof routeObjects = [
+      {
+        ...routeObjects[0]!,
+        children: [
+          {
+            path: '/',
+            element: (() => {
+              throw new Error('kaboom');
+            })(),
+          },
+        ],
+      },
+    ];
+    const router = createMemoryRouter(boom, { initialEntries: ['/'] });
+    render(<RouterProvider router={router} />);
+    expect(screen.getByTestId('route-error')).toBeTruthy();
+  });
 });
 ```
 
@@ -4324,6 +4513,89 @@ describe('role gating', () => {
   it('redirects to the forced reset while mustResetPassword is true (U-7)', () => {
     at('/', user('lecturer', true));
     expect(screen.getByText('reset')).toBeTruthy();
+  });
+});
+```
+
+Create `apps/panel/src/overlays/overlay-host.test.tsx`:
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it } from 'vitest';
+import { OverlayHost, OverlayProvider, useOverlays } from './overlay-host.js';
+
+function Harness() {
+  const { open, close, stack } = useOverlays();
+  return (
+    <>
+      <button type="button" onClick={() => open(<p>first</p>)}>open first</button>
+      <button type="button" onClick={() => open(<p>second</p>)}>open second</button>
+      <button type="button" onClick={() => open(<p>locked</p>, { dismissible: false })}>
+        open locked
+      </button>
+      <button type="button" onClick={() => stack[0] && close(stack[0].id)}>
+        close first
+      </button>
+      <OverlayHost />
+    </>
+  );
+}
+
+const renderHost = () =>
+  render(
+    <OverlayProvider>
+      <Harness />
+    </OverlayProvider>,
+  );
+
+describe('overlay host', () => {
+  it('renders nothing until an overlay is opened', () => {
+    renderHost();
+    expect(screen.getByTestId('overlay-host').dataset.depth).toBe('0');
+  });
+
+  it('stacks overlays — S-15 opens on top of S-14, it does not replace it', async () => {
+    const user = userEvent.setup();
+    renderHost();
+    await user.click(screen.getByRole('button', { name: 'open first' }));
+    await user.click(screen.getByRole('button', { name: 'open second' }));
+    expect(screen.getByText('first')).toBeTruthy();
+    expect(screen.getByText('second')).toBeTruthy();
+    expect(screen.getByTestId('overlay-host').dataset.depth).toBe('2');
+  });
+
+  it('orders layers so the newest is on top', async () => {
+    const user = userEvent.setup();
+    renderHost();
+    await user.click(screen.getByRole('button', { name: 'open first' }));
+    await user.click(screen.getByRole('button', { name: 'open second' }));
+    const layers = screen.getByTestId('overlay-host').querySelectorAll('.us-overlayhost__layer');
+    const z = [...layers].map((l) => Number((l as HTMLElement).style.zIndex));
+    expect(z[1]!).toBeGreaterThan(z[0]!);
+  });
+
+  it('closes a specific overlay without disturbing the rest', async () => {
+    const user = userEvent.setup();
+    renderHost();
+    await user.click(screen.getByRole('button', { name: 'open first' }));
+    await user.click(screen.getByRole('button', { name: 'open second' }));
+    await user.click(screen.getByRole('button', { name: 'close first' }));
+    expect(screen.queryByText('first')).toBeNull();
+    expect(screen.getByText('second')).toBeTruthy();
+  });
+
+  it('leaves a non-dismissible overlay alone on Escape (S-02 has no escape hatch)', async () => {
+    const user = userEvent.setup();
+    renderHost();
+    await user.click(screen.getByRole('button', { name: 'open locked' }));
+    await user.type(screen.getByTestId('overlay-host'), '{Escape}');
+    expect(screen.getByText('locked')).toBeTruthy();
+  });
+
+  it('mounts inside .us-panel — never position: fixed (conventions §3)', () => {
+    renderHost();
+    expect(getComputedStyle(screen.getByTestId('overlay-host')).position).toBe('absolute');
   });
 });
 ```
@@ -4436,12 +4708,162 @@ export function ScreenPlaceholder({ id, title }: { id: string; title: string }) 
 }
 ```
 
+`apps/panel/src/overlays/overlay-host.tsx`:
+
+```tsx
+import {
+  createContext, useCallback, useContext, useMemo, useRef, useState,
+  type ReactNode,
+} from 'react';
+
+export interface OverlayEntry {
+  readonly id: number;
+  readonly node: ReactNode;
+  /** Set by the opener when the overlay must not be dismissed by the scrim. */
+  readonly dismissible: boolean;
+}
+
+interface OverlayValue {
+  readonly stack: readonly OverlayEntry[];
+  open(node: ReactNode, options?: { dismissible?: boolean }): number;
+  close(id: number): void;
+  closeTop(): void;
+}
+
+const OverlayContext = createContext<OverlayValue | null>(null);
+
+/**
+ * The mount point and z-stack for every UI-local overlay (SI-D-2: overlays are
+ * state, not URLs). A STACK, not a flag — S-15 opens on top of S-14.
+ *
+ * This is deliberately not a Modal: it owns mounting, ordering, the scrim and
+ * Escape, and nothing else. Visual design lives in the screens (prompt 09).
+ */
+export function OverlayProvider({ children }: { children: ReactNode }) {
+  const [stack, setStack] = useState<OverlayEntry[]>([]);
+  const nextId = useRef(1);
+
+  const open = useCallback((node: ReactNode, options?: { dismissible?: boolean }) => {
+    const id = nextId.current++;
+    setStack((s) => [...s, { id, node, dismissible: options?.dismissible ?? true }]);
+    return id;
+  }, []);
+
+  const close = useCallback((id: number) => {
+    setStack((s) => s.filter((e) => e.id !== id));
+  }, []);
+
+  const closeTop = useCallback(() => {
+    setStack((s) => (s.at(-1)?.dismissible === false ? s : s.slice(0, -1)));
+  }, []);
+
+  const value = useMemo(() => ({ stack, open, close, closeTop }), [stack, open, close, closeTop]);
+  return <OverlayContext.Provider value={value}>{children}</OverlayContext.Provider>;
+}
+
+export function useOverlays(): OverlayValue {
+  const ctx = useContext(OverlayContext);
+  if (!ctx) throw new Error('useOverlays must be used inside <OverlayProvider>');
+  return ctx;
+}
+
+/**
+ * Renders the stack INSIDE .us-panel. No portal to document.body and no
+ * position: fixed — frontend-conventions §3, and screen-inventory §8.3 requires
+ * that a dialog opened from the dark .us-assistant scope render light, which
+ * only holds if it mounts here rather than inside that scope.
+ */
+export function OverlayHost() {
+  const { stack, closeTop } = useOverlays();
+  return (
+    <div
+      className="us-overlayhost"
+      data-testid="overlay-host"
+      data-depth={stack.length}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') closeTop();
+      }}
+    >
+      {stack.map((entry, i) => (
+        <div
+          key={entry.id}
+          className="us-overlayhost__layer"
+          data-overlay-id={entry.id}
+          style={{ zIndex: 100 + i }}
+          role="presentation"
+        >
+          {entry.node}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+Add to `apps/panel/src/styles/app.css`:
+
+```css
+/* Absolute inside .us-panel — never fixed against the viewport. */
+.us-overlayhost { position: absolute; inset: 0; pointer-events: none; }
+.us-overlayhost[data-depth="0"] { display: none; }
+.us-overlayhost__layer { position: absolute; inset: 0; pointer-events: auto; }
+```
+
+`apps/panel/src/routes/panel-shell.tsx`:
+
+```tsx
+import { Outlet } from 'react-router';
+import { OverlayHost, OverlayProvider } from '../overlays/overlay-host.js';
+
+/**
+ * The layout route element. S-03 (panel shell, chrome & alert host — "panel,
+ * all routes") lands HERE in Wave 1: header, recording frame + notch, the
+ * alert/banner host and the WS connection indicator all go beside <Outlet/>,
+ * inside the router, so they can use useLocation/useNavigate.
+ */
+export function PanelShell() {
+  return (
+    <OverlayProvider>
+      {/* Wave 1: <PanelHeader/> and the recording frame mount here. */}
+      <Outlet />
+      <OverlayHost />
+    </OverlayProvider>
+  );
+}
+```
+
+`apps/panel/src/routes/route-error.tsx`:
+
+```tsx
+import { useRouteError } from 'react-router';
+
+/**
+ * A kiosk has no keyboard, no address bar and nobody to press reload — an
+ * unhandled render error must not become a white screen in a lecture hall.
+ * Recording continues regardless: the device is the authority, not the browser
+ * (state-machines §5.5).
+ */
+export function RouteError() {
+  const error = useRouteError();
+  return (
+    <main data-testid="route-error" role="alert">
+      <h1>Something went wrong on this screen</h1>
+      <p>Recording is not affected. Go back to the dashboard and try again.</p>
+      <a href="/">Back to dashboard</a>
+      <pre hidden>{error instanceof Error ? error.message : String(error)}</pre>
+    </main>
+  );
+}
+```
+
 `apps/panel/src/routes/router.tsx`:
 
 ```tsx
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import type { UserRole } from '@eduscope/shared';
 import { RequireRole } from '../auth/require-role.js';
+import { PanelShell } from './panel-shell.js';
+import { RouteError } from './route-error.js';
 import { ScreenPlaceholder } from './screens.js';
 
 interface RouteSpec {
@@ -4472,7 +4894,7 @@ export const ROUTES: readonly RouteSpec[] = [
   { path: '/advanced/device', screen: 'S-36', title: 'Device & Identity', gate: 'admin' },
 ];
 
-export const routeObjects: RouteObject[] = ROUTES.map(({ path, screen, title, gate }) => {
+const screenRoutes: RouteObject[] = ROUTES.map(({ path, screen, title, gate }) => {
   const element = <ScreenPlaceholder id={screen} title={title} />;
   return {
     path,
@@ -4485,19 +4907,36 @@ export const routeObjects: RouteObject[] = ROUTES.map(({ path, screen, title, ga
   };
 });
 
+/**
+ * ONE layout route wrapping every screen. The shell must be inside the router,
+ * not above it, or S-03's chrome cannot read the current location.
+ */
+export const routeObjects: RouteObject[] = [
+  {
+    element: <PanelShell />,
+    errorElement: <RouteError />,
+    children: [
+      ...screenRoutes,
+      // No address bar to mistype, but a bad programmatic navigate must not
+      // leave a blank panel with no way back.
+      { path: '*', element: <ScreenPlaceholder id="not-found" title="Screen not found" /> },
+    ],
+  },
+];
+
 export const createRouter = () => createBrowserRouter(routeObjects);
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `pnpm --filter @eduscope/panel test`
-Expected: PASS — `router.test.tsx` 7 passed, `require-role.test.tsx` 4 passed, plus Task 13's suites.
+Expected: PASS — `router.test.tsx` 11 passed, `require-role.test.tsx` 4 passed, `overlay-host.test.tsx` 6 passed, plus Task 13's suites.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/panel/src/auth apps/panel/src/routes
-git commit -m "feat(panel): router skeleton from the nav map with role gating"
+git add apps/panel/src/auth apps/panel/src/routes apps/panel/src/overlays apps/panel/src/styles/app.css
+git commit -m "feat(panel): layout route, role gating, error boundary and overlay host"
 ```
 
 ---
@@ -4505,16 +4944,25 @@ git commit -m "feat(panel): router skeleton from the nav map with role gating"
 ## Task 15: apps/panel — client provider, WS store, TanStack Query
 
 **Files:**
-- Create: `apps/panel/src/client/client-provider.tsx`, `src/store/ws-store.ts`, `src/query/query-client.ts`
-- Modify: `apps/panel/src/App.tsx`, `src/main.tsx`
-- Test: `apps/panel/src/store/ws-store.test.ts`
+- Create: `apps/panel/src/client/client-provider.tsx`, `src/store/ws-store.ts`, `src/store/selectors.ts`, `src/store/telemetry-store.ts`, `src/hooks/use-ticker.ts`, `src/query/query-client.ts`
+- Modify: `apps/panel/src/App.tsx`, `src/main.tsx`, `docs/design/frontend-conventions.md`
+- Test: `apps/panel/src/store/ws-store.test.ts`, `apps/panel/src/store/selectors.test.tsx`, `apps/panel/src/hooks/use-ticker.test.ts`
 
 **Interfaces:**
-- Consumes: `EduscopeClient`, `createMockClient`, `createRealClient`, `EventEnvelope`, `ConnectionStatus`, `TIMERS`.
+- Consumes: `EduscopeClient`, `createMockClient`, `createRealClient`, `EventEnvelope`, `ConnectionStatus`, and the payload types `RecordingStatePayload`, `SourcesStatusPayload`, `ChannelStatePayload`, `StorageStatusPayload`, `DeviceHealthPayload`, `AiCountdownPayload`, `AiSetPayload`, `QuizSessionPayload`, `QuizPublicationPayload`, `SystemAlert`.
 - Produces:
   - `ClientProvider` + `useClient(): EduscopeClient` — **the single place in the app that constructs a client**.
-  - `useWsStore` (zustand) with slice `{ recording, sources, channels, storage, deviceHealth, aiCountdown, aiSet, quizSession, publications, alerts, connection, lastSeq, stale }` and actions `ingest(envelope)`, `setConnection(status)`, `reset()`.
-  - `createQueryClient()` — `staleTime: Infinity`, `refetchOnWindowFocus: false`, `retry: 1`. **No polling anywhere a WS event exists** (events.md §5); TanStack Query holds request/response only.
+  - `useWsStore` (zustand) with **typed** slices `{ recording, sources, channels, storage, deviceHealth, aiCountdown, aiSet, quizSession, publications, alerts, connection, needsResync, stale }` and actions `ingest(envelope)`, `setConnection(status)`, `clearResync()`, `reset()`.
+  - `useTelemetryStore` — a separate transient store for `audioLevels` and `lastSeq`, created with `subscribeWithSelector` and **read imperatively, never through a React hook**.
+  - `src/store/selectors.ts` — the atomic selectors screens use, plus `useWsShallow` for multi-field reads.
+  - `useTicker(intervalMs)` — a leaf-local tick for locally-derived time.
+  - `createQueryClient()` — `staleTime: Infinity`, `refetchOnWindowFocus: false`, `retry: 1`. **No polling anywhere a WS event exists** (events.md §5).
+
+> **Why this task is bigger than "wire a store".** Forty-two screens are written against whatever shape lands here, so three decisions have to be made now rather than retrofitted:
+>
+> 1. **Typed slices.** Tasks 2–4 exist to produce `RecordingStatePayload` and friends. Storing them as `Record<string, unknown>` throws that away and forces a cast at every point of use — exactly where `state === 'recording'` narrowing should be doing the work.
+> 2. **Selector discipline.** zustand v5 removed the equality-function argument from the hook, so an object-returning selector is a fresh reference on **every** store notification and re-renders unconditionally. `ingest` rebuilds `sources`/`channels`/`publications` by spread, so map selectors are never referentially stable either. Atomic selectors by default, `useShallow` for multi-field reads, and the rule written into frontend-conventions.
+> 3. **Telemetry is not application state.** `audio.levels` arrives at 10 Hz. In the same store it notifies every subscriber ten times a second, and zustand re-runs every registered selector on each notification — on an RK3588 that is also running the capture pipelines. Meters never enter React state: the transient store is subscribed imperatively and writes a CSS custom property. `lastSeq` changes on every event and gets the same treatment.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4522,7 +4970,7 @@ Create `apps/panel/src/store/ws-store.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useWsStore } from './ws-store.js';
+import { useTelemetryStore, useWsStore } from './ws-store.js';
 
 const envelope = (event: string, payload: unknown, seq: number) =>
   ({ event, at: '2026-07-30T09:00:00+00:00', seq, payload }) as never;
@@ -4569,6 +5017,141 @@ describe('ws store', () => {
   it('never buffers commands — the store holds no outbound queue', () => {
     expect(Object.keys(useWsStore.getState())).not.toContain('pendingCommands');
   });
+
+  it('notifies subscribers exactly ONCE per envelope', () => {
+    let notifications = 0;
+    const unsub = useWsStore.subscribe(() => {
+      notifications += 1;
+    });
+    useWsStore.getState().ingest(envelope('recording.state', { state: 'recording' }, 0));
+    unsub();
+    expect(notifications).toBe(1);
+  });
+
+  it('keeps audio levels OUT of the application store', () => {
+    useWsStore.getState().ingest(
+      envelope('audio.levels', { roleId: 'mic-lecturer', rms: 0.4 }, 0),
+    );
+    expect(Object.keys(useWsStore.getState())).not.toContain('audioLevels');
+    expect(useTelemetryStore.getState().audioLevels['mic-lecturer']).toBe(0.4);
+  });
+
+  it('does not notify the application store for telemetry', () => {
+    let notifications = 0;
+    const unsub = useWsStore.subscribe(() => {
+      notifications += 1;
+    });
+    for (let i = 0; i < 20; i += 1) {
+      useWsStore.getState().ingest(
+        envelope('audio.levels', { roleId: 'mic-lecturer', rms: 0.4 }, i),
+      );
+    }
+    unsub();
+    expect(notifications, '10 Hz telemetry must not wake the UI store').toBe(0);
+  });
+
+  it('drops cleared alerts rather than growing forever on a weeks-long uptime', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('system.alert', { id: 'A1', code: 'source.offline', clearedAt: null }, 0));
+    expect(Object.keys(useWsStore.getState().alerts)).toEqual(['A1']);
+    s.ingest(
+      envelope(
+        'system.alert',
+        { id: 'A1', code: 'source.offline', clearedAt: '2026-07-30T09:01:00+00:00' },
+        1,
+      ),
+    );
+    expect(useWsStore.getState().alerts).toEqual({});
+  });
+});
+```
+
+Create `apps/panel/src/store/selectors.test.tsx`:
+
+```tsx
+import { render } from '@testing-library/react';
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useTelemetryStore, useWsStore } from './ws-store.js';
+import { useRecordingState, useWsShallow } from './selectors.js';
+
+const envelope = (event: string, payload: unknown, seq: number) =>
+  ({ event, at: '2026-07-30T09:00:00+00:00', seq, payload }) as never;
+
+function Probe({ onRender }: { onRender: () => void }) {
+  useRecordingState();
+  onRender();
+  return null;
+}
+
+describe('selector discipline (zustand v5 has no automatic shallow equality)', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('an atomic selector does not re-render on an unrelated slice change', () => {
+    let renders = 0;
+    render(<Probe onRender={() => { renders += 1; }} />);
+    const baseline = renders;
+    act(() => {
+      useWsStore.getState().ingest(
+        envelope('storage.status', { pressure: 'warning' }, 0),
+      );
+    });
+    expect(renders, 'storage must not re-render a recording-state consumer').toBe(baseline);
+  });
+
+  it('a multi-field read via useWsShallow is stable when nothing it reads changed', () => {
+    let renders = 0;
+    function Multi() {
+      useWsShallow((s) => ({ stale: s.stale, needsResync: s.needsResync }));
+      renders += 1;
+      return null;
+    }
+    render(<Multi />);
+    const baseline = renders;
+    act(() => {
+      useWsStore.getState().ingest(envelope('device.health', { ntpSynced: true }, 0));
+    });
+    expect(renders).toBe(baseline);
+  });
+
+  it('telemetry at 10 Hz causes ZERO React renders', () => {
+    let renders = 0;
+    render(<Probe onRender={() => { renders += 1; }} />);
+    const baseline = renders;
+    act(() => {
+      for (let i = 0; i < 100; i += 1) {
+        useTelemetryStore.getState().setLevel('mic-lecturer', i / 100);
+      }
+    });
+    expect(renders, 'meters must never enter React state').toBe(baseline);
+  });
+});
+```
+
+Create `apps/panel/src/hooks/use-ticker.test.ts`:
+
+```ts
+import { renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useTicker } from './use-ticker.js';
+import { useWsStore } from '../store/ws-store.js';
+
+describe('useTicker', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('ticks locally and never touches shared state (INV-G-7)', () => {
+    let storeNotifications = 0;
+    const unsub = useWsStore.subscribe(() => { storeNotifications += 1; });
+    const { result } = renderHook(() => useTicker(1_000));
+    const first = result.current;
+    vi.advanceTimersByTime(3_000);
+    expect(result.current).toBeGreaterThan(first);
+    unsub();
+    expect(storeNotifications, 'a tick is not application state').toBe(0);
+  });
 });
 ```
 
@@ -4581,28 +5164,81 @@ Expected: FAIL — `Cannot find module './ws-store.js'`
 
 `apps/panel/src/store/ws-store.ts`:
 
+`apps/panel/src/store/telemetry-store.ts` — the transient half:
+
+```ts
+import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
+import type { SourceRoleId } from '@eduscope/shared';
+
+interface TelemetryState {
+  /** audio.levels at <= 10 Hz. NEVER read through a React hook. */
+  audioLevels: Partial<Record<SourceRoleId, number>>;
+  /** Bookkeeping: changes on every event, consumed by nothing visual. */
+  lastSeq: number | null;
+  setLevel(roleId: SourceRoleId, rms: number): void;
+  setLastSeq(seq: number): void;
+  reset(): void;
+}
+
+/**
+ * Telemetry, kept out of the application store on purpose.
+ *
+ * Ten notifications a second against a store that 42 screens subscribe to means
+ * zustand re-runs every registered selector ten times a second, on a board that
+ * is also running the capture pipelines. Meters subscribe here IMPERATIVELY —
+ *
+ *   useEffect(() => useTelemetryStore.subscribe(
+ *     (s) => s.audioLevels['mic-lecturer'],
+ *     (rms) => el.current?.style.setProperty('--level', String(rms)),
+ *   ), []);
+ *
+ * — which writes a CSS custom property and causes zero React renders.
+ */
+export const useTelemetryStore = create<TelemetryState>()(
+  subscribeWithSelector((set) => ({
+    audioLevels: {},
+    lastSeq: null,
+    setLevel: (roleId, rms) =>
+      set((s) => ({ audioLevels: { ...s.audioLevels, [roleId]: rms } })),
+    setLastSeq: (seq) => set({ lastSeq: seq }),
+    reset: () => set({ audioLevels: {}, lastSeq: null }),
+  })),
+);
+```
+
+`apps/panel/src/store/ws-store.ts`:
+
 ```ts
 import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
-import type { EventEnvelope } from '@eduscope/shared';
+import type {
+  AiCountdownPayload, AiSetPayload, ChannelStatePayload, DeviceHealthPayload,
+  EventEnvelope, QuizPublicationPayload, QuizSessionPayload, RecordingStatePayload,
+  SourcesStatusPayload, StorageStatusPayload, SystemAlert,
+} from '@eduscope/shared';
+import { useTelemetryStore } from './telemetry-store.js';
 
-type ByKey<T> = Record<string, T>;
+export { useTelemetryStore };
 
-interface WsState {
-  recording: Record<string, unknown> | null;
-  sources: ByKey<Record<string, unknown>>;
-  channels: ByKey<Record<string, unknown>>;
-  storage: Record<string, unknown> | null;
-  deviceHealth: Record<string, unknown> | null;
-  aiCountdown: Record<string, unknown> | null;
-  aiSet: Record<string, unknown> | null;
-  quizSession: Record<string, unknown> | null;
-  publications: ByKey<Record<string, unknown>>;
-  alerts: ByKey<Record<string, unknown>>;
-  audioLevels: ByKey<number>;
+/**
+ * Slices are TYPED FROM THE CONTRACT. Tasks 2–4 exist to produce these payload
+ * types; storing them as `unknown` would push a cast into all 42 screens and
+ * defeat the narrowing (`recording.state === 'recording'`) they are built on.
+ */
+export interface WsState {
+  recording: RecordingStatePayload | null;
+  sources: Partial<Record<SourcesStatusPayload['roleId'], SourcesStatusPayload>>;
+  channels: Partial<Record<ChannelStatePayload['channelId'], ChannelStatePayload>>;
+  storage: StorageStatusPayload | null;
+  deviceHealth: DeviceHealthPayload | null;
+  aiCountdown: AiCountdownPayload | null;
+  aiSet: AiSetPayload | null;
+  quizSession: QuizSessionPayload | null;
+  publications: Record<string, QuizPublicationPayload>;
+  alerts: Record<string, SystemAlert>;
 
   connection: ConnectionStatus | null;
-  lastSeq: number | null;
   /** events.md §1: a gap forces a full snapshot re-request, never a patch. */
   needsResync: boolean;
   /** U-2: disconnected longer than T-WS-STALE — dim live regions. */
@@ -4617,11 +5253,11 @@ interface WsState {
 const EMPTY = {
   recording: null, sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, quizSession: null, publications: {}, alerts: {},
-  audioLevels: {}, connection: null, lastSeq: null, needsResync: false, stale: false,
-} as const;
+  connection: null, needsResync: false, stale: false,
+} satisfies Omit<WsState, 'ingest' | 'setConnection' | 'clearResync' | 'reset'>;
 
 /**
- * WS-fed state. Deliberately separate from TanStack Query: query owns
+ * WS-fed application state. Separate from TanStack Query: query owns
  * request/response, this owns the push channel (frontend-conventions §1).
  *
  * There is no outbound queue by design — "commands are never queued and
@@ -4632,36 +5268,58 @@ export const useWsStore = create<WsState>((set, get) => ({
   ...EMPTY,
 
   ingest(envelope) {
-    const { lastSeq } = get();
-    if (lastSeq !== null && envelope.seq > lastSeq + 1) set({ needsResync: true });
-    set({ lastSeq: envelope.seq });
-
-    const p = envelope.payload as Record<string, unknown>;
-    switch (envelope.event) {
-      case 'recording.state': set({ recording: p }); return;
-      case 'sources.status':
-        set((s) => ({ sources: { ...s.sources, [p.roleId as string]: p } }));
-        return;
-      case 'channel.state':
-        set((s) => ({ channels: { ...s.channels, [p.channelId as string]: p } }));
-        return;
-      case 'audio.levels':
-        set((s) => ({ audioLevels: { ...s.audioLevels, [p.roleId as string]: p.rms as number } }));
-        return;
-      case 'storage.status': set({ storage: p }); return;
-      case 'device.health': set({ deviceHealth: p }); return;
-      case 'ai.countdown': set({ aiCountdown: p }); return;
-      case 'ai.set': set({ aiSet: p }); return;
-      case 'quiz.session': set({ quizSession: p }); return;
-      case 'quiz.publication':
-        set((s) => ({ publications: { ...s.publications, [p.publicationId as string]: p } }));
-        return;
-      case 'system.alert':
-        set((s) => ({ alerts: { ...s.alerts, [p.id as string]: p } }));
-        return;
-      default:
-        return; // catalog events with no store slice yet (log.entry, upload.*, …)
+    // Telemetry short-circuits BEFORE any set() on this store, so 10 Hz levels
+    // never notify a UI subscriber.
+    if (envelope.event === 'audio.levels') {
+      const t = useTelemetryStore.getState();
+      t.setLevel(envelope.payload.roleId, envelope.payload.rms);
+      t.setLastSeq(envelope.seq);
+      return;
     }
+
+    const { lastSeq } = useTelemetryStore.getState();
+    useTelemetryStore.getState().setLastSeq(envelope.seq);
+    const gap = lastSeq !== null && envelope.seq > lastSeq + 1;
+
+    // ONE set() per envelope: every extra set is another full notification pass
+    // over every registered selector.
+    const patch = ((): Partial<WsState> => {
+      switch (envelope.event) {
+        case 'recording.state': return { recording: envelope.payload };
+        case 'sources.status':
+          return { sources: { ...get().sources, [envelope.payload.roleId]: envelope.payload } };
+        case 'channel.state':
+          return { channels: { ...get().channels, [envelope.payload.channelId]: envelope.payload } };
+        case 'storage.status': return { storage: envelope.payload };
+        case 'device.health': return { deviceHealth: envelope.payload };
+        case 'ai.countdown': return { aiCountdown: envelope.payload };
+        case 'ai.set': return { aiSet: envelope.payload };
+        case 'quiz.session': return { quizSession: envelope.payload };
+        case 'quiz.publication': {
+          const next = { ...get().publications };
+          // Bounded: a closed, unprojected publication is history, and history
+          // lives in the library — not in a store on a device that runs for weeks.
+          next[envelope.payload.publicationId] = envelope.payload;
+          for (const [id, p] of Object.entries(next)) {
+            if (p.state === 'closed' && p.projectorState === 'withdrawn') delete next[id];
+          }
+          return { publications: next };
+        }
+        case 'system.alert': {
+          const next = { ...get().alerts };
+          // INV-SA-1 re-raises a still-true condition every 30 s; a source that
+          // flaps for a week would otherwise grow this map without bound.
+          if (envelope.payload.clearedAt) delete next[envelope.payload.id];
+          else next[envelope.payload.id] = envelope.payload;
+          return { alerts: next };
+        }
+        default:
+          return {}; // catalog events with no slice yet (log.entry, upload.*, …)
+      }
+    })();
+
+    if (gap) set({ ...patch, needsResync: true });
+    else if (Object.keys(patch).length > 0) set(patch);
   },
 
   setConnection(status) {
@@ -4671,13 +5329,94 @@ export const useWsStore = create<WsState>((set, get) => ({
   },
 
   clearResync() {
-    set({ needsResync: false, lastSeq: null });
+    set({ needsResync: false });
+    useTelemetryStore.getState().setLastSeq(-1);
   },
 
   reset() {
     set({ ...EMPTY });
+    useTelemetryStore.getState().reset();
   },
 }));
+```
+
+`apps/panel/src/store/selectors.ts` — **the shape every screen in prompt 09 must use**:
+
+```ts
+import { useShallow } from 'zustand/react/shallow';
+import { useWsStore, type WsState } from './ws-store.js';
+
+/**
+ * zustand v5 removed the equality-function argument from the hook. A selector
+ * that returns a NEW object — `s => ({ a: s.a, b: s.b })` — therefore compares
+ * unequal on every notification and re-renders unconditionally.
+ *
+ * The rule, in two lines:
+ *   - read ONE field  -> use an atomic selector from this file
+ *   - read SEVERAL    -> use useWsShallow
+ * Never call useWsStore() with no selector, and never return a fresh object or
+ * array literal from a bare useWsStore(...).
+ */
+export const useWsShallow = <T>(selector: (s: WsState) => T): T =>
+  useWsStore(useShallow(selector));
+
+// ── atomic selectors ───────────────────────────────────────────────────────
+export const useRecordingState = () => useWsStore((s) => s.recording?.state ?? 'idle');
+export const useRecordingSession = () => useWsStore((s) => s.recording);
+export const useIsStale = () => useWsStore((s) => s.stale);
+export const useNeedsResync = () => useWsStore((s) => s.needsResync);
+export const useConnectionPhase = () => useWsStore((s) => s.connection?.phase ?? 'connecting');
+export const useStoragePressure = () => useWsStore((s) => s.storage?.pressure ?? 'ok');
+export const useAiCountdown = () => useWsStore((s) => s.aiCountdown);
+
+/**
+ * Keyed reads take the key so the selector returns a stable primitive-or-row
+ * reference rather than the whole map, which `ingest` rebuilds by spread.
+ */
+export const useSourceStatus = (roleId: string) =>
+  useWsStore((s) => s.sources[roleId as keyof WsState['sources']]);
+export const useChannelStatus = (channelId: string) =>
+  useWsStore((s) => s.channels[channelId as keyof WsState['channels']]);
+```
+
+Append to `docs/design/frontend-conventions.md` §1, so the rule is binding rather than advisory:
+
+```markdown
+- Screens read WS state through `apps/panel/src/store/selectors.ts` only: one
+  atomic selector per field, or `useWsShallow` for a multi-field read. A bare
+  `useWsStore(s => ({ … }))` re-renders on every store notification — zustand v5
+  has no automatic shallow equality.
+- `audio.levels` and other telemetry never enter React state. Subscribe to the
+  transient store imperatively and write a CSS custom property or paint a canvas.
+```
+
+`apps/panel/src/hooks/use-ticker.ts`:
+
+```ts
+import { useEffect, useState } from 'react';
+
+/**
+ * A leaf-local clock tick.
+ *
+ * The contract is explicit that the panel derives elapsed time locally — the
+ * timer from `startedAt` + `recordedDurationMs`, the AI countdown from the
+ * absolute `nextAt` — because "countdown ticks are never events per second"
+ * (INV-G-7). The corollary is that a tick is not application state either: put
+ * it in the store and you have replaced a 10 Hz storm with a 1 Hz one.
+ *
+ * Use it in the leaf that renders digits, and derive from the absolute instant:
+ *
+ *   useTicker(1_000);
+ *   const elapsed = Date.now() - Date.parse(startedAt);
+ */
+export function useTicker(intervalMs: number): number {
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return tick;
+}
 ```
 
 - [ ] **Step 4: Write the provider and query client**
@@ -4730,30 +5469,47 @@ export function ClientProvider({
   children: ReactNode;
   scenario?: ScenarioName;
 }) {
-  const client = useMemo<EduscopeClient>(
-    () =>
+  const [client, setClient] = useState<EduscopeClient | null>(null);
+
+  /**
+   * The client is constructed INSIDE the effect, not in useMemo.
+   *
+   * `createMockClient` starts wall-clock timers the moment it is called (the
+   * 10 Hz level loop, the ws-flap schedule). Under StrictMode React renders
+   * twice and throws the first render away — a useMemo'd client from that
+   * discarded render never reaches an effect, so nothing ever calls dispose()
+   * and it emits forever. Constructing here means every client that exists has
+   * a matching cleanup.
+   */
+  useEffect(() => {
+    const instance =
       import.meta.env.VITE_EDUSCOPE_REAL_API === '1'
         ? createRealClient(import.meta.env.VITE_EDUSCOPE_API_URL ?? '/api/v1')
-        : createMockClient(scenario),
-    [scenario],
-  );
+        : createMockClient(scenario);
 
-  useEffect(() => {
-    const store = useWsStore.getState();
-    const offEvents = client.events$.subscribe((e) => {
+    const offEvents = instance.events$.subscribe((e) => {
       useWsStore.getState().ingest(e);
     });
-    const offConn = client.connection$.subscribe((s) => {
+    const offConn = instance.connection$.subscribe((s) => {
       useWsStore.getState().setConnection(s);
-      if (s.resyncReason) void client.resync().then(() => useWsStore.getState().clearResync());
+      if (s.resyncReason) {
+        void instance.resync().then(() => useWsStore.getState().clearResync());
+      }
     });
+
+    setClient(instance);
     return () => {
       offEvents();
       offConn();
-      store.reset();
-      client.dispose();
+      useWsStore.getState().reset();
+      instance.dispose();
+      setClient(null);
     };
-  }, [client]);
+  }, [scenario]);
+
+  // One frame with no client while the effect runs. The kiosk boots into U-1's
+  // skeleton anyway, so there is nothing to show yet.
+  if (!client) return null;
 
   return <ClientContext.Provider value={client}>{children}</ClientContext.Provider>;
 }
@@ -4806,13 +5562,15 @@ export function App() {
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm --filter @eduscope/panel test`
-Expected: PASS — `ws-store.test.ts` 5 passed, everything from Tasks 13–14 still green.
+Expected: PASS — `ws-store.test.ts` 9 passed, `selectors.test.tsx` 3 passed, `use-ticker.test.ts` 1 passed, everything from Tasks 13–14 still green.
+
+The two assertions that matter most are *"10 Hz telemetry must not wake the UI store"* (0 notifications) and *"notifies subscribers exactly ONCE per envelope"*. If either regresses in prompt 09, every screen pays for it.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/panel/src/client apps/panel/src/store apps/panel/src/query apps/panel/src/App.tsx
-git commit -m "feat(panel): client provider, WS store with resync rules, query wiring"
+git add apps/panel/src/client apps/panel/src/store apps/panel/src/hooks apps/panel/src/query apps/panel/src/App.tsx docs/design/frontend-conventions.md
+git commit -m "feat(panel): typed WS store, selector discipline, transient telemetry store"
 ```
 
 ---
@@ -5108,12 +5866,12 @@ git commit -m "feat(panel): scenario dev overlay behind a long-press"
 
 **Files:**
 - Create: `tools/eslint-rules/no-direct-network.js`
-- Create: `eslint.config.js` (root)
+- Modify: `eslint.config.js` (root — created in Task 1; this task appends one block)
 - Test: `tools/eslint-rules/no-direct-network.test.ts`
 
 **Interfaces:**
-- Consumes: `eslint` (flat config), `typescript-eslint`.
-- Produces: a flat config whose `files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}']` block bans direct network access, with `packages/api-client/src/**` explicitly exempted. Bans cover **globals** (`fetch`, `WebSocket`, `XMLHttpRequest`, `EventSource`, `navigator.sendBeacon`), **module imports** (`axios`, `ky`, `got`, `superagent`, `socket.io-client`, `undici`, `node-fetch`), and **member access** (`window.fetch`, `globalThis.fetch`).
+- Consumes: the base `eslint.config.js` from Task 1.
+- Produces: one additional flat-config block whose `files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}']` bans direct network access, with `packages/api-client/src/**` explicitly exempted. Bans cover **globals** (`fetch`, `WebSocket`, `XMLHttpRequest`, `EventSource`), **module imports** (`axios`, `ky`, `got`, `superagent`, `socket.io-client`, `undici`, `node-fetch`), and **member access** (`window.fetch`, `globalThis.fetch`, `navigator.sendBeacon`).
 
 > A plain `no-restricted-imports` is not enough: `fetch` and `WebSocket` are globals, not imports, so the rule needs `no-restricted-globals` and `no-restricted-properties` too. That is why this task exists as its own gate rather than a line in a config.
 
@@ -5206,7 +5964,7 @@ describe('client-boundary rule (frontend-conventions §1)', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm test tools/eslint-rules`
-Expected: FAIL — `Could not find config file` (no root `eslint.config.js` yet).
+Expected: FAIL — the `fetch` cases report **0 errors**, because Task 1's base config lints cleanly but has no boundary block yet.
 
 - [ ] **Step 3: Write the rule fragment**
 
@@ -5251,33 +6009,18 @@ export const boundaryFiles = ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'];
 export const boundaryExempt = ['packages/api-client/src/**'];
 ```
 
-- [ ] **Step 4: Write the root flat config**
+- [ ] **Step 4: Append the boundary block to the existing config**
 
-`eslint.config.js`:
+In `eslint.config.js` (created in Task 1), add the import and one final block. Everything above it is unchanged:
 
 ```js
-import js from '@eslint/js';
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
 import {
   bannedGlobals, bannedImports, bannedProperties, boundaryExempt, boundaryFiles,
 } from './tools/eslint-rules/no-direct-network.js';
 
-export default tseslint.config(
-  {
-    ignores: [
-      '**/dist/**', '**/build/**', '**/.next/**', '**/node_modules/**',
-      '**/coverage/**', '**/playwright-report/**', '**/test-results/**',
-      'packages/shared/src/schemas/generated/**', // codegen output
-      'prototype/**', 'legacy-Codebase/**',
-    ],
-  },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    files: ['**/*.{ts,tsx}'],
-    languageOptions: { globals: { ...globals.browser, ...globals.node } },
-  },
+// … the Task 1 blocks stay exactly as they are; append this as the last entry
+// inside tseslint.config(…):
+
   // ── the client boundary ───────────────────────────────────────────────────
   {
     files: boundaryFiles,
@@ -5288,7 +6031,6 @@ export default tseslint.config(
       'no-restricted-properties': ['error', ...bannedProperties],
     },
   },
-);
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -5306,12 +6048,14 @@ git add eslint.config.js tools/eslint-rules
 git commit -m "feat(lint): client-boundary rule with a test proving it fails the build"
 ```
 
+> **Why the base config is not here.** `pnpm lint` is a root script from Task 1, and a script that fails for sixteen tasks trains everyone to ignore it. Task 1 owns the base; this task owns the one thing that is genuinely about the client boundary.
+
 ---
 
 ## Task 18: apps/quiz — Next.js mobile-first scaffold
 
 **Files:**
-- Create: `apps/quiz/package.json`, `next.config.mjs`, `tsconfig.json`, `postcss.config.mjs`
+- Create: `apps/quiz/package.json`, `next.config.mjs`, `tsconfig.json`, `postcss.config.mjs`, `vitest.config.ts`, `src/test-setup.ts`
 - Create: `apps/quiz/app/layout.tsx`, `app/globals.css`, `app/j/[joinCode]/page.tsx`, `app/j/[joinCode]/register/page.tsx`, `app/s/[quizSessionId]/page.tsx`
 - Create: `apps/quiz/src/identity/identity-provider.ts`, `src/identity/self-registration.ts`, `src/client/quiz-client-provider.tsx`
 - Create: `packages/api-client/src/quiz/quiz-app-client.ts`
@@ -5621,6 +6365,30 @@ export function createSelfRegistrationProvider(client: QuizAppClient): QuizIdent
 }
 ```
 
+`apps/quiz/vitest.config.ts` — the root `vitest.workspace.ts` from Task 1 delegates here, so root and per-app runs cannot drift:
+
+```ts
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    name: 'quiz',
+    environment: 'jsdom',
+    globals: false,
+    setupFiles: ['./src/test-setup.ts'],
+    include: ['{app,src}/**/*.test.{ts,tsx}'],
+  },
+});
+```
+
+`apps/quiz/src/test-setup.ts`:
+
+```ts
+import '@testing-library/jest-dom/vitest';
+```
+
 `apps/quiz/next.config.mjs`:
 
 ```js
@@ -5895,9 +6663,22 @@ import { useClient } from './client/client-provider.js';
  *  - the start button is a placeholder for S-04's Start pill and is removed the
  *    moment S-04 lands.
  */
+declare global {
+  interface Window {
+    __renderCount?: number;
+  }
+}
+
 function ScaffoldShell() {
   const client = useClient();
-  const state = useWsStore((s) => (s.recording?.state as string | undefined) ?? 'idle');
+  const state = useRecordingState(); // atomic selector — see store/selectors.ts
+
+  // Gate 1e counts commits of this component to prove telemetry never renders.
+  // Removed with the button when S-04 lands.
+  if (typeof window !== 'undefined') {
+    window.__renderCount = (window.__renderCount ?? 0) + 1;
+  }
+
   return (
     <div data-recording-state={state}>
       <button
@@ -5943,15 +6724,15 @@ git commit -m "test(panel): Playwright smoke covering boot, happy path and scena
 - Consumes: root scripts from Task 1.
 - Produces: a four-job pipeline — `typecheck`, `lint`, `test`, `e2e` — on push and pull request.
 
-- [ ] **Step 1: Verify the four commands pass locally first**
+- [ ] **Step 1: Verify the five commands pass locally first**
 
 Run each and record the result; CI must not be the first place these run:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm e2e
+pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm e2e
 ```
 
-Expected: all four exit 0.
+Expected: all five exit 0.
 
 - [ ] **Step 2: Write the workflow**
 
@@ -6008,6 +6789,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  # Playwright's webServer already builds both apps, but a failure there surfaces
+  # as an opaque webServer timeout. Tailwind v4 + workspace transpilePackages is
+  # exactly the combination that typechecks and then fails to build, so it gets
+  # its own job and its own error message.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
 
   e2e:
     runs-on: ubuntu-latest
@@ -6098,7 +6895,25 @@ test('GATE 1b — the overlay switches every catalog script live', async ({ page
     await expect(page.getByTestId('active-scenario')).toHaveText(name);
   }
 });
+
+test('GATE 1e — 10 s of happy does not turn telemetry into renders', async ({ page }) => {
+  await page.goto('/');
+
+  // The shell increments window.__renderCount on every commit of the scaffold
+  // probe (added in step 4 below). audio.levels flows at 10 Hz throughout.
+  const before = await page.evaluate(() => window.__renderCount ?? 0);
+  await page.waitForTimeout(10_000);
+  const after = await page.evaluate(() => window.__renderCount ?? 0);
+
+  // ~100 audio.levels events land in this window. A handful of renders from
+  // real state changes is expected; anything near 100 means telemetry has
+  // leaked back into React state (Task 15) and every screen will pay for it.
+  expect(after - before, `renders during 10 s of idle happy: ${after - before}`)
+    .toBeLessThan(20);
+});
 ```
+
+> **Why this assertion and not a generic frame-budget gate.** Every other claim in this plan is verified executably, and frontend cost is the one thing the RK3588 genuinely constrains — so it deserves a gate. But a Profiler-commit or long-task budget measured against three placeholder components measures nothing and would be rewritten the moment real screens land. *"Telemetry causes no renders"* is precise, non-flaky, meaningful today, and is exactly the invariant that would silently regress during prompt 09 when 42 screens subscribe to the store. It is the same claim as `selectors.test.tsx`, asserted end-to-end through a real browser and a real 10 Hz event stream.
 
 - [ ] **Step 2: Write the quiz gate spec**
 
@@ -6147,7 +6962,7 @@ test('GATE 1d — every quiz route skeleton renders', async ({ page }) => {
 - [ ] **Step 3: Run the gate**
 
 Run: `pnpm gate`
-Expected: PASS — `4 passed` across the two apps. Both web servers start, both apps render on the mock, all seven scripts switch live.
+Expected: PASS — `5 passed` across the two apps. Both web servers start, both apps render on the mock, all seven scripts switch live, and 10 s of 10 Hz telemetry produces fewer than 20 renders.
 
 - [ ] **Step 4: Commit**
 
@@ -6398,12 +7213,17 @@ Expected: exit 0, no output.
 ```bash
 pnpm test
 ```
-Expected: exit 0. Every suite green, including `gate-contract-coverage.test.ts` and `gate-boundary.test.ts`.
+Expected: exit 0. Every suite green across all four projects (`packages`, `panel`, `quiz`, `tools`), including `gate-contract-coverage.test.ts` and `gate-boundary.test.ts`.
+
+```bash
+pnpm build
+```
+Expected: exit 0. `vite build` for the panel and `next build` for the quiz app both succeed.
 
 ```bash
 pnpm gate
 ```
-Expected: exit 0, `4 passed` across the two apps.
+Expected: exit 0, `5 passed` across the two apps.
 
 ```bash
 pnpm e2e
@@ -6422,10 +7242,10 @@ touching `fetch`."*
 
 | # | Gate | Command | Result | Evidence |
 |---|---|---|---|---|
-| 1 | Both apps boot on the mock; the overlay switches scripts live | `pnpm gate` | | `4 passed` / panel + quiz |
+| 1 | Both apps boot on the mock; the overlay switches scripts live; telemetry causes no renders | `pnpm gate` | | `5 passed` / panel + quiz |
 | 2 | Client covers 100 % of contract operations and events | `pnpm --filter @eduscope/api-client test gate-contract-coverage` | | 77 / 77 operations, 22 / 22 events |
 | 3 | The boundary rule fails the build on a direct fetch | `pnpm test tools/eslint-rules/gate-boundary.test.ts` | | `exit=1` with `no-restricted-globals` |
-| 4 | CI green | `gh run watch` | | run URL |
+| 4 | CI green | `gh run watch` | | run URL (5 jobs) |
 
 ## Deliberate exclusions
 
@@ -6455,7 +7275,7 @@ git push
 ```
 
 Run: `gh run watch`
-Expected: all five jobs `✓`. Fill the gate record's Result column from this run, then the scaffold is complete.
+Expected: all six jobs `✓` (`typecheck`, `lint`, `test`, `build`, `e2e`, `gate`). Fill the gate record's Result column from this run, then the scaffold is complete.
 
 ---
 
@@ -6495,6 +7315,35 @@ Checked against the source documents with fresh eyes.
 | Gate: boundary rule fails the build, proved | 23 |
 | Gate: CI green | 24 |
 | Scope rule — no screens beyond skeletons | Stated in Global Constraints; enforced by Tasks 14 and 18 rendering placeholders only |
+
+**Review round 2 — what was added, and what was deliberately not.**
+
+Added, because each one is infrastructure that 42 screens would otherwise duplicate or work around:
+
+| Change | Task | Why it could not wait |
+|---|---|---|
+| `vitest.workspace.ts` delegating to per-package configs | 1 | A root `vitest run` with no workspace file runs `.test.tsx` under Node with no JSX transform. CI's `test` job and Gate 4 were asserting nothing. |
+| Base `eslint.config.js` moved to Task 1 | 1, 17 | `pnpm lint` is a root script from Task 1; a script that fails for sixteen tasks trains everyone to ignore it. |
+| `react-hooks/exhaustive-deps` + `jsx-a11y` | 1 | Re-render discipline is this scaffold's central risk, and conventions §3 mandates `aria-label` on every icon-only control of a keyboard-less kiosk. Both are one config block, and screens are then born compliant. |
+| Layout route + `PanelShell` | 14 | S-03 is specified `(panel, all routes)` and *"must be built first"*. Under a flat sibling array it can only live outside `RouterProvider`, where it cannot read the location. |
+| `errorElement` + catch-all route | 14 | A kiosk has no address bar, no keyboard and nobody to press reload; an unhandled render error must not be a white screen in a lecture hall. |
+| `OverlayHost` (mount point + stack) | 14 | Ten overlays, two binding placement rules (absolute inside `.us-panel`; portal out of the dark scope so dialogs render light), and S-15 opens on top of S-14. The alternative is ten hand-rolled scrims. |
+| Typed store slices | 15 | Tasks 2–4 exist to produce those payload types; `Record<string, unknown>` pushes a cast into every screen. |
+| `selectors.ts` + the conventions rule | 15 | zustand v5 removed the hook's equality argument. Written against the old sketch, 42 screens re-render on every notification, and it is not fixable afterwards. |
+| Transient telemetry store | 15 | `audio.levels` at 10 Hz in the shared store re-runs every registered selector ten times a second on the board running the capture pipelines. |
+| One `set()` per envelope; bounded `alerts`/`publications`; client built in the effect | 15 | Three concrete defects: triple notification per event; unbounded growth over a weeks-long uptime with `T-ALERT-REEVALUATE` re-raising every 30 s; and a StrictMode-discarded client whose 10 Hz timers are never disposed. |
+| `useTicker` | 15 | INV-G-7 has the panel deriving time locally. In the store, that is a second 1 Hz storm. |
+| `vite-env.d.ts`, `tsc --noEmit` (not `tsc -b`), no `prettier` | 2, 13 | Three configuration errors that fail on first run: untyped `import.meta.env` under `exactOptionalPropertyTypes`, build mode on non-composite projects, and a formatter that is in no `package.json`. |
+| CI `build` job | 20 | Playwright's `webServer` does already build both apps — so the build is not *unexercised* — but a failure surfaces as an opaque webServer timeout. Tailwind v4 + `transpilePackages` is exactly the pairing that typechecks and then fails to build. |
+| Gate 1e: telemetry causes no renders | 21 | Frontend cost is the one thing the RK3588 genuinely constrains, and it was the only claim in the plan with no executable assertion. |
+
+**Not** added, with the reasoning:
+
+- **Rebuilding `PreviewChannel` around `ImageBitmap`/`OffscreenCanvas.convertToBlob()`.** `convertToBlob` is async and yields a `Blob` + object URL, not the JPEG data-URI this scaffold is specified to produce, and Wave 8 replaces the entire preview path with a WebRTC `MediaStream`. The real waste was allocating a 640×360 canvas eight-to-twelve times a second; that is fixed in Task 11 (one reused canvas, 480×270 at q0.5, 8 fps) at a fraction of the cost of redesigning a transport with a known expiry date.
+- **A generic Profiler-commit or long-task budget in Gate 1.** Measured against three placeholder components it asserts nothing, and it would be rewritten the moment real screens land. Gate 1e asserts the specific invariant that is meaningful today *and* is the one that would silently regress in prompt 09.
+- **`Modal`, `Drawer`, `Toggle`, `Stepper` primitives.** screen-inventory §11 lists them under Wave 0, but they are component design, not infrastructure, and the scope rule for this plan is explicit that screens are prompt 09. Task 14 ships the overlay *host* — the mount point, ordering and dismissal — because that is the part whose absence forces duplication. What the layers look like is a screen decision.
+- **The on-screen keyboard host.** Also a Wave 0 item in screen-inventory §11, but its one hard requirement — *"must not cover the submit button at 1280×800; reserve the lower 380 px"* — is an S-01 layout decision, and this scaffold has no text input to host it for. Task 13 records that it lands with S-01 in Wave 1 so the dependency is not orphaned.
+- **Code splitting.** Correctly absent: the panel is served from the device, so transfer is free and only parse cost matters.
 
 **Type consistency.** `EventStream`/`Unsubscribe` (Task 5) are used unchanged in Tasks 6, 11, 12, 15, 18. `TransitionId` and `MachineId` (Task 6) are used unchanged in Tasks 7, 8, 10. `ScenarioName` (Task 8) is used in Tasks 9, 12, 15, 16. `validated()` (Task 10) is the single choke point Task 22 relies on. `MockClient` (Task 12) is the type `useMockClient()` (Task 15) narrows to and the overlay (Task 16) consumes. `QuizIdentity` (Task 18, `packages/api-client`) is the return type of `QuizIdentityProvider` (Task 18, `apps/quiz`).
 
