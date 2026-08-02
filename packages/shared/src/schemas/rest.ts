@@ -12,6 +12,9 @@ import * as generated from './generated/zod.gen.js';
 export * from './generated/zod.gen.js';
 export type * from './generated/types.gen.js';
 
+// ── type adapter: zInstant needs { offset: true } for contracts/events.md ────
+export const zInstant = z.string().datetime({ offset: true });
+
 /** Cursor pagination envelope (openapi.yaml Conventions: `{ items, nextCursor }`). */
 export const zPage = <T extends z.ZodTypeAny>(item: T) =>
   z.object({ items: z.array(item), nextCursor: z.string().nullable() });
