@@ -30,17 +30,25 @@ user is pushing/opening the PR themselves and will report the run result —
 this row stays pending until that's confirmed, and the scaffold is not
 declared complete until it is.
 
-**Node floor bumped 22.11.0 → 22.12.0 (all five jobs failed first PR run).**
-The user reported all five CI jobs failing with
-`ERR_PNPM_UNSUPPORTED_ENGINE`: `vite@7.3.6` (resolved from the plan's own
-"Vite >= 7" floor) requires Node `>=22.12.0`, which the plan's original
-Node floor (`22.11.0`, locked in `.nvmrc`/`engines.node`/CI's
-`NODE_VERSION`/a literal-value test in `tools/workspace.test.ts`) does not
-satisfy — invisible locally since this environment runs Node 24. This is a
-genuine conflict between two of the plan's own Global Constraints, not a
-given-code bug; asked the human partner which governs (2026-08-03),
-approved: bump the floor to 22.12.0 everywhere it's pinned, including the
-locked test. All 276 tests pass after the change.
+**Node floor bumped twice: 22.11.0 → 22.12.0 → 22.13.0 (all five jobs
+failed the first two PR runs).** The user reported all five CI jobs
+failing with `ERR_PNPM_UNSUPPORTED_ENGINE`, twice in a row:
+
+1. `vite@7.3.6` (resolved from the plan's own "Vite >= 7" floor) requires
+   Node `>=22.12.0`, which the plan's original floor (`22.11.0`) doesn't
+   satisfy. Bumped to 22.12.0.
+2. That still failed: `eslint-visitor-keys@5.0.1` (a transitive dep of
+   `eslint@9`) requires `^22.13.0` specifically — `22.12.0` doesn't match
+   that range. Bumped to 22.13.0, this time verified against every
+   installed package's `engines.node` field (not just the one that broke)
+   so a third round isn't needed.
+
+Both invisible locally, since this environment runs Node 24. Genuine
+conflicts between the plan's own Global Constraints ("Node >= 22.11" vs.
+"Vite >= 7" / whatever `eslint@9` pulls in), not given-code bugs; asked the
+human partner which governs before the first bump (2026-08-03), approved:
+bump the floor wherever it's pinned, including the locked test in
+`tools/workspace.test.ts`. All 276 tests pass after both changes.
 
 ## Deliberate exclusions
 

@@ -13,14 +13,15 @@ describe('workspace foundation', () => {
   });
 
   it('pins the Node floor in .nvmrc and engines', () => {
-    // 22.12.0, not the plan's original 22.11.0 — vite@7.3.6 (resolved by
-    // the plan's own "Vite >= 7" floor) requires Node >=22.12.0, which
-    // pnpm's engine-strict check enforces. Confirmed via CI failure
-    // (ERR_PNPM_UNSUPPORTED_ENGINE) once .nvmrc's 22.11.0 hit a runner
-    // that actually pins to it; human-approved fix, 2026-08-03.
-    expect(read('.nvmrc').trim()).toBe('22.12.0');
+    // 22.13.0, not the plan's original 22.11.0. Two CI failures pinned
+    // this down: vite@7.3.6 needs >=22.12.0 (from the plan's own "Vite
+    // >= 7" floor), then eslint-visitor-keys@5.0.1 (a transitive dep of
+    // eslint@9) needs ^22.13.0 specifically — 22.12.0 doesn't satisfy
+    // that range. Verified against every installed package's engines.node
+    // field so this doesn't need a third round; human-approved, 2026-08-03.
+    expect(read('.nvmrc').trim()).toBe('22.13.0');
     const pkg = JSON.parse(read('package.json')) as { engines?: { node?: string } };
-    expect(pkg.engines?.node).toBe('>=22.12');
+    expect(pkg.engines?.node).toBe('>=22.13');
   });
 
   it('turns on the strictness the plan depends on', () => {
