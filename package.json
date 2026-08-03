@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.12.3",
-  "engines": { "node": ">=22.11" },
+  "engines": { "node": ">=22.12" },
   "scripts": {
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint .",

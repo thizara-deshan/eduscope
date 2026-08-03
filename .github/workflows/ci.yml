@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '22.11.0'
+  NODE_VERSION: '22.12.0'
 
 jobs:
   typecheck:
@@ -83,3 +83,18 @@ jobs:
           name: playwright-report
           path: apps/panel/playwright-report/
           retention-days: 7
+
+  gate:
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @eduscope/panel exec playwright install --with-deps chromium
+      - name: Scaffold gate
+        run: pnpm gate
