@@ -25,21 +25,51 @@ Supporting local runs, all green on commit `d6d3cb6` (2026-08-03):
 
 A validation sweep of the repo against this plan found the tree structurally
 complete but **not reproducibly green**, and closed the gaps below. Re-verified
-after: `pnpm typecheck` exit 0, `pnpm lint` exit 0, `pnpm test` exit 0 with
-**31 files / 280 tests passed**, `pnpm build` exit 0.
+after, on Node 24 / pnpm 9.6 with Chromium 1234 installed:
+
+| Command | Result |
+|---|---|
+| `pnpm typecheck` | exit 0 |
+| `pnpm lint` | exit 0, no output |
+| `pnpm test` | exit 0, **31 files / 280 tests passed** |
+| `pnpm build` | exit 0 |
+| `pnpm e2e` | exit 0, **6 passed** |
+| `pnpm gate` | exit 0, **5 passed** — panel 3 (1a, 1b, 1e) + quiz 2 (1c, 1d) |
 
 | Finding | Resolution |
 |---|---|
 | `pnpm lint` exited 1 on a clean tree (1142 errors) — ESLint flat config does not read `.gitignore`, so `eslint .` walked `.claude/worktrees/` (a full second copy of the repo, `prototype/` and `legacy-Codebase/` included) and `.agents/skills/`. This failed Gate 3's `3a` and `3c`. | Added `.claude/**`, `.agents/**`, `agent/**`, `revamp-guide/**` to the `ignores` block in `eslint.config.js`. |
 | Gate 3's `3b` asserted only a non-zero exit code, so it passed **vacuously** while lint was red — it would have passed with the boundary rule deleted. | `gate-boundary.test.ts` now asserts the failure names `no-restricted-globals` and points at the `__gate__` fixture. |
 | `mock/events/emitter.ts`, `store/connection.ts` and `test/event-coverage.test.ts` appeared in the File Structure but did not exist; their logic was inlined elsewhere. | Extracted to the specified paths — no duplication, all behaviour-preserving. `event-coverage.test.ts` is new coverage from the client's side of the boundary. |
-| The mock simulation shipped in the panel's **production** entry chunk (415.56 kB / 124.31 kB gzip). Confirmed by grepping the built artifact for `pipeline-crash-midway`. Flipping `VITE_EDUSCOPE_REAL_API` did not remove it, because the dev overlay's static `listScenarios` import anchored the whole catalog. | `client-provider.tsx` loads the mock via dynamic `import()`; the overlay is `import.meta.env.DEV`-gated behind `lazy()`. Entry chunk is now **382.66 kB / 115.50 kB gzip** with the scenario catalog, overlay and preview mock **absent**; the mock is a 33.46 kB chunk a real-API build never requests. |
-| Nothing enforced that. | CI's `build` job now fails if the entry chunk exceeds **150 kB gzip** (currently 115.2 kB). |
+| The mock simulation shipped in the panel's **production** entry chunk (415.56 kB / 124.31 kB gzip). Confirmed by grepping the built artifact for `pipeline-crash-midway`. Flipping `VITE_EDUSCOPE_REAL_API` did not remove it, because the dev overlay's static `listScenarios` import anchored the whole catalog. | `client-provider.tsx` loads the mock via dynamic `import()`, and the overlay is `lazy()` behind a build-time flag, so both split out of the entry chunk. See the adapter-selection note below for which flag. |
+| Nothing enforced that. | CI's `build` job now fails if the entry chunk exceeds **150 kB gzip**. |
 | `ScaffoldShell` incremented `window.__renderCount` in the render body — impure, and double-counted under `StrictMode`, inflating Gate 1e's own measurement. | Moved into a `useEffect`, so it counts commits. |
 | `tools/workspace.test.ts` asserted `vitest.workspace.ts` contains `'jsdom'`. That file only delegates and never names an environment, so the assertion was satisfied by a **comment** and kept passing after the panel moved to happy-dom. | Rewritten to assert the environment in each app's own `vitest.config.ts`. The plan's Task 1 snippet was corrected to match. |
 | Root `package.json` still carried an unused `jsdom` devDependency. | Removed; lockfile regenerated (`lockfileVersion: '9.0'` preserved). |
 | `packages/shared/node_modules/` held an npm-style `.package-lock.json` from a stray `npm install` inside a pnpm workspace. | Deleted. |
 | The plan's own text disagreed with itself or with the repo in four places: Node floor still `22.11`; Task 13 still specified `jsdom`; File Structure placed `contract-honesty.test.ts` at `test/` while Task 10 placed it at `test/mock/`. | Plan corrected in place, each with an inline note. Every path the plan declares — 79 in File Structure, 145 across all task Files blocks — now resolves on disk. |
+
+### The overlay gate is adapter selection, not `import.meta.env.DEV`
+
+Gating the scenario overlay on `import.meta.env.DEV` was the obvious move and it
+was **wrong**: Playwright drives `vite preview`, a production build, where `DEV`
+is false. Gate 1b (*"the overlay switches every catalog script live"*) and the
+matching smoke test both failed on a missing `scenario-hotspot` — the gate caught
+it, which is what the gate is for.
+
+`App.tsx` now gates on `import.meta.env.VITE_EDUSCOPE_REAL_API !== '1'`. The
+overlay only ever does anything against a mock client, so it ships exactly when
+the mock ships, and the flag that selects the adapter is the flag that decides
+both. Resulting builds, measured:
+
+| Build | Entry chunk | Split chunks | Catalog / overlay / preview mock in entry? |
+|---|---|---|---|
+| default (mock adapter — dev, CI, Playwright) | 383.14 kB / **115.81 kB gzip** | `create-mock-client` 30.70 kB, `registry` 2.85 kB, `scenario-overlay` 1.57 kB | no — lazily fetched after first paint |
+| `VITE_EDUSCOPE_REAL_API=1` (the device) | 357.82 kB / **108.40 kB gzip** | none | **no — eliminated entirely** |
+
+Baseline before this pass was 415.56 kB / 124.31 kB gzip in one chunk, with the
+whole simulation inside it. The device build is the one that matters, and it is
+now 16 kB gzip lighter with none of the mock in it.
 
 ### Deliberately not changed
 

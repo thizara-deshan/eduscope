@@ -12,11 +12,17 @@ import './styles/app.css';
 /**
  * The dev overlay renders `listScenarios()`, which anchors the whole scenario
  * catalog — all seven scripts and the machines behind them — into whatever chunk
- * imports it. `import.meta.env.DEV` is statically replaced at build time, so this
- * ternary lets Rollup drop the entire subtree from a production build instead of
- * shipping a debug tool to a lecture-hall kiosk.
+ * imports it. This flag is statically replaced at build time, so Rollup drops the
+ * entire subtree rather than shipping a debug tool to a lecture-hall kiosk.
+ *
+ * The gate is the ADAPTER SELECTION, not `import.meta.env.DEV`. The overlay only
+ * ever does anything against a mock client, so it should ship exactly when the
+ * mock does — and `DEV` is false in the `vite preview` build that Playwright
+ * drives, which is precisely where Gate 1b has to be able to switch scripts.
  */
-const ScenarioOverlay = import.meta.env.DEV
+const MOCK_ADAPTER = import.meta.env.VITE_EDUSCOPE_REAL_API !== '1';
+
+const ScenarioOverlay = MOCK_ADAPTER
   ? lazy(() =>
       import('./devtools/scenario-overlay.js').then((m) => ({ default: m.ScenarioOverlay })),
     )
