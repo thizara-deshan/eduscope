@@ -3,6 +3,9 @@ import globals from 'globals';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
+import {
+  bannedGlobals, bannedImports, bannedProperties, boundaryExempt, boundaryFiles,
+} from './tools/eslint-rules/no-direct-network.js';
 
 export default tseslint.config(
   {
@@ -37,6 +40,16 @@ export default tseslint.config(
       'jsx-a11y/label-has-associated-control': 'error',
       'jsx-a11y/no-autofocus': 'error',
       'jsx-a11y/role-has-required-aria-props': 'error',
+    },
+  },
+  // ── the client boundary ───────────────────────────────────────────────────
+  {
+    files: boundaryFiles,
+    ignores: boundaryExempt,
+    rules: {
+      'no-restricted-globals': ['error', ...bannedGlobals],
+      'no-restricted-imports': ['error', { paths: bannedImports }],
+      'no-restricted-properties': ['error', ...bannedProperties],
     },
   },
 );
