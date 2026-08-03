@@ -18,14 +18,17 @@ function write(path: string): void {
   writeFileSync(path, CODE, 'utf8');
 }
 
-function lintExitCode(): number {
+function lint(): { code: number; text: string } {
   try {
-    execFileSync('pnpm', ['lint'], { cwd: root, stdio: 'pipe', shell: true });
-    return 0;
+    const out = execFileSync('pnpm', ['lint'], { cwd: root, stdio: 'pipe', shell: true });
+    return { code: 0, text: out.toString() };
   } catch (e) {
-    return (e as { status?: number }).status ?? 1;
+    const err = e as { status?: number; stdout?: Buffer };
+    return { code: err.status ?? 1, text: err.stdout?.toString() ?? '' };
   }
 }
+
+const lintExitCode = (): number => lint().code;
 
 afterEach(() => {
   for (const p of [VIOLATION, CONTROL]) {
@@ -44,10 +47,15 @@ describe('GATE 3 — the boundary rule fails the build', () => {
 
   it('3b: a direct fetch in apps/panel makes pnpm lint exit non-zero', () => {
     write(VIOLATION);
-    expect(
-      lintExitCode(),
-      'a component calling fetch() must FAIL the build (frontend-conventions §1)',
-    ).not.toBe(0);
+    const { code, text } = lint();
+    expect(code, 'a component calling fetch() must FAIL the build (frontend-conventions §1)')
+      .not.toBe(0);
+    // Asserting the exit code alone is not enough: it passes even with the
+    // boundary block deleted, as long as anything ELSE in the repo happens to
+    // be lint-dirty. Pin the failure to this rule and this file.
+    expect(text, 'lint failed, but not because of the boundary rule')
+      .toContain('no-restricted-globals');
+    expect(text, 'lint failed, but not on the gate fixture').toMatch(/__gate__/);
   }, 20_000);
 
   it('3c: the same file inside packages/api-client keeps lint green', () => {

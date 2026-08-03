@@ -41,10 +41,21 @@ describe('workspace foundation', () => {
   });
 
   it('gives the app test projects a DOM environment', () => {
+    // The plan asserted the string 'jsdom' appeared in vitest.workspace.ts, but
+    // that file only DELEGATES to each app's config — the assertion could only
+    // ever be satisfied by a comment, and went on passing after apps/panel moved
+    // to happy-dom (jsdom does not resolve var(--x) in getComputedStyle). Assert
+    // the delegation here and the real environment where it is actually set.
     const ws = read('vitest.workspace.ts');
-    expect(ws).toContain('jsdom');
     expect(ws).toContain('apps/panel');
     expect(ws).toContain('apps/quiz');
+
+    const domEnvironments = ['jsdom', 'happy-dom'];
+    for (const app of ['apps/panel', 'apps/quiz']) {
+      const config = read(`${app}/vitest.config.ts`);
+      const environment = /environment:\s*'([^']+)'/.exec(config)?.[1];
+      expect(domEnvironments, `${app} test environment: ${environment}`).toContain(environment);
+    }
   });
 
   it('lints from task 1 — the root script must not be dead for 16 tasks', () => {

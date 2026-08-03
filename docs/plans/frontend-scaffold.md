@@ -32,7 +32,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 **Ids and instants (openapi.yaml Conventions).** Ids are **ULIDs** matching `^[0-9A-HJKMNP-TV-Z]{26}$`. Instants are **ISO-8601 with an explicit offset, stored UTC**. Pagination is cursor-based: `?cursor=&limit=` → `{ items, nextCursor }`.
 
-**Version floors.** Node ≥ **22.11** (`.nvmrc`, `engines.node`). pnpm ≥ **9.12**. TypeScript ≥ **5.6** with `strict: true`. React **18.3.x** across the whole workspace — this is why `apps/quiz` pins Next.js **14.2.x** (Next 15's App Router requires React 19). Vite ≥ **7**, Vitest ≥ **3**, Tailwind CSS **4.x**, react-router **7.x**, TanStack Query **5.x**, zustand **5.x**, Playwright ≥ **1.48**.
+**Version floors.** Node ≥ **22.13** (`.nvmrc`, `engines.node`) — raised from this plan's original 22.11 during execution, because this plan's own "Vite ≥ 7" floor resolves `vite@7.3.6` (needs `>=22.12.0`) and `eslint@9` pulls `eslint-visitor-keys@5.0.1` (needs `^22.13.0`). Human-approved 2026-08-03; see `docs/plans/frontend-scaffold-gate.md`. pnpm ≥ **9.12**. TypeScript ≥ **5.6** with `strict: true`. React **18.3.x** across the whole workspace — this is why `apps/quiz` pins Next.js **14.2.x** (Next 15's App Router requires React 19). Vite ≥ **7**, Vitest ≥ **3**, Tailwind CSS **4.x**, react-router **7.x**, TanStack Query **5.x**, zustand **5.x**, Playwright ≥ **1.48**.
 
 **Scope rule.** No screen implementation beyond skeletons. Screens are prompt 09. A route file in this plan renders a named placeholder and its role gate — nothing else.
 
@@ -120,7 +120,7 @@ packages/api-client/
     real-stub.test.ts
     operation-coverage.test.ts          # 100 % of contract operations
     event-coverage.test.ts              # 100 % of contract events
-    contract-honesty.test.ts            # every mock response parses its zod schema
+    mock/contract-honesty.test.ts       # every mock response parses its zod schema
     scenario/*.test.ts
 
 apps/panel/
@@ -190,9 +190,9 @@ describe('workspace foundation', () => {
   });
 
   it('pins the Node floor in .nvmrc and engines', () => {
-    expect(read('.nvmrc').trim()).toBe('22.11.0');
+    expect(read('.nvmrc').trim()).toBe('22.13.0');
     const pkg = JSON.parse(read('package.json')) as { engines?: { node?: string } };
-    expect(pkg.engines?.node).toBe('>=22.11');
+    expect(pkg.engines?.node).toBe('>=22.13');
   });
 
   it('turns on the strictness the plan depends on', () => {
@@ -212,10 +212,21 @@ describe('workspace foundation', () => {
   });
 
   it('gives the app test projects a DOM environment', () => {
+    // NOTE (execution): this originally asserted `expect(ws).toContain('jsdom')`.
+    // vitest.workspace.ts only DELEGATES to each app's config and never names an
+    // environment, so that assertion could only be satisfied by a comment — and
+    // it kept passing after apps/panel moved to happy-dom. Assert the delegation
+    // here, and the environment where it is actually configured.
     const ws = read('vitest.workspace.ts');
-    expect(ws).toContain('jsdom');
     expect(ws).toContain('apps/panel');
     expect(ws).toContain('apps/quiz');
+
+    const domEnvironments = ['jsdom', 'happy-dom'];
+    for (const app of ['apps/panel', 'apps/quiz']) {
+      const config = read(`${app}/vitest.config.ts`);
+      const environment = /environment:\s*'([^']+)'/.exec(config)?.[1];
+      expect(domEnvironments, `${app} test environment: ${environment}`).toContain(environment);
+    }
   });
 
   it('lints from task 1 — the root script must not be dead for 16 tasks', () => {
@@ -3998,7 +4009,7 @@ Expected: FAIL — `Cannot find module './App.js'` / `ENOENT … tokens.css`
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
-    "jsdom": "^25.0.1",
+    "happy-dom": "^15.11.6",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^7.0.0",
@@ -4030,7 +4041,11 @@ export default defineConfig({
   plugins: [react()],
   test: {
     name: 'panel',
-    environment: 'jsdom',
+    // happy-dom, not jsdom (execution deviation): jsdom does not resolve CSS
+    // custom properties (var(--x)) in getComputedStyle — a known, unfixed
+    // limitation — which breaks every computed-style assertion against a
+    // design token, including this task's own tokens.test.ts.
+    environment: 'happy-dom',
     globals: false,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],

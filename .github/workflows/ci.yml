@@ -65,6 +65,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+      # The panel ships to fixed hardware (RK3588, 1280x800 kiosk), so the entry
+      # chunk is a budget, not an emergent property. Only index-*.js counts:
+      # create-mock-client-*.js is a deliberately split chunk that a real-API
+      # build never requests.
+      - name: Panel entry-chunk budget
+        run: |
+          BYTES=$(cat apps/panel/dist/assets/index-*.js | gzip -9 | wc -c)
+          echo "panel entry chunk, gzipped: ${BYTES} bytes (ceiling 150000)"
+          if [ "$BYTES" -ge 150000 ]; then
+            echo "::error::panel entry chunk is over the 150 kB gzip budget"
+            exit 1
+          fi
+
   e2e:
     runs-on: ubuntu-latest
     steps:

@@ -8,12 +8,23 @@ import { ClientProvider } from '../client/client-provider.js';
 import '../styles/tokens.css';
 import { ScenarioOverlay } from './scenario-overlay.js';
 
-const renderOverlay = () =>
+/**
+ * `ClientProvider` builds the mock through a dynamic `import()` (so the
+ * simulation stays out of the entry chunk), and renders nothing until it
+ * resolves. `render()` is synchronous, so the overlay is absent for the first
+ * microtask turn — flush the pending module load before asserting. Fake timers
+ * do not gate microtasks, so this settles without advancing the clock.
+ */
+async function renderOverlay(): Promise<void> {
   render(
     <ClientProvider>
       <ScenarioOverlay />
     </ClientProvider>,
   );
+  await act(async () => {
+    await vi.dynamicImportSettled();
+  });
+}
 
 // @testing-library/user-event's async pointer/click sequencing hangs
 // indefinitely under vi.useFakeTimers() in this dependency combination
@@ -29,8 +40,8 @@ describe('scenario dev overlay', () => {
     vi.useRealTimers();
   });
 
-  it('is hidden until the long-press completes', () => {
-    renderOverlay();
+  it('is hidden until the long-press completes', async () => {
+    await renderOverlay();
     expect(screen.queryByRole('dialog', { name: /scenario/i })).toBeNull();
 
     fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
@@ -45,8 +56,8 @@ describe('scenario dev overlay', () => {
     expect(screen.getByRole('dialog', { name: /scenario/i })).toBeTruthy();
   });
 
-  it('lists all seven catalog scripts with their descriptions', () => {
-    renderOverlay();
+  it('lists all seven catalog scripts with their descriptions', async () => {
+    await renderOverlay();
     fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
     act(() => {
       vi.advanceTimersByTime(2_100);
@@ -59,8 +70,8 @@ describe('scenario dev overlay', () => {
     }
   });
 
-  it('switches the live scenario when a script is chosen', () => {
-    renderOverlay();
+  it('switches the live scenario when a script is chosen', async () => {
+    await renderOverlay();
     fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
     act(() => {
       vi.advanceTimersByTime(2_100);
@@ -70,8 +81,8 @@ describe('scenario dev overlay', () => {
     expect(screen.getByTestId('active-scenario')).toHaveTextContent('start-fails');
   });
 
-  it('meets the 44px touch floor on the hotspot and every option', () => {
-    renderOverlay();
+  it('meets the 44px touch floor on the hotspot and every option', async () => {
+    await renderOverlay();
     const hotspot = screen.getByTestId('scenario-hotspot');
     expect(getComputedStyle(hotspot).minWidth).toBe('44px');
     expect(getComputedStyle(hotspot).minHeight).toBe('44px');

@@ -14,6 +14,11 @@ export default tseslint.config(
       '**/coverage/**', '**/playwright-report/**', '**/test-results/**',
       'packages/shared/src/schemas/generated/**', // codegen output
       'prototype/**', 'legacy-Codebase/**',
+      // Agent tooling and worktree checkouts. All are gitignored, but ESLint
+      // flat config does NOT read .gitignore, so `eslint .` walks into them —
+      // and a worktree under .claude/ carries its own full copy of prototype/
+      // and legacy-Codebase/, which is how a clean tree lints 1142 errors.
+      '.claude/**', '.agents/**', 'agent/**', 'revamp-guide/**',
     ],
   },
   js.configs.recommended,

@@ -5,6 +5,7 @@ import type {
   EventEnvelope, QuizPublicationPayload, QuizSessionPayload, RecordingStatePayload,
   SourcesStatusPayload, StorageStatusPayload, SystemAlert,
 } from '@eduscope/shared';
+import { hasSeqGap, isStale } from './connection.js';
 import { useTelemetryStore } from './telemetry-store.js';
 
 export { useTelemetryStore };
@@ -67,7 +68,7 @@ export const useWsStore = create<WsState>((set, get) => ({
 
     const { lastSeq } = useTelemetryStore.getState();
     useTelemetryStore.getState().setLastSeq(envelope.seq);
-    const gap = lastSeq !== null && envelope.seq > lastSeq + 1;
+    const gap = hasSeqGap(lastSeq, envelope); // U-3, see store/connection.ts
 
     // ONE set() per envelope: every extra set is another full notification pass
     // over every registered selector.
@@ -111,9 +112,8 @@ export const useWsStore = create<WsState>((set, get) => ({
   },
 
   setConnection(status) {
-    // U-2: dim live regions, KEEP the recording slice — the device is still
-    // recording and hiding the frame would be the more dangerous lie.
-    set({ connection: status, stale: status.phase === 'stale' });
+    // U-2: dim live regions, KEEP the recording slice — see store/connection.ts.
+    set({ connection: status, stale: isStale(status) });
   },
 
   clearResync() {

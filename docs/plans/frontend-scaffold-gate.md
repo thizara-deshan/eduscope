@@ -21,6 +21,43 @@ Supporting local runs, all green on commit `d6d3cb6` (2026-08-03):
 | `pnpm gate` | exit 0, `5 passed` across the two apps |
 | `pnpm e2e` | exit 0, `6 passed` — panel's `e2e/` directory now holds both `gate-boot.spec.ts` (Task 21, 3 tests) and the pre-existing `panel-smoke.spec.ts` (Task 19, 3 tests); the plan's "3 passed" estimate predates Task 21 adding a second spec file to the same directory |
 
+## Post-gate conformance pass (2026-08-04)
+
+A validation sweep of the repo against this plan found the tree structurally
+complete but **not reproducibly green**, and closed the gaps below. Re-verified
+after: `pnpm typecheck` exit 0, `pnpm lint` exit 0, `pnpm test` exit 0 with
+**31 files / 280 tests passed**, `pnpm build` exit 0.
+
+| Finding | Resolution |
+|---|---|
+| `pnpm lint` exited 1 on a clean tree (1142 errors) — ESLint flat config does not read `.gitignore`, so `eslint .` walked `.claude/worktrees/` (a full second copy of the repo, `prototype/` and `legacy-Codebase/` included) and `.agents/skills/`. This failed Gate 3's `3a` and `3c`. | Added `.claude/**`, `.agents/**`, `agent/**`, `revamp-guide/**` to the `ignores` block in `eslint.config.js`. |
+| Gate 3's `3b` asserted only a non-zero exit code, so it passed **vacuously** while lint was red — it would have passed with the boundary rule deleted. | `gate-boundary.test.ts` now asserts the failure names `no-restricted-globals` and points at the `__gate__` fixture. |
+| `mock/events/emitter.ts`, `store/connection.ts` and `test/event-coverage.test.ts` appeared in the File Structure but did not exist; their logic was inlined elsewhere. | Extracted to the specified paths — no duplication, all behaviour-preserving. `event-coverage.test.ts` is new coverage from the client's side of the boundary. |
+| The mock simulation shipped in the panel's **production** entry chunk (415.56 kB / 124.31 kB gzip). Confirmed by grepping the built artifact for `pipeline-crash-midway`. Flipping `VITE_EDUSCOPE_REAL_API` did not remove it, because the dev overlay's static `listScenarios` import anchored the whole catalog. | `client-provider.tsx` loads the mock via dynamic `import()`; the overlay is `import.meta.env.DEV`-gated behind `lazy()`. Entry chunk is now **382.66 kB / 115.50 kB gzip** with the scenario catalog, overlay and preview mock **absent**; the mock is a 33.46 kB chunk a real-API build never requests. |
+| Nothing enforced that. | CI's `build` job now fails if the entry chunk exceeds **150 kB gzip** (currently 115.2 kB). |
+| `ScaffoldShell` incremented `window.__renderCount` in the render body — impure, and double-counted under `StrictMode`, inflating Gate 1e's own measurement. | Moved into a `useEffect`, so it counts commits. |
+| `tools/workspace.test.ts` asserted `vitest.workspace.ts` contains `'jsdom'`. That file only delegates and never names an environment, so the assertion was satisfied by a **comment** and kept passing after the panel moved to happy-dom. | Rewritten to assert the environment in each app's own `vitest.config.ts`. The plan's Task 1 snippet was corrected to match. |
+| Root `package.json` still carried an unused `jsdom` devDependency. | Removed; lockfile regenerated (`lockfileVersion: '9.0'` preserved). |
+| `packages/shared/node_modules/` held an npm-style `.package-lock.json` from a stray `npm install` inside a pnpm workspace. | Deleted. |
+| The plan's own text disagreed with itself or with the repo in four places: Node floor still `22.11`; Task 13 still specified `jsdom`; File Structure placed `contract-honesty.test.ts` at `test/` while Task 10 placed it at `test/mock/`. | Plan corrected in place, each with an inline note. Every path the plan declares — 79 in File Structure, 145 across all task Files blocks — now resolves on disk. |
+
+### Deliberately not changed
+
+- **`PREVIEW_FPS = 8` / `toDataURL`.** Flagged as a main-thread encode cost on
+  the RK3588, then withdrawn: Task 11's cost note and this plan's Self-Review
+  already price it (one reused canvas, 480×270 @ q0.5, 8 fps) and explicitly
+  reject an `OffscreenCanvas` rewrite, since Wave 8 replaces the path with a
+  WebRTC `MediaStream` and `convertToBlob` would not return the JPEG data URI
+  the scaffold is specified to produce.
+- **Route-level code splitting.** Every route element is currently the same
+  `ScreenPlaceholder`; converting to `lazy:` would point dynamic imports at
+  screen modules that do not exist yet. This belongs in prompt 09's first task.
+- **`boundaryExempt: ['packages/api-client/src/**']`.** Matches the plan
+  verbatim. Narrow it to `real/` when the Phase-4 adapter lands.
+- **The stale `.claude/worktrees/frontend-scaffold` worktree.** Fully merged
+  into `main` and now ESLint-ignored, so it is inert; removing it needs a
+  permission this session did not have.
+
 **Gate 4 status: closed.** The `gate` job was added to
 `.github/workflows/ci.yml` (Step 1); every command it runs was verified
 green locally, then the branch was pushed to the open PR. Two CI runs

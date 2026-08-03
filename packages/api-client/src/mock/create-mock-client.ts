@@ -1,4 +1,3 @@
-import type { EventEnvelope } from '@eduscope/shared';
 import type { EduscopeClient, PreviewChannel } from '../client.js';
 import { createEmitter, type ConnectionStatus, type EventStream } from '../stream.js';
 import type { Clock } from './clock.js';
@@ -10,6 +9,7 @@ import { createScenarioEngine, getScenario } from './scenario/registry.js';
 import type { ScenarioName, WorldSeed } from './scenario/types.js';
 import { createSeed, type Seed } from './seed/index.js';
 import { createConnectionController } from './events/connection.js';
+import { createEnvelopeStream } from './events/emitter.js';
 import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
 import { MockWorld, PAYLOAD_BUILDERS } from './world.js';
@@ -35,7 +35,10 @@ export function createMockClient(
   options: { clock?: Clock } = {},
 ): MockClient {
   const clock = options.clock ?? createWallClock();
-  const outward = createEmitter<EventEnvelope>();
+  // Envelope forwarding, connection-lifetime `seq` stamping and snapshot replay
+  // all live in events/emitter.ts — see its docblock for why the counter has to
+  // outlive the world it is stamping.
+  const envelopes = createEnvelopeStream(() => world);
 
   // Stable across a `switchScenario` the same way `outward` is (review I5):
   // `build()` mints a fresh `ConnectionController` every time, so nothing may
@@ -58,7 +61,6 @@ export function createMockClient(
   let world!: MockWorld;
   let rest!: ReturnType<typeof createRestOperations>;
   let connection!: ReturnType<typeof createConnectionController>;
-  let seq = 0;
 
   function build(name: ScenarioName): void {
     for (const stop of teardown) stop();
@@ -73,11 +75,7 @@ export function createMockClient(
     for (const machine of ALL_MACHINES) world.registerMachine(machine);
 
     // Re-stamp seq so it stays monotonic per connection across a live switch.
-    teardown.push(
-      world.subscribeEvents((e) => {
-        outward.emit({ ...e, seq: seq++ });
-      }),
-    );
+    teardown.push(envelopes.attach(world));
 
     // Bootstrap live machine state from the seed BEFORE anything reads it
     // (review I2/I3/I4): without this, the WS snapshot, `getStorageOverview()`,
@@ -123,12 +121,7 @@ export function createMockClient(
       build(name);
     },
 
-    events$: {
-      subscribe(listener: (e: EventEnvelope) => void) {
-        for (const e of snapshotInSeqOrder(world)) listener(e);
-        return outward.subscribe(listener);
-      },
-    },
+    events$: envelopes.events$,
     connection$: connectionStream,
     openPreview: (): PreviewChannel => createPreviewChannel(world),
     resync: async () => {
@@ -136,7 +129,7 @@ export function createMockClient(
       // above — replaying `world.snapshot()`'s raw (world-internal, per-scenario)
       // seq values here would violate the "seq is monotonic per connection"
       // contract stream.ts documents.
-      for (const e of snapshotInSeqOrder(world)) outward.emit({ ...e, seq: seq++ });
+      envelopes.replay(world);
     },
     dispose() {
       for (const stop of teardown) stop();
@@ -161,22 +154,6 @@ function snapshotTransition(machine: MachineId): Transition {
   return { id: 'snapshot', machine, from: [], to: null, effects: [], cite: 'C-9' };
 }
 
-/**
- * `world.snapshot()` returns `latest`'s values in Map iteration order, which
- * is INSERTION order — a `Map.set()` on an already-present key updates the
- * value but does not move its position. `bootstrapFromSeed` (below) and
- * `seedSnapshot` can both write the same discriminated key (e.g.
- * `sources.status:presentation`, `storage.status`) before the first
- * subscriber ever attaches — each write still gets a fresh, strictly
- * increasing `seq` from `MockWorld.emit`, but the key's iteration position
- * stays pinned to wherever it was FIRST inserted, so replaying the raw Map
- * order does not reliably track `seq` order. Sort by `seq` explicitly at the
- * two points this file replays a snapshot, rather than depend on Map
- * ordering incidentally matching it.
- */
-function snapshotInSeqOrder(world: MockWorld): EventEnvelope[] {
-  return [...world.snapshot()].sort((a, b) => a.seq - b.seq);
-}
 
 /**
  * Drives live machine state to agree with the seed/WorldSeed BEFORE anything

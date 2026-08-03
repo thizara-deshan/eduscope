@@ -1,8 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import {
-  createMockClient, createRealClient, type EduscopeClient, type MockClient,
-} from '@eduscope/api-client';
-import type { ScenarioName } from '@eduscope/api-client';
+import { createRealClient } from '@eduscope/api-client';
+import type { EduscopeClient, MockClient, ScenarioName } from '@eduscope/api-client';
 import { useWsStore } from '../store/ws-store.js';
 
 const ClientContext = createContext<EduscopeClient | null>(null);
@@ -32,27 +30,54 @@ export function ClientProvider({
    * a matching cleanup.
    */
   useEffect(() => {
-    const instance =
+    /**
+     * The mock adapter is imported DYNAMICALLY.
+     *
+     * It is a discrete-event simulation of every state machine plus all 77 REST
+     * operations — statically imported it lands in the entry chunk and is parsed
+     * on a 1280x800 kiosk that will never execute a line of it. A dynamic import
+     * gives it its own chunk that a real-API build never requests.
+     */
+    const load = async (): Promise<EduscopeClient> =>
       import.meta.env.VITE_EDUSCOPE_REAL_API === '1'
         ? createRealClient(import.meta.env.VITE_EDUSCOPE_API_URL ?? '/api/v1')
-        : createMockClient(scenario);
+        : (await import('@eduscope/api-client/mock')).createMockClient(scenario);
 
-    const offEvents = instance.events$.subscribe((e) => {
-      useWsStore.getState().ingest(e);
-    });
-    const offConn = instance.connection$.subscribe((s) => {
-      useWsStore.getState().setConnection(s);
-      if (s.resyncReason) {
-        void instance.resync().then(() => useWsStore.getState().clearResync());
+    // Cleanup can run before the import resolves (StrictMode's discarded first
+    // render, or a fast scenario switch). Every client that gets constructed
+    // must still get a matching dispose(), so the late arrival checks this flag
+    // rather than assuming it is still wanted.
+    let cancelled = false;
+    let instance: EduscopeClient | null = null;
+    const offs: Array<() => void> = [];
+
+    void load().then((created) => {
+      if (cancelled) {
+        created.dispose();
+        return;
       }
+      instance = created;
+      offs.push(
+        created.events$.subscribe((e) => {
+          useWsStore.getState().ingest(e);
+        }),
+      );
+      offs.push(
+        created.connection$.subscribe((s) => {
+          useWsStore.getState().setConnection(s);
+          if (s.resyncReason) {
+            void created.resync().then(() => useWsStore.getState().clearResync());
+          }
+        }),
+      );
+      setClient(created);
     });
 
-    setClient(instance);
     return () => {
-      offEvents();
-      offConn();
+      cancelled = true;
+      for (const off of offs) off();
       useWsStore.getState().reset();
-      instance.dispose();
+      instance?.dispose();
       setClient(null);
     };
   }, [scenario]);

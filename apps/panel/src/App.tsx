@@ -1,14 +1,26 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router';
 import { AuthProvider } from './auth/auth-context.js';
 import { ClientProvider, useClient } from './client/client-provider.js';
-import { ScenarioOverlay } from './devtools/scenario-overlay.js';
 import { createQueryClient } from './query/query-client.js';
 import { createRouter } from './routes/router.js';
 import { useRecordingState } from './store/selectors.js';
 import './styles/tokens.css';
 import './styles/app.css';
+
+/**
+ * The dev overlay renders `listScenarios()`, which anchors the whole scenario
+ * catalog — all seven scripts and the machines behind them — into whatever chunk
+ * imports it. `import.meta.env.DEV` is statically replaced at build time, so this
+ * ternary lets Rollup drop the entire subtree from a production build instead of
+ * shipping a debug tool to a lecture-hall kiosk.
+ */
+const ScenarioOverlay = import.meta.env.DEV
+  ? lazy(() =>
+      import('./devtools/scenario-overlay.js').then((m) => ({ default: m.ScenarioOverlay })),
+    )
+  : () => null;
 
 /**
  * The kiosk stage. `.us-panel` is capped at 1280x800 and is the positioning
@@ -41,11 +53,14 @@ function ScaffoldShell() {
   const client = useClient();
   const state = useRecordingState(); // atomic selector — see store/selectors.ts
 
-  // Gate 1e counts commits of this component to prove telemetry never renders.
+  // Gate 1e counts COMMITS of this component to prove telemetry never renders.
+  // It lives in an effect, not the render body: StrictMode renders twice and
+  // throws one away, so a counter incremented during render reports 2x per
+  // commit and mutates module state from a function that must stay pure.
   // Removed with the button when S-04 lands.
-  if (typeof window !== 'undefined') {
+  useEffect(() => {
     window.__renderCount = (window.__renderCount ?? 0) + 1;
-  }
+  });
 
   return (
     <div data-recording-state={state}>
@@ -76,7 +91,9 @@ export function App() {
         <AuthProvider>
           <Stage>
             <RouterProvider router={router} />
-            <ScenarioOverlay />
+            <Suspense fallback={null}>
+              <ScenarioOverlay />
+            </Suspense>
             <ScaffoldShell />
           </Stage>
         </AuthProvider>
