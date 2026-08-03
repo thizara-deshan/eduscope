@@ -1,4 +1,7 @@
 import type { ReactNode } from 'react';
+import { RouterProvider } from 'react-router';
+import { AuthProvider } from './auth/auth-context.js';
+import { createRouter } from './routes/router.js';
 import './styles/tokens.css';
 import './styles/app.css';
 
@@ -16,6 +19,16 @@ export function Stage({ children }: { children?: ReactNode }) {
   );
 }
 
+// One router instance for the app's lifetime — react-router owns navigation
+// state internally, so this must not be rebuilt on every render.
+const router = createRouter();
+
 export function App() {
-  return <Stage />;
+  return (
+    <AuthProvider>
+      <Stage>
+        <RouterProvider router={router} />
+      </Stage>
+    </AuthProvider>
+  );
 }
