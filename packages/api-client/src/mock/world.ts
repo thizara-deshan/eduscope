@@ -47,6 +47,10 @@ export class MockWorld {
     return this.emitter.subscribe(listener);
   }
 
+  subscriberCount(): number {
+    return this.emitter.size();
+  }
+
   get events$(): EventStream<EventEnvelope> {
     return this.emitter;
   }
