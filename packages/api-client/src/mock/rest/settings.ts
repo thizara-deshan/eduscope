@@ -1,5 +1,6 @@
 import {
-  zCommandAccepted, zEncodingProfile, zNetworkConfig, zStreamTarget,
+  zCommandAccepted, zEncodingProfile, zGetEncoderSettingsResponse, zNetworkConfig,
+  zStreamTarget,
   type CommandAccepted, type EncoderCapabilities, type EncodingProfile,
   type EncodingProfileUpdate, type NetworkConfig, type NetworkConfigUpdate,
   type StreamTarget, type StreamTargetCreate, type StreamTargetUpdate, type Ulid,
@@ -46,10 +47,10 @@ export function createSettingsOperations(ctx: RestContext) {
 
     getEncoderSettings: async (): Promise<{ profile: EncodingProfile; capabilities: EncoderCapabilities }> => {
       requireAdmin(ctx);
-      return {
-        profile: validated(zEncodingProfile, seed.encoderSettings.profile),
+      return validated(zGetEncoderSettingsResponse, {
+        profile: seed.encoderSettings.profile,
         capabilities: seed.encoderSettings.capabilities,
-      };
+      });
     },
 
     updateEncoderSettings: async (body: EncodingProfileUpdate): Promise<EncodingProfile> => {

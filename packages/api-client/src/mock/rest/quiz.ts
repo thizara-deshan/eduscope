@@ -1,5 +1,5 @@
 import {
-  zLeaderboard, zQuizSessionProjection,
+  zLeaderboard, zListPublicationResponsesResponse, zQuizSessionProjection,
   type AnswerProjection, type Leaderboard, type QuizSessionProjection, type Ulid,
 } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
@@ -30,11 +30,11 @@ export function createQuizOperations({ world, seed }: RestContext) {
       if (!found) {
         throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown publication: ${publicationId}` });
       }
-      return {
+      return validated(zListPublicationResponsesResponse, {
         items: [],
         syncedAt: nowIsoZ(world.clock),
         stale: world.state('quiz.sync') !== 'synced',
-      };
+      });
     },
 
     getLeaderboard: async (query: { sessionId: Ulid }): Promise<Leaderboard> =>

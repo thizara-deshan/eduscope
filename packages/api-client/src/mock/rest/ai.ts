@@ -1,6 +1,6 @@
 import {
-  zAiCountdownSnapshot, zCommandAccepted, zQuestion, zQuestionSet,
-  zQuestionSetDetail,
+  zAiCountdownSnapshot, zCommandAccepted, zPublicationWithQuestion, zQuestion,
+  zQuestionSet, zQuestionSetDetail,
   type AiCountdownSnapshot, type CommandAccepted, type IntervalMinutes,
   type ProjectorRequest, type PublicationWithQuestion, type Question,
   type QuestionCreate, type QuestionSet, type QuestionSetDetail,
@@ -19,17 +19,34 @@ function asIntervalMinutes(n: unknown): IntervalMinutes {
 }
 
 export function createAiOperations({ world, engine, seed }: RestContext) {
-  function accept(operationId: keyof typeof COMMAND_PLANS): CommandAccepted {
+  /** Scenario refusal only — does NOT schedule. Split out so commands that
+   * target an existing entity can validate the entity before any transition
+   * fires (see the four ops below and task-10-report.md's I3 finding: a
+   * bogus id must not still drive the machine / broadcast WS events). */
+  function checkRefusal(operationId: keyof typeof COMMAND_PLANS): void {
     const refusal = engine.onCommand(operationId);
     if (refusal) throw new ProblemError(refusal);
+  }
+
+  function runPlan(operationId: keyof typeof COMMAND_PLANS): void {
     for (const step of COMMAND_PLANS[operationId] ?? []) {
       world.schedule(step.transition, step.afterMs);
     }
+  }
+
+  function buildAccepted(): CommandAccepted {
     return validated(zCommandAccepted, {
       commandId: nextUlid(world),
       acceptedAt: nowIsoZ(world.clock),
       resolveBySec: RESOLVE_BY_SEC,
     });
+  }
+
+  /** Shared by commands with no pre-existing entity to validate: refusal check, then the plan, then respond. */
+  function accept(operationId: keyof typeof COMMAND_PLANS): CommandAccepted {
+    checkRefusal(operationId);
+    runPlan(operationId);
+    return buildAccepted();
   }
 
   return {
@@ -103,8 +120,12 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
       return accepted;
     },
 
+    // Order matters (task-10-report.md I3): refusal check, THEN find/validate
+    // the entity, and only once that passes does the transition actually
+    // fire — a bogus/immutable id must 404/409 without ever touching the
+    // machine or broadcasting a WS event for a command that "failed".
     editQuestion: async (questionId: Ulid, body: QuestionUpdate): Promise<CommandAccepted> => {
-      const accepted = accept('editQuestion');
+      checkRefusal('editQuestion');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       if (row.state !== 'draft') {
@@ -122,42 +143,49 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
         row.correctOptionId = row.options[body.options.findIndex((o) => o.isCorrect)]?.id ?? null;
       }
       row.edited = true;
-      return accepted;
+      runPlan('editQuestion');
+      return buildAccepted();
     },
 
     discardQuestion: async (questionId: Ulid): Promise<CommandAccepted> => {
-      const accepted = accept('discardQuestion');
+      checkRefusal('discardQuestion');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       if (row.state !== 'draft') {
         throw new ProblemError({ status: 409, code: 'question.immutable', title: 'Only draft questions can be discarded' });
       }
       row.state = 'discarded';
-      return accepted;
+      runPlan('discardQuestion');
+      return buildAccepted();
     },
 
     sendToProjector: async (questionId: Ulid): Promise<CommandAccepted> => {
-      const accepted = accept('sendToProjector');
+      checkRefusal('sendToProjector');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       row.state = 'sent';
-      return accepted;
+      runPlan('sendToProjector');
+      return buildAccepted();
     },
 
+    // Returns a fresh array of freshly-validated rows — never the live
+    // `seed.publications` reference (task-10-report.md I5: a read must not
+    // hand a caller write access to the fixture array).
     listPublications: async (query: { sessionId: Ulid }): Promise<PublicationWithQuestion[]> => {
       void query;
-      return seed.publications;
+      return seed.publications.map((p) => validated(zPublicationWithQuestion, p));
     },
 
     closePublication: async (publicationId: Ulid): Promise<CommandAccepted> => {
-      const accepted = accept('closePublication');
+      checkRefusal('closePublication');
       const row = seed.publications.find((p) => p.id === publicationId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown publication: ${publicationId}` });
       row.state = 'closed';
       row.closedAt = nowIsoZ(world.clock);
       row.closeReason = 'lecturer-closed';
       row.isShowing = false;
-      return accepted;
+      runPlan('closePublication');
+      return buildAccepted();
     },
 
     setProjector: async (body: ProjectorRequest): Promise<CommandAccepted> => {

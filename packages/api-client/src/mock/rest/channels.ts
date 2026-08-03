@@ -73,9 +73,28 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
       return validated(zChannelConfig, row);
     },
 
+    // `local` is machine 1a's own consumer, not toggleable here (openapi.yaml:309);
+    // an unknown channel id 404s via `findChannel`; idle (no active session)
+    // answers 409 session.not-active per openapi.yaml:311-312, rather than
+    // silently driving `channel:meeting`/`channel:streaming` regardless.
     enableChannel: async (channelId: string): Promise<CommandAccepted> => {
       const refusal = engine.onCommand('enableChannel');
       if (refusal) throw new ProblemError(refusal);
+      if (channelId === 'local') {
+        throw new ProblemError({
+          status: 422,
+          code: 'config.invalid',
+          title: 'local is not toggleable — machine 1a owns it',
+        });
+      }
+      findChannel(channelId);
+      if (world.state('recording') === 'idle') {
+        throw new ProblemError({
+          status: 409,
+          code: 'session.not-active',
+          title: 'No active session — use PUT enabledByDefault instead',
+        });
+      }
       // CH-01 (streaming's own preflight entry) and CH-04 (meeting's direct
       // entry) are NOT the same doc id under a suffix — see channel.ts's own
       // module comment — so this is not a plain `channelTransitionId` resolve.
@@ -92,6 +111,14 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
     disableChannel: async (channelId: string): Promise<CommandAccepted> => {
       const refusal = engine.onCommand('disableChannel');
       if (refusal) throw new ProblemError(refusal);
+      if (channelId === 'local') {
+        throw new ProblemError({
+          status: 422,
+          code: 'config.invalid',
+          title: 'local is not toggleable — machine 1a owns it',
+        });
+      }
+      findChannel(channelId);
       const entry = channelTransitionId(channelId === 'streaming' ? 'streaming' : 'meeting', 'CH-07');
       const afterMs = COMMAND_PLANS.disableChannel?.[0]?.afterMs ?? 150;
       world.schedule(entry, afterMs);

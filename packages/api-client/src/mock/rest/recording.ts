@@ -1,12 +1,22 @@
 import { TIMERS, zCommandAccepted, zRecordingStateSnapshot } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
 import { COMMAND_PLANS, RESOLVE_BY_SEC } from '../commands.js';
-import { validated } from '../seed/index.js';
+import { validated, nowIsoZ } from '../seed/index.js';
 import { PAYLOAD_BUILDERS, nextUlid } from '../world.js';
+import { requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
 
-export function createRecordingOperations({ world, engine }: RestContext) {
-  /** Shared by every 202 command: scenario refusal first, then the plan. */
+export function createRecordingOperations(ctx: RestContext) {
+  const { world, engine } = ctx;
+
+  /**
+   * Shared by every 202 command: scenario refusal first, then the plan.
+   * `acceptedAt` uses `nowIsoZ()`, not the given example's raw
+   * `world.clock.nowIso()` — that returns a `+00:00`-suffixed instant, but
+   * `zCommandAccepted.acceptedAt` (`zInstant`) is the strict Z-only variant
+   * and rejects it. Fixed here per task-10-report.md's C1 finding (confirmed:
+   * every 202 command threw at runtime with the brief's literal code).
+   */
   function accept(operationId: keyof typeof COMMAND_PLANS) {
     const refusal = engine.onCommand(operationId);
     if (refusal) throw new ProblemError(refusal);
@@ -15,7 +25,7 @@ export function createRecordingOperations({ world, engine }: RestContext) {
     }
     return validated(zCommandAccepted, {
       commandId: nextUlid(world),
-      acceptedAt: world.clock.nowIso(),
+      acceptedAt: nowIsoZ(world.clock),
       resolveBySec: RESOLVE_BY_SEC,
     });
   }
@@ -31,7 +41,11 @@ export function createRecordingOperations({ world, engine }: RestContext) {
     pauseRecording: async () => accept('pauseRecording'),
     resumeRecording: async () => accept('resumeRecording'),
     stopRecording: async () => accept('stopRecording'),
-    takeoverRecording: async () => accept('takeoverRecording'),
+    // x-required-role: admin (R-21) — client.ts documents this inline.
+    takeoverRecording: async () => {
+      requireAdmin(ctx);
+      return accept('takeoverRecording');
+    },
   };
 }
 

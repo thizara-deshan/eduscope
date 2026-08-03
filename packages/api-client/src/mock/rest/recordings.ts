@@ -8,7 +8,7 @@ import { ProblemError } from '../../errors.js';
 import { RESOLVE_BY_SEC } from '../commands.js';
 import { validated, nowIsoZ, seedId } from '../seed/index.js';
 import { nextUlid } from '../world.js';
-import { currentUser, isAdmin } from './auth.js';
+import { currentUser, isAdmin, requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
 
 const DEFAULT_LIMIT = 20;
@@ -74,7 +74,9 @@ export function createRecordingsOperations(ctx: RestContext) {
       return validated(zRecordingDetail, deriveDetail(row));
     },
 
+    // x-required-role: admin (RA-06) — soft-delete is an admin-only, audited act.
     deleteRecording: async (recordingId: Ulid): Promise<CommandAccepted> => {
+      requireAdmin(ctx);
       const refusal = engine.onCommand('deleteRecording');
       if (refusal) throw new ProblemError(refusal);
       const row = seed.recordings.find((r) => r.id === recordingId);
