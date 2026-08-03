@@ -10,6 +10,7 @@
     "test": "vitest run",
     "build": "pnpm -r --filter \"./apps/*\" build",
     "e2e": "pnpm --filter @eduscope/panel e2e",
+    "gate": "pnpm -r --sequential gate",
     "dev:panel": "pnpm --filter @eduscope/panel dev",
     "dev:quiz": "pnpm --filter @eduscope/quiz dev"
   },
