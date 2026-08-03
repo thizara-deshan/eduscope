@@ -8,7 +8,7 @@ touching `fetch`."*
 | 1 | Both apps boot on the mock; the overlay switches scripts live; telemetry causes no renders | `pnpm gate` | ✅ pass | `5 passed` / panel (3, 13.3s) + quiz (2, 38.4s) |
 | 2 | Client covers 100 % of contract operations and events | `pnpm --filter @eduscope/api-client test gate-contract-coverage` | ✅ pass | 77 / 77 operations, 22 / 22 events, `5 passed` |
 | 3 | The boundary rule fails the build on a direct fetch | `pnpm test tools/eslint-rules/gate-boundary.test.ts` | ✅ pass | `exit=1` with `no-restricted-globals`, `3 passed` |
-| 4 | CI green | `gh run watch` | ⏳ pending | not yet run — `gh` CLI unavailable in this environment; blocked on user pushing/opening the PR (see Task 20 note below) |
+| 4 | CI green | `gh run watch` | ✅ pass | all 6 jobs green (typecheck, lint, test, build, e2e, gate) on the PR against `worktree-frontend-scaffold`, confirmed by user, 2026-08-03 |
 
 Supporting local runs, all green on commit `d6d3cb6` (2026-08-03):
 
@@ -21,14 +21,13 @@ Supporting local runs, all green on commit `d6d3cb6` (2026-08-03):
 | `pnpm gate` | exit 0, `5 passed` across the two apps |
 | `pnpm e2e` | exit 0, `6 passed` — panel's `e2e/` directory now holds both `gate-boot.spec.ts` (Task 21, 3 tests) and the pre-existing `panel-smoke.spec.ts` (Task 19, 3 tests); the plan's "3 passed" estimate predates Task 21 adding a second spec file to the same directory |
 
-**Gate 4 status:** the `gate` job was added to `.github/workflows/ci.yml`
-(Step 1) and every command it runs has been verified green locally above.
-Actually watching a CI run requires pushing this branch and either the `gh`
-CLI (not installed in this environment) or an authenticated GitHub session
-(the in-app browser has none). Per the ruling recorded against Task 20, the
-user is pushing/opening the PR themselves and will report the run result —
-this row stays pending until that's confirmed, and the scaffold is not
-declared complete until it is.
+**Gate 4 status: closed.** The `gate` job was added to
+`.github/workflows/ci.yml` (Step 1); every command it runs was verified
+green locally, then the branch was pushed to the open PR. Two CI runs
+failed on Node engine mismatches (see below), fixed and re-pushed; the
+third run went green across all 6 jobs, confirmed by the user 2026-08-03.
+`gh` CLI was never available in this environment, so CI was watched by the
+user directly rather than via `gh run watch`.
 
 **Node floor bumped twice: 22.11.0 → 22.12.0 → 22.13.0 (all five jobs
 failed the first two PR runs).** The user reported all five CI jobs
