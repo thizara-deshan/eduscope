@@ -104,12 +104,12 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
     },
 
     editQuestion: async (questionId: Ulid, body: QuestionUpdate): Promise<CommandAccepted> => {
+      const accepted = accept('editQuestion');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       if (row.state !== 'draft') {
         throw new ProblemError({ status: 409, code: 'question.immutable', title: 'Only draft questions can be edited' });
       }
-      const accepted = accept('editQuestion');
       if (body.prompt !== undefined) row.prompt = body.prompt;
       if (body.options !== undefined) {
         row.options = body.options.map((o, i) => ({
@@ -126,20 +126,20 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
     },
 
     discardQuestion: async (questionId: Ulid): Promise<CommandAccepted> => {
+      const accepted = accept('discardQuestion');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       if (row.state !== 'draft') {
         throw new ProblemError({ status: 409, code: 'question.immutable', title: 'Only draft questions can be discarded' });
       }
-      const accepted = accept('discardQuestion');
       row.state = 'discarded';
       return accepted;
     },
 
     sendToProjector: async (questionId: Ulid): Promise<CommandAccepted> => {
+      const accepted = accept('sendToProjector');
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
-      const accepted = accept('sendToProjector');
       row.state = 'sent';
       return accepted;
     },
@@ -150,9 +150,9 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
     },
 
     closePublication: async (publicationId: Ulid): Promise<CommandAccepted> => {
+      const accepted = accept('closePublication');
       const row = seed.publications.find((p) => p.id === publicationId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown publication: ${publicationId}` });
-      const accepted = accept('closePublication');
       row.state = 'closed';
       row.closedAt = nowIsoZ(world.clock);
       row.closeReason = 'lecturer-closed';
