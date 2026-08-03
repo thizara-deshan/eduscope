@@ -233,6 +233,30 @@ export const zExportJobPayload = z.object({
 /** §2.21 — system and recordings volumes are never listed (INV-EX-2). */
 export const zUsbVolumesPayload = z.object({ volumes: z.array(zUsbVolume) });
 
+// ── §2 payload types ─────────────────────────────────────────────────────
+// Named types for the schemas above — every zXPayload needs a bare XPayload
+// so consumers (the WS store, Task 15) can type slices without re-deriving
+// z.infer at every call site.
+export type RecordingStatePayload = z.infer<typeof zRecordingStatePayload>;
+export type RecordingSegmentPayload = z.infer<typeof zRecordingSegmentPayload>;
+export type RecordingArtifactPayload = z.infer<typeof zRecordingArtifactPayload>;
+export type ChannelStatePayload = z.infer<typeof zChannelStatePayload>;
+export type SourcesStatusPayload = z.infer<typeof zSourcesStatusPayload>;
+export type AudioLevelsPayload = z.infer<typeof zAudioLevelsPayload>;
+export type AudioControlPayload = z.infer<typeof zAudioControlPayload>;
+export type StorageStatusPayload = z.infer<typeof zStorageStatusPayload>;
+export type DeviceHealthPayload = z.infer<typeof zDeviceHealthPayload>;
+export type AiCountdownPayload = z.infer<typeof zAiCountdownPayload>;
+export type AiSetPayload = z.infer<typeof zAiSetPayload>;
+export type AiQuestionPayload = z.infer<typeof zAiQuestionPayload>;
+export type QuizSessionPayload = z.infer<typeof zQuizSessionPayload>;
+export type QuizPublicationPayload = z.infer<typeof zQuizPublicationPayload>;
+export type QuizResponsesPayload = z.infer<typeof zQuizResponsesPayload>;
+export type UploadJobPayload = z.infer<typeof zUploadJobPayload>;
+export type UploadPartPayload = z.infer<typeof zUploadPartPayload>;
+export type ExportJobPayload = z.infer<typeof zExportJobPayload>;
+export type UsbVolumesPayload = z.infer<typeof zUsbVolumesPayload>;
+
 // ── §2 union ───────────────────────────────────────────────────────────────
 
 export const zPanelServerEvent = z.discriminatedUnion('event', [
