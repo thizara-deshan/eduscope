@@ -31,6 +31,12 @@
       "skillPath": "skills/find-skills/SKILL.md",
       "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
     },
+    "finishing-a-development-branch": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/finishing-a-development-branch/SKILL.md",
+      "computedHash": "a2afe045ea677114a89854f296ae57f8d34eb84864daa7b08ea9434acded724d"
+    },
     "nextjs-app-router-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",
@@ -49,11 +55,23 @@
       "skillPath": "toolchains/javascript/testing/playwright/SKILL.md",
       "computedHash": "51c36a38a26bdea5a4277670117f2f0eee1c7831f12a2503cb0c0fc29faf2c75"
     },
+    "requesting-code-review": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/requesting-code-review/SKILL.md",
+      "computedHash": "2304d2073c62eab163e04de40fe775e3d87c69c0df40cd4dc953fdb8e3205b81"
+    },
     "security-review": {
       "source": "getsentry/skills",
       "sourceType": "github",
       "skillPath": "skills/security-review/SKILL.md",
       "computedHash": "1eee1e41aa0a0e75dbbe0cac387e3d61bedf51af1888f184301a173731e6973e"
+    },
+    "subagent-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/subagent-driven-development/SKILL.md",
+      "computedHash": "3cd0e609ff5e4347326b6201ea398b9204850e164475d49d96bced1f8cba8974"
     },
     "tailwind-design-system": {
       "source": "wshobson/agents",
@@ -66,6 +84,12 @@
       "sourceType": "github",
       "skillPath": "plugins/developer-kit-typescript/skills/turborepo-monorepo/SKILL.md",
       "computedHash": "ff0d773bec7d716f5765f385119234e48731546809d279ffcb3917c508bc6833"
+    },
+    "using-git-worktrees": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/using-git-worktrees/SKILL.md",
+      "computedHash": "48c8a1040e378e0cb7208107294e3afa9067b9370c3f33b49a443eb6b7528b0d"
     },
     "vercel-composition-patterns": {
       "source": "vercel-labs/agent-skills",
