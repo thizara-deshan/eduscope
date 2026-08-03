@@ -21,6 +21,7 @@ import type { ConnectionStatus, EventStream } from './stream.js';
 /** events.md §3 — its own socket, and the one place the client sends WS messages. */
 export interface PreviewChannel {
   send(message: PreviewClientMessage): void;
+  /** Mock adapter note: frames are delivered as sentinel-tagged `ice` messages — see `mock/events/preview.ts`'s `isMockPreviewFrame`. */
   readonly messages$: EventStream<PreviewServerMessage>;
   close(): void;
 }

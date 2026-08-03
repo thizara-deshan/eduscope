@@ -22,7 +22,7 @@ export class MockWorld {
   private readonly states = new Map<MachineId, string>();
   private readonly transitions = new Map<TransitionId, Transition>();
   private readonly emitter = createEmitter<EventEnvelope>();
-  private readonly latest = new Map<PanelEventName, EventEnvelope>();
+  private readonly latest = new Map<string, EventEnvelope>();
   private readonly intercept: WorldOptions['intercept'];
   private seq = 0;
 
@@ -93,7 +93,7 @@ export class MockWorld {
       seq: this.seq++,
       payload,
     });
-    this.latest.set(event, envelope);
+    this.latest.set(latestKey(envelope), envelope);
     this.emitter.emit(envelope);
   }
 
@@ -116,6 +116,29 @@ export class MockWorld {
         return;
     }
   }
+}
+
+/**
+ * `snapshot()` must return every distinct entity, not just the latest row per
+ * event *name* — `sources.status` has one row per `SourceRoleId`, `channel.state`
+ * one per `channelId`, `system.alert` one per alert `id`, `upload.job`/`export.job`
+ * one per `jobId`, `quiz.publication` one per `publicationId`, `ai.question` one
+ * per `questionId`. Fold whichever discriminator the payload carries into the
+ * `latest` key so replaying/resyncing a "full snapshot" actually is one. Events
+ * with none of these fields (`recording.state`, `storage.status`,
+ * `device.health`, `quiz.session`, `ai.countdown`, `ai.set` — the doc's "(current)"
+ * ones — …) fall back to a plain per-event singleton, same as before this fix.
+ */
+function latestKey(envelope: EventEnvelope): string {
+  const payload = envelope.payload as Record<string, unknown>;
+  const discriminator =
+    payload.roleId ??
+    payload.channelId ??
+    payload.id ??
+    payload.jobId ??
+    payload.publicationId ??
+    payload.questionId;
+  return typeof discriminator === 'string' ? `${envelope.event}:${discriminator}` : envelope.event;
 }
 
 /** Per-event payload builders; each machine module registers its own on import. */

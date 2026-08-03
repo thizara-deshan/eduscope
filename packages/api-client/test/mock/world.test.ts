@@ -10,6 +10,7 @@ import { recordingMachine } from '../../src/mock/machines/recording.js';
 // registered too, not just recordingMachine.
 import { aiCountdownMachine } from '../../src/mock/machines/ai.js';
 import { quizSessionMachine } from '../../src/mock/machines/quiz.js';
+import { sourceMachine } from '../../src/mock/machines/health.js';
 
 function world() {
   const clock = createVirtualClock('2026-07-30T09:00:00.000+00:00');
@@ -73,5 +74,22 @@ describe('MockWorld', () => {
     const snapshot = w.snapshot();
     expect(snapshot.map((e) => e.event)).toContain('recording.state');
     for (const e of snapshot) expect(() => zEventEnvelope.parse(e)).not.toThrow();
+  });
+
+  it('keeps one snapshot row per entity, not one per event name (events.md §1 "never a partial patch")', () => {
+    const { w } = world();
+    // Two independent `source:*` machines both emit `sources.status` — the
+    // `latest` map used to be keyed by event name alone, so the second
+    // emit would silently clobber the first in snapshot().
+    w.registerMachine(sourceMachine('presentation'));
+    w.registerMachine(sourceMachine('lecturer-cam'));
+    w.apply('HL-02'); // presentation: unknown -> online
+    w.apply('HL-02@lecturer-cam'); // lecturer-cam: unknown -> online
+
+    const statuses = w
+      .snapshot()
+      .filter((e) => e.event === 'sources.status')
+      .map((e) => (e.payload as { roleId: string }).roleId);
+    expect(statuses.sort()).toEqual(['lecturer-cam', 'presentation']);
   });
 });

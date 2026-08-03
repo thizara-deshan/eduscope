@@ -11,6 +11,28 @@ const ANSWER_DELAY_MS = 300;
 const PREVIEW_FPS = 8;
 const PREVIEW_PERIOD_MS = 1_000 / PREVIEW_FPS;
 
+/**
+ * MOCK-ONLY CONVENTION: the real §3 contract has no dedicated "frame"
+ * message — actual preview video arrives over the negotiated WebRTC
+ * `MediaStream`, entirely out of band from this signaling channel (Wave 8
+ * replaces this whole path). There is no real peer connection here, so
+ * frames are pushed as `ice` messages instead, reusing its opaque
+ * `candidate` string to carry each generated data URI. This keeps the
+ * channel strictly typed as `EventStream<PreviewServerMessage>` with no
+ * schema change and no cast. `sdpMid` is stamped with this sentinel (instead
+ * of `null`, which a real trickle-ICE candidate would also use) purely so a
+ * mock frame is distinguishable at runtime from a genuine ICE candidate —
+ * see `isMockPreviewFrame` below.
+ */
+const MOCK_FRAME_SDP_MID = 'mock-frame';
+
+/** True for a `PreviewServerMessage` that is actually a mock JPEG frame smuggled over `ice` (see `MOCK_FRAME_SDP_MID`). */
+export function isMockPreviewFrame(
+  msg: PreviewServerMessage,
+): msg is Extract<PreviewServerMessage, { type: 'ice' }> {
+  return msg.type === 'ice' && msg.sdpMid === MOCK_FRAME_SDP_MID;
+}
+
 interface Negotiation {
   readonly negotiationId: string;
   readonly roleId: SourceRoleId;
@@ -21,24 +43,32 @@ interface Negotiation {
  * events.md §3 — a dedicated signaling socket, separate from the one-way
  * event stream (`telemetry.ts`'s subject). One `PreviewChannel` per
  * `openPreview()` call; `<= 1` active negotiation per channel.
- *
- * V1 binds four `SourceRole`s (`machines/index.ts`'s `BOUND_SOURCE_ROLES`) —
- * `mic-room` is permanently unbound (INV-SR-2, A-08 amended) and has no
- * registered machine 5a instance at all, so `world.state()` would throw for
- * it; treat "not registered" the same as "not online" rather than letting
- * that throw escape this module.
  */
 export function createPreviewChannel(world: MockWorld): PreviewChannel {
   const emitter = createEmitter<PreviewServerMessage>();
   let current: Negotiation | null = null;
   let closed = false;
 
-  function isOnline(roleId: SourceRoleId): boolean {
+  /**
+   * V1 binds four `SourceRole`s (`machines/index.ts`'s `BOUND_SOURCE_ROLES`)
+   * — `mic-room` is permanently unbound (INV-SR-2, A-08 amended) and has no
+   * registered machine 5a instance at all, so `world.state()` throws for it.
+   * That "not registered" case, and an explicit `state === 'unbound'`, both
+   * map to the contract's dedicated `source-unbound` code; a *registered*
+   * role that just isn't `online` yet (offline/unknown/degraded) maps to
+   * `source-offline` instead — these are two different codes for a reason,
+   * do not collapse them into one.
+   */
+  function sourceErrorCode(roleId: SourceRoleId): 'source-unbound' | 'source-offline' | null {
+    let state: string;
     try {
-      return world.state(`source:${roleId}`) === 'online';
+      state = world.state(`source:${roleId}`);
     } catch {
-      return false;
+      return 'source-unbound';
     }
+    if (state === 'unbound') return 'source-unbound';
+    if (state === 'online') return null;
+    return 'source-offline';
   }
 
   function endCurrent(): void {
@@ -51,19 +81,11 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     let stopped = false;
     const tick = () => {
       if (stopped || closed) return;
-      // MOCK-ONLY CONVENTION: the real §3 contract has no dedicated "frame"
-      // message — actual preview video arrives over the negotiated WebRTC
-      // `MediaStream`, entirely out of band from this signaling channel
-      // (Wave 8 replaces this whole path). There is no real peer connection
-      // here, so frames are pushed as `ice` messages instead, reusing its
-      // opaque `candidate` string to carry each generated data URI. This
-      // keeps the channel strictly typed as `EventStream<PreviewServerMessage>`
-      // with no schema change and no cast.
       emitter.emit({
         type: 'ice',
         negotiationId: negotiation.negotiationId,
         candidate: generateFrame(negotiation.roleId, seq),
-        sdpMid: null,
+        sdpMid: MOCK_FRAME_SDP_MID,
         sdpMLineIndex: null,
       });
       seq += 1;
@@ -75,31 +97,45 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     };
   }
 
+  function sendAnswer(negotiation: Negotiation): void {
+    emitter.emit({
+      type: 'answer',
+      negotiationId: negotiation.negotiationId,
+      sdp: fakeAnswerSdp(negotiation.roleId),
+    });
+  }
+
   function handleOffer(msg: Extract<PreviewClientMessage, { type: 'offer' }>): void {
-    if (!isOnline(msg.roleId)) {
+    const errorCode = sourceErrorCode(msg.roleId);
+    if (errorCode) {
       emitter.emit({
         type: 'error',
         negotiationId: msg.negotiationId,
-        code: 'source-offline',
-        message: `source ${msg.roleId} is not online`,
-      });
-      return;
-    }
-    // A retried offer for the SAME negotiation that is already open/pending
-    // is refused rather than restarted. A DIFFERENT negotiationId instead
-    // implicitly supersedes the previous one (events.md §3's "<= 1 active
-    // negotiation per connection; a new offer implicitly closes the
-    // previous negotiation" — that is the branch below, not this one).
-    if (current?.negotiationId === msg.negotiationId) {
-      emitter.emit({
-        type: 'error',
-        negotiationId: msg.negotiationId,
-        code: 'busy',
-        message: `negotiation ${msg.negotiationId} is already open`,
+        code: errorCode,
+        message:
+          errorCode === 'source-unbound'
+            ? `source ${msg.roleId} has no physical input bound`
+            : `source ${msg.roleId} is not online`,
       });
       return;
     }
 
+    // A re-offer of the SAME negotiationId is treated as idempotent, never
+    // as an error: events.md §3 says `error` is "terminal per negotiation",
+    // and this negotiation is still alive (still streaming, or still
+    // waiting on its first answer) — emitting `error{code:'busy'}` here
+    // would be a contract violation (a terminal error for a live
+    // negotiation). In the documented flow this path is close to
+    // unreachable anyway: a real client mints a fresh negotiationId per
+    // lightbox open.
+    if (current?.negotiationId === msg.negotiationId) {
+      if (current.stopFrames) sendAnswer(current); // already answered — ack again, no-op otherwise
+      return;
+    }
+
+    // events.md §3: <= 1 active negotiation per connection; a new offer
+    // (a genuinely different negotiationId) implicitly closes the previous
+    // one rather than erroring.
     endCurrent();
     const negotiation: Negotiation = {
       negotiationId: msg.negotiationId,
@@ -111,11 +147,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
       // The channel may have been closed, or superseded by a newer offer,
       // while this answer was in flight — do not resurrect a dead negotiation.
       if (closed || current !== negotiation) return;
-      emitter.emit({
-        type: 'answer',
-        negotiationId: negotiation.negotiationId,
-        sdp: fakeAnswerSdp(negotiation.roleId),
-      });
+      sendAnswer(negotiation);
       negotiation.stopFrames = startFrames(negotiation);
     }, ANSWER_DELAY_MS);
   }

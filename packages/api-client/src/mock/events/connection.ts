@@ -22,16 +22,33 @@ export interface ConnectionController {
  * (Task 12), not something this socket-lifecycle module manufactures on its
  * own. This module only drives the `'reconnect'` resync the wsFlap script
  * describes.
+ *
+ * `Clock.setTimeout` has no bulk-cancel, and this module schedules a
+ * variable, data-dependent number of callbacks per `start()` (the backoff
+ * ladder's length depends on `downMs`), so rather than collecting every
+ * handle to `clearTimeout` individually, each `start()` mints a fresh
+ * `generation`. Every callback this module schedules captures that
+ * generation and no-ops if `generation` has since moved on (a later
+ * `stop()` or `start()`) by the time it fires — the same effect as
+ * cancelling every pending timer, without the handle bookkeeping. Without
+ * this, a `stop()`/`start()` cycle would leave the old session's timers
+ * alive, injecting phantom `stale`/`open`+resync events into the new one.
  */
 export function createConnectionController(
   world: MockWorld,
   script: ScenarioScript,
 ): ConnectionController {
   const emitter = createEmitter<ConnectionStatus>();
-  let stopped = true;
+  let generation = 0;
+  let running = false;
 
-  function set(phase: ConnectionStatus['phase'], attempt: number, resyncReason?: ConnectionStatus['resyncReason']): void {
-    if (stopped) return;
+  function set(
+    gen: number,
+    phase: ConnectionStatus['phase'],
+    attempt: number,
+    resyncReason?: ConnectionStatus['resyncReason'],
+  ): void {
+    if (gen !== generation || !running) return;
     emitter.emit({
       phase,
       attempt,
@@ -47,12 +64,12 @@ export function createConnectionController(
     }
   }
 
-  function dropSocket(downMs: number, onRestored: () => void): void {
+  function dropSocket(gen: number, downMs: number, onRestored: () => void): void {
     let attempt = 0;
 
     const emitReconnecting = () => {
       attempt += 1;
-      set('reconnecting', attempt);
+      set(gen, 'reconnecting', attempt);
     };
     emitReconnecting(); // the socket just dropped — the first attempt fires immediately
 
@@ -65,7 +82,7 @@ export function createConnectionController(
       elapsed += wait;
       if (elapsed >= downMs) return; // no more attempts fit before the socket restores
       world.clock.setTimeout(() => {
-        if (stopped) return;
+        if (gen !== generation) return;
         emitReconnecting();
         scheduleNext();
       }, wait);
@@ -74,24 +91,23 @@ export function createConnectionController(
 
     if (downMs > TIMERS['T-WS-STALE']) {
       world.clock.setTimeout(() => {
-        if (stopped) return;
-        set('stale', attempt);
+        set(gen, 'stale', attempt);
       }, TIMERS['T-WS-STALE']);
     }
 
     world.clock.setTimeout(() => {
-      if (stopped) return;
-      set('open', attempt, 'reconnect');
+      if (gen !== generation) return;
+      set(gen, 'open', attempt, 'reconnect');
       replaySnapshot();
       onRestored();
     }, downMs);
   }
 
-  function runFlapCycles(remaining: number, afterMs: number, downMs: number): void {
-    if (stopped || remaining <= 0) return;
+  function runFlapCycles(gen: number, remaining: number, afterMs: number, downMs: number): void {
+    if (remaining <= 0) return;
     world.clock.setTimeout(() => {
-      if (stopped) return;
-      dropSocket(downMs, () => runFlapCycles(remaining - 1, afterMs, downMs));
+      if (gen !== generation) return;
+      dropSocket(gen, downMs, () => runFlapCycles(gen, remaining - 1, afterMs, downMs));
     }, afterMs);
   }
 
@@ -99,17 +115,20 @@ export function createConnectionController(
     connection$: emitter,
 
     start() {
-      stopped = false;
-      set('connecting', 0);
+      generation += 1;
+      const gen = generation;
+      running = true;
+      set(gen, 'connecting', 0);
       // The mock's first connect never fails — go straight to `open`.
-      set('open', 0);
+      set(gen, 'open', 0);
       if (script.wsFlap) {
-        runFlapCycles(script.wsFlap.repeat, script.wsFlap.afterMs, script.wsFlap.downMs);
+        runFlapCycles(gen, script.wsFlap.repeat, script.wsFlap.afterMs, script.wsFlap.downMs);
       }
     },
 
     stop() {
-      stopped = true;
+      running = false;
+      generation += 1; // invalidate every callback scheduled by this session
     },
   };
 }
