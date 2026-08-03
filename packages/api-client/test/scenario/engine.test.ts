@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createVirtualClock } from '../../src/mock/clock.js';
 import { MockWorld } from '../../src/mock/world.js';
-import { recordingMachine } from '../../src/mock/machines/index.js';
+import { ALL_MACHINES } from '../../src/mock/machines/index.js';
 import {
   createScenarioEngine,
   extendScenario,
@@ -13,7 +13,9 @@ function worldFor(name: Parameters<typeof getScenario>[0]) {
   const engine = createScenarioEngine(getScenario(name));
   const clock = createVirtualClock('2026-07-30T09:00:00.000+00:00');
   const w = new MockWorld({ clock, intercept: engine.intercept });
-  w.registerMachine(recordingMachine);
+  for (const machine of ALL_MACHINES) w.registerMachine(machine);
+  // Scenario-specific setup: pipeline-crash-midway schedules consumer crash at 40s
+  if (name === 'pipeline-crash-midway') w.schedule('R-16', 40_000);
   return { w, clock, engine };
 }
 
