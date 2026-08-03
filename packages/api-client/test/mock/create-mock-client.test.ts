@@ -72,3 +72,72 @@ describe('createMockClient', () => {
     }
   });
 });
+
+describe('createMockClient — review fixes (C1, I2–I6)', () => {
+  it('C1: the WS snapshot carries channel.state for all 3 channels, including local', () => {
+    const client = createMockClient('happy', { clock: at() });
+    const channelIds: string[] = [];
+    client.events$.subscribe((e) => {
+      if (e.event === 'channel.state') channelIds.push(e.payload.channelId);
+    });
+    expect(channelIds).toEqual(expect.arrayContaining(['local', 'meeting', 'streaming']));
+    const local = client.world.snapshot().find(
+      (e) => e.event === 'channel.state' && e.payload.channelId === 'local',
+    );
+    expect(local).toMatchObject({
+      event: 'channel.state',
+      payload: { channelId: 'local', state: 'on', presetId: 'pc-only' },
+    });
+  });
+
+  it('I2/I4: disk-full storage pressure and byte counts agree across the WS snapshot and both REST reads', async () => {
+    const client = createMockClient('disk-full', { clock: at() });
+    let wsPayload: { pressure: string; freeBytes: number; totalBytes: number } | undefined;
+    client.events$.subscribe((e) => {
+      if (e.event === 'storage.status') wsPayload = e.payload;
+    });
+
+    const overview = await client.getStorageOverview();
+    const health = await client.getDeviceHealth();
+
+    expect(wsPayload?.pressure).toBe('critical');
+    expect(overview.pressure).toBe('critical');
+    expect(health.storagePressure).toBe('critical');
+    expect(wsPayload?.freeBytes).toBe(overview.freeBytes);
+    expect(wsPayload?.totalBytes).toBe(overview.totalBytes);
+  });
+
+  it('I3: sources.status agrees between the WS snapshot and getSourcesStatus() for every bound role', async () => {
+    const client = createMockClient('happy', { clock: at() });
+    const wsStates = new Map<string, string>();
+    client.events$.subscribe((e) => {
+      if (e.event === 'sources.status') wsStates.set(e.payload.roleId, e.payload.state);
+    });
+
+    const restStatuses = await client.getSourcesStatus();
+    for (const status of restStatuses) {
+      expect(wsStates.get(status.roleId)).toBe(status.state);
+    }
+    expect(wsStates.get('presentation')).toBe('online');
+  });
+
+  it('I5: a connection$ subscriber attached after switchScenario still receives live events', () => {
+    const clock = at();
+    const client = createMockClient('happy', { clock });
+    client.switchScenario('ws-flap');
+
+    const phases: string[] = [];
+    client.connection$.subscribe((s) => phases.push(s.phase));
+    expect(phases).toContain('open'); // replayed immediately on subscribe
+
+    clock.advance(20_000); // past ws-flap's first drop (afterMs: 15_000)
+    expect(phases).toContain('reconnecting');
+  });
+
+  it('I6: a connection$ subscriber attached after construction still observes the current phase', () => {
+    const client = createMockClient('happy', { clock: at() });
+    const phases: string[] = [];
+    client.connection$.subscribe((s) => phases.push(s.phase));
+    expect(phases[0]).toBe('open');
+  });
+});
