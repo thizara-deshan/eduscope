@@ -1,512 +1,441 @@
-import { z } from 'zod';
-import { Instant, Ulid } from './primitives';
-import {
-  AiCountdownState,
-  CaptureCardState,
-  ChannelId,
-  ChannelRuntimeState,
-  DeleteReason,
-  ExportJobState,
-  FirmwareState,
-  IntervalMinutes,
-  LayoutPresetId,
-  MergeState,
-  OptionLabel,
-  ParticipantConnectionState,
-  ProjectorState,
-  PublicationCloseReason,
-  PublicationState,
-  QuestionProvenance,
-  QuestionSetState,
-  QuestionSetTrigger,
-  QuestionState,
-  QuizSessionProjectionState,
-  QuizSyncState,
-  RecordingState,
-  RecordingWireState,
-  SegmentEndReason,
-  SegmentState,
-  SmartStatus,
-  SourceHealthState,
-  SourceRoleId,
-  StartReason,
-  StoragePressure,
-  UploadFilePartState,
-  UploadJobState,
-} from './enums';
-import { AppliedState } from './enums';
-import { PublisherState, RetentionPolicy } from './storage';
-import { SystemAlert, LogEntry } from './observability';
-import { UsbVolume } from './exports';
-import { FirmwareUpdate } from './firmware';
-
 /**
- * WebSocket event catalog — the zod half of contracts/events.md.
- * Server→client only on the event channel; commands go over REST
- * (target-architecture §2.1). Every event carries { event, at, seq, payload };
- * seq is per-connection monotonic — a gap forces a full resync (state-machines
- * §5.5). WebRTC preview signaling rides a SEPARATE socket (§3 below).
+ * Hand-authored mirror of contracts/events.md v0.1.0 — §2 panel/admin events,
+ * §3 WebRTC preview signaling, §4 device<->quiz-server sync. Both the Phase-2
+ * mock adapter and the Phase-4 backend validate against these.
  */
+import { z } from 'zod';
+import {
+  zAiCountdownState,
+  zCaptureCardState,
+  zChannelId,
+  zChannelRuntimeState,
+  zExportJobState,
+  zFirmwareUpdate,
+  zLayoutPresetId,
+  zLogEntry,
+  zMergeState,
+  zPublicationCloseReason,
+  zProjectorState,
+  zPublisherState,
+  zQuestionSetState,
+  zQuestionState,
+  zQuizSessionProjectionState,
+  zQuizSyncState,
+  zRecordingWireState,
+  zRetentionPolicy,
+  zSegmentEndReason,
+  zSegmentState,
+  zSmartStatus,
+  zSourceHealthState,
+  zSourceRoleId,
+  zStoragePressure,
+  zSystemAlert,
+  zUlid,
+  zUploadFilePartState,
+  zUploadJobState,
+  zUsbVolume,
+} from './rest.js';
 
-export const eventEnvelope = <N extends string, P extends z.ZodTypeAny>(
-  name: N,
-  payload: P,
-) =>
-  z.object({
-    event: z.literal(name),
-    at: Instant,
-    seq: z.number().int().nonnegative(),
-    payload,
-  });
+// ── WS event envelope instant format: ISO 8601 with explicit offset ─────────
+const zEventInstant = z.string().datetime({ offset: true });
 
-// ── 1. core-api → panel/admin ───────────────────────────────────────────────
+// ── §2 payloads ────────────────────────────────────────────────────────────
 
-/** Machine 1a. Emitted on transition + on subscribe. */
-export const RecordingStatePayload = z.object({
-  state: RecordingWireState,
-  startReason: StartReason.nullable(),
-  sessionId: Ulid.nullable(),
+/** §2.1 — startedAt/recordedDurationMs drive a LOCAL tick; no per-second events. */
+export const zRecordingStatePayload = z.object({
+  state: zRecordingWireState,
+  startReason: z.enum(['initial', 'resume', 'recovery']).nullable(),
+  sessionId: zUlid.nullable(),
   title: z.string().nullable(),
-  ownerUserId: Ulid.nullable(),
+  ownerUserId: zUlid.nullable(),
   ownerDisplayName: z.string().nullable(),
-  startedAt: Instant.nullable(),
+  startedAt: zEventInstant.nullable(),
   recordedDurationMs: z.number().int().nonnegative().nullable(),
   segmentIndex: z.number().int().nonnegative().nullable(),
   segmentCount: z.number().int().nonnegative().nullable(),
   pauseCount: z.number().int().nonnegative().nullable(),
-  takeoverBy: Ulid.nullable(),
+  takeoverBy: zUlid.nullable(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
-  adopted: z.boolean().optional(), // BR-1
+  adopted: z.boolean().optional(),
 });
-export const RecordingStateEvent = eventEnvelope('recording.state', RecordingStatePayload);
-export type RecordingStateEvent = z.infer<typeof RecordingStateEvent>;
 
-/** SEG-1 bookkeeping. Emitted on segment open/close. */
-export const RecordingSegmentPayload = z.object({
-  sessionId: Ulid,
-  recordingId: Ulid,
-  segmentId: Ulid,
+/** §2.2 */
+export const zRecordingSegmentPayload = z.object({
+  sessionId: zUlid,
+  recordingId: zUlid,
+  segmentId: zUlid,
   index: z.number().int().nonnegative(),
-  state: SegmentState,
-  endReason: SegmentEndReason.nullable(),
+  state: zSegmentState,
+  endReason: zSegmentEndReason.nullable(),
   durationMs: z.number().int().nonnegative().nullable(),
 });
-export const RecordingSegmentEvent = eventEnvelope('recording.segment', RecordingSegmentPayload);
-export type RecordingSegmentEvent = z.infer<typeof RecordingSegmentEvent>;
 
-/** Machine 1b (RA-01…RA-07). Drives the library badge and upload eligibility. */
-export const RecordingArtifactPayload = z.object({
-  recordingId: Ulid,
-  sessionId: Ulid,
-  state: RecordingState,
-  mergeState: MergeState,
+/** §2.3 */
+export const zRecordingArtifactPayload = z.object({
+  recordingId: zUlid,
+  sessionId: zUlid,
+  state: z.enum(['capturing', 'finalizing', 'merging', 'ready', 'failed', 'deleted']),
+  mergeState: zMergeState,
   durationMs: z.number().int().nonnegative().nullable(),
   totalBytes: z.number().int().nonnegative().nullable(),
-  deleteReason: DeleteReason.nullable(),
+  deleteReason: z.string().nullable(),
 });
-export const RecordingArtifactEvent = eventEnvelope('recording.artifact', RecordingArtifactPayload);
-export type RecordingArtifactEvent = z.infer<typeof RecordingArtifactEvent>;
 
-/** Machine 1c (CH-01…CH-10). */
-export const ChannelStatePayload = z.object({
-  channelId: ChannelId,
-  state: ChannelRuntimeState,
-  presetId: LayoutPresetId,
+/** §2.4 */
+export const zChannelStatePayload = z.object({
+  channelId: zChannelId,
+  state: zChannelRuntimeState,
+  presetId: zLayoutPresetId,
   ratioA: z.number().int().nullable(),
   ratioB: z.number().int().nullable(),
-  reason: z.string().nullable(), // named failure reason (CH-03/CH-06)
+  reason: z.string().nullable(),
 });
-export const ChannelStateEvent = eventEnvelope('channel.state', ChannelStatePayload);
-export type ChannelStateEvent = z.infer<typeof ChannelStateEvent>;
 
-/** Machine 5a (HL-01…HL-09). Emitted on transition + on subscribe. */
-export const SourcesStatusPayload = z.object({
-  roleId: SourceRoleId,
-  state: SourceHealthState,
+/** §2.5 */
+export const zSourcesStatusPayload = z.object({
+  roleId: zSourceRoleId,
+  state: zSourceHealthState,
   detail: z.string().nullable(),
-  since: Instant,
-  inputId: Ulid.nullable(),
+  since: zEventInstant,
+  inputId: zUlid.nullable(),
 });
-export const SourcesStatusEvent = eventEnvelope('sources.status', SourcesStatusPayload);
-export type SourcesStatusEvent = z.infer<typeof SourcesStatusEvent>;
 
-/** Telemetry, never state (INV-AC-2). Throttled to ≤ 10 Hz. */
-export const AudioLevelsPayload = z.object({
-  roleId: SourceRoleId,
+/** §2.6 — throttled to <= 10 Hz, panel connections only. Telemetry, never rows. */
+export const zAudioLevelsPayload = z.object({
+  roleId: zSourceRoleId,
   rms: z.number().min(0).max(1),
 });
-export const AudioLevelsEvent = eventEnvelope('audio.levels', AudioLevelsPayload);
-export type AudioLevelsEvent = z.infer<typeof AudioLevelsEvent>;
 
-/** Applied-state push for the mic control (INV-AC-1 — the panel shows actual state, never assumed). Contract-v0 addition to state-machines §10. */
-export const AudioControlPayload = z.object({
-  roleId: SourceRoleId,
+/** §2.7 — appliedState is the truth the UI shows (INV-AC-1). */
+export const zAudioControlPayload = z.object({
+  roleId: zSourceRoleId,
   gain: z.number().int().min(0).max(100),
   muted: z.boolean(),
-  appliedState: AppliedState,
+  appliedState: z.enum(['applied', 'pending', 'failed']),
   lastError: z.string().nullable(),
 });
-export const AudioControlEvent = eventEnvelope('audio.control', AudioControlPayload);
-export type AudioControlEvent = z.infer<typeof AudioControlEvent>;
 
-/** Machine 5b. Policy quoted from RetentionPolicy so the UI never hardcodes thresholds (INV-RP-1). */
-export const StorageStatusPayload = z.object({
-  pressure: StoragePressure,
+/** §2.8 — carries the full policy so warning text quotes real values (INV-RP-1). */
+export const zStorageStatusPayload = z.object({
+  pressure: zStoragePressure,
   freeBytes: z.number().int().nonnegative(),
   totalBytes: z.number().int().nonnegative(),
-  policy: RetentionPolicy,
+  policy: zRetentionPolicy,
 });
-export const StorageStatusEvent = eventEnvelope('storage.status', StorageStatusPayload);
-export type StorageStatusEvent = z.infer<typeof StorageStatusEvent>;
 
-/** Machine 5c + publisher projections (INV-DH-2). */
-export const DeviceHealthPayload = z.object({
-  captureCardState: CaptureCardState,
-  publisherStates: z.record(SourceRoleId, PublisherState),
+/** §2.9 */
+export const zDeviceHealthPayload = z.object({
+  captureCardState: zCaptureCardState,
+  publisherStates: z.record(z.string(), zPublisherState),
   ntpSynced: z.boolean(),
   clockOffsetMs: z.number().int().nullable(),
-  diskHealth: SmartStatus,
-  lastBootAt: Instant,
+  diskHealth: zSmartStatus,
+  lastBootAt: zEventInstant,
 });
-export const DeviceHealthEvent = eventEnvelope('device.health', DeviceHealthPayload);
-export type DeviceHealthEvent = z.infer<typeof DeviceHealthEvent>;
 
-/** Raise/clear of a current condition (INV-SA-1/2/3). */
-export const SystemAlertEvent = eventEnvelope('system.alert', SystemAlert);
-export type SystemAlertEvent = z.infer<typeof SystemAlertEvent>;
-
-/** Feeds the AD-7 SystemLogs live view (subscribed views only). */
-export const LogEntryEvent = eventEnvelope('log.entry', LogEntry);
-export type LogEntryEvent = z.infer<typeof LogEntryEvent>;
-
-/**
- * Machine 2a. Emitted on transition + every T-COUNTDOWN-RESYNC (15 s) — the
- * panel renders the ticking display locally from nextAt (INV-G-7).
- */
-export const AiCountdownPayload = z.object({
-  state: AiCountdownState,
+/** §2.12 — nextAt is absolute; the panel ticks locally (INV-G-7). */
+export const zAiCountdownPayload = z.object({
+  state: zAiCountdownState,
   remainingMs: z.number().int().nonnegative().nullable(),
-  nextAt: Instant.nullable(),
-  intervalMinutes: IntervalMinutes,
+  nextAt: zEventInstant.nullable(),
+  intervalMinutes: z.union([z.literal(10), z.literal(15), z.literal(20), z.literal(30)]),
 });
-export const AiCountdownEvent = eventEnvelope('ai.countdown', AiCountdownPayload);
-export type AiCountdownEvent = z.infer<typeof AiCountdownEvent>;
 
-/**
- * Machine 2b. Supersedes the `ai.batch_ready` sketch (state-machines §10):
- * state = 'ready' IS batch-ready and drives the green banner.
- */
-export const AiSetPayload = z.object({
-  setId: Ulid,
-  sessionId: Ulid,
-  state: QuestionSetState,
-  trigger: QuestionSetTrigger,
-  count: z.number().int().nonnegative().nullable(), // surviving draft questions on ready
-  error: z.string().nullable(),
-  attempt: z.number().int().nonnegative().nullable(),
+/** §2.13 — supersedes ai.batch_ready; state `ready` IS batch-ready. */
+export const zAiSetPayload = z.object({
+  setId: zUlid,
+  sessionId: zUlid,
+  state: zQuestionSetState,
+  trigger: z.enum(['countdown', 'manual']),
+  count: z.number().int().nonnegative().nullable(),
+  error: z.enum(['timeout', 'unreachable', 'invalid-payload']).nullable(),
+  attempt: z.number().int().nonnegative(),
 });
-export const AiSetEvent = eventEnvelope('ai.set', AiSetPayload);
-export type AiSetEvent = z.infer<typeof AiSetEvent>;
 
-/** Machine 2c (Q-18…Q-23). */
-export const AiQuestionPayload = z.object({
-  questionId: Ulid,
-  setId: Ulid.nullable(),
-  state: QuestionState,
-  provenance: QuestionProvenance,
+/** §2.14 — setId null = lecturer-authored ("Yours" chip). */
+export const zAiQuestionPayload = z.object({
+  questionId: zUlid,
+  setId: zUlid.nullable(),
+  state: zQuestionState,
+  provenance: z.enum(['generated', 'lecturer-authored']),
   edited: z.boolean(),
 });
-export const AiQuestionEvent = eventEnvelope('ai.question', AiQuestionPayload);
-export type AiQuestionEvent = z.infer<typeof AiQuestionEvent>;
 
-/** Machine 4a (Z-01…Z-06). Also feeds the projector consumer's join QR. */
-export const QuizSessionPayload = z.object({
-  state: QuizSessionProjectionState,
-  quizSessionId: Ulid.nullable(),
+/** §2.15 */
+export const zQuizSessionPayload = z.object({
+  state: zQuizSessionProjectionState,
+  quizSessionId: zUlid.nullable(),
   joinUrl: z.string().nullable(),
   joinCode: z.string().nullable(),
   joinedCount: z.number().int().nonnegative(),
 });
-export const QuizSessionEvent = eventEnvelope('quiz.session', QuizSessionPayload);
-export type QuizSessionEvent = z.infer<typeof QuizSessionEvent>;
 
-/** Machine 2d (Q-30…Q-36) + machine 4d syncState. */
-export const QuizPublicationPayload = z.object({
-  publicationId: Ulid,
-  questionId: Ulid,
-  state: PublicationState,
+/** §2.16 — exactly one publication may carry isShowing (INV-QPUB-1). */
+export const zQuizPublicationPayload = z.object({
+  publicationId: zUlid,
+  questionId: zUlid,
+  state: z.enum(['publishing', 'open', 'closed', 'failed']),
   isShowing: z.boolean(),
-  projectorState: ProjectorState,
-  syncState: QuizSyncState,
-  closeReason: PublicationCloseReason.nullable(),
+  projectorState: zProjectorState,
+  syncState: zQuizSyncState,
+  closeReason: zPublicationCloseReason.nullable(),
 });
-export const QuizPublicationEvent = eventEnvelope('quiz.publication', QuizPublicationPayload);
-export type QuizPublicationEvent = z.infer<typeof QuizPublicationEvent>;
 
-/** Per-student answer deltas feeding the live leaderboard (LP-17). Batched; stale marks machine 4d ≥ stale (INV-AP-2). */
-export const QuizResponsesPayload = z.object({
-  publicationId: Ulid,
+/** §2.17 — `stale` marks projections that must not be shown as current (INV-AP-2). */
+export const zQuizResponsesPayload = z.object({
+  publicationId: zUlid,
   deltas: z.array(
     z.object({
       studentIdNumber: z.string().max(32),
       displayName: z.string().max(128),
-      selectedOptionId: Ulid,
+      selectedOptionId: zUlid,
       isCorrect: z.boolean(),
       responseTimeMs: z.number().int().nonnegative(),
-      submittedAt: Instant,
+      submittedAt: zEventInstant,
     }),
   ),
-  syncedAt: Instant,
+  syncedAt: zEventInstant,
   stale: z.boolean(),
 });
-export const QuizResponsesEvent = eventEnvelope('quiz.responses', QuizResponsesPayload);
-export type QuizResponsesEvent = z.infer<typeof QuizResponsesEvent>;
 
-/** Machine 3a (U-01…U-10). Progress steps ≥ 5 %. */
-export const UploadJobPayload = z.object({
-  jobId: Ulid,
-  recordingId: Ulid,
-  state: UploadJobState,
+/** §2.18 */
+export const zUploadJobPayload = z.object({
+  jobId: zUlid,
+  recordingId: zUlid,
+  state: zUploadJobState,
   attempt: z.number().int().nonnegative(),
-  nextAttemptAt: Instant.nullable(),
-  progressPct: z.number().min(0).max(100),
+  nextAttemptAt: zEventInstant.nullable(),
+  progressPct: z.number().int().min(0).max(100),
   lastError: z.string().nullable(),
-  blockedBy: z.enum(['merge']).nullable(), // SM-D-1 "Preparing…"
+  blockedBy: z.string().nullable(),
 });
-export const UploadJobEvent = eventEnvelope('upload.job', UploadJobPayload);
-export type UploadJobEvent = z.infer<typeof UploadJobEvent>;
 
-/** Machine 3b (UP-01…UP-05). */
-export const UploadPartPayload = z.object({
-  partId: Ulid,
-  jobId: Ulid,
-  streamKey: z.string().max(32),
-  state: UploadFilePartState,
+/** §2.19 */
+export const zUploadPartPayload = z.object({
+  partId: zUlid,
+  jobId: zUlid,
+  streamKey: z.string(),
+  state: zUploadFilePartState,
   bytesSent: z.number().int().nonnegative(),
   bytesTotal: z.number().int().nonnegative(),
 });
-export const UploadPartEvent = eventEnvelope('upload.part', UploadPartPayload);
-export type UploadPartEvent = z.infer<typeof UploadPartEvent>;
 
-/** ExportJob progress (INV-EX-1) — scoped to the requesting AuthSession, never broadcast (B-38). Contract-v0 addition. */
-export const ExportJobPayload = z.object({
-  jobId: Ulid,
-  state: ExportJobState,
+/** §2.20 — real transfer bytes, never free-space arithmetic (INV-EX-1). */
+export const zExportJobPayload = z.object({
+  jobId: zUlid,
+  state: zExportJobState,
   bytesCopied: z.number().int().nonnegative(),
   bytesTotal: z.number().int().nonnegative(),
   error: z.string().nullable(),
 });
-export const ExportJobEvent = eventEnvelope('export.job', ExportJobPayload);
-export type ExportJobEvent = z.infer<typeof ExportJobEvent>;
 
-/** USB insert/remove (LP-11) — scoped to sessions with the export flow open. Contract-v0 addition. */
-export const UsbVolumesPayload = z.object({
-  volumes: z.array(UsbVolume),
-});
-export const UsbVolumesEvent = eventEnvelope('usb.volumes', UsbVolumesPayload);
-export type UsbVolumesEvent = z.infer<typeof UsbVolumesEvent>;
+/** §2.21 — system and recordings volumes are never listed (INV-EX-2). */
+export const zUsbVolumesPayload = z.object({ volumes: z.array(zUsbVolume) });
 
-/** AD-5 firmware progress (FirmwareUpdate has a linear entity lifecycle, no §1–6 machine). Contract-v0 addition. */
-export const FirmwareStateEvent = eventEnvelope('firmware.state', FirmwareUpdate);
-export type FirmwareStateEvent = z.infer<typeof FirmwareStateEvent>;
+// ── §2 payload types ─────────────────────────────────────────────────────
+// Named types for the schemas above — every zXPayload needs a bare XPayload
+// so consumers (the WS store, Task 15) can type slices without re-deriving
+// z.infer at every call site.
+export type RecordingStatePayload = z.infer<typeof zRecordingStatePayload>;
+export type RecordingSegmentPayload = z.infer<typeof zRecordingSegmentPayload>;
+export type RecordingArtifactPayload = z.infer<typeof zRecordingArtifactPayload>;
+export type ChannelStatePayload = z.infer<typeof zChannelStatePayload>;
+export type SourcesStatusPayload = z.infer<typeof zSourcesStatusPayload>;
+export type AudioLevelsPayload = z.infer<typeof zAudioLevelsPayload>;
+export type AudioControlPayload = z.infer<typeof zAudioControlPayload>;
+export type StorageStatusPayload = z.infer<typeof zStorageStatusPayload>;
+export type DeviceHealthPayload = z.infer<typeof zDeviceHealthPayload>;
+export type AiCountdownPayload = z.infer<typeof zAiCountdownPayload>;
+export type AiSetPayload = z.infer<typeof zAiSetPayload>;
+export type AiQuestionPayload = z.infer<typeof zAiQuestionPayload>;
+export type QuizSessionPayload = z.infer<typeof zQuizSessionPayload>;
+export type QuizPublicationPayload = z.infer<typeof zQuizPublicationPayload>;
+export type QuizResponsesPayload = z.infer<typeof zQuizResponsesPayload>;
+export type UploadJobPayload = z.infer<typeof zUploadJobPayload>;
+export type UploadPartPayload = z.infer<typeof zUploadPartPayload>;
+export type ExportJobPayload = z.infer<typeof zExportJobPayload>;
+export type UsbVolumesPayload = z.infer<typeof zUsbVolumesPayload>;
 
-/** Every event the panel/admin WS can deliver. */
-export const PanelServerEvent = z.discriminatedUnion('event', [
-  RecordingStateEvent,
-  RecordingSegmentEvent,
-  RecordingArtifactEvent,
-  ChannelStateEvent,
-  SourcesStatusEvent,
-  AudioLevelsEvent,
-  AudioControlEvent,
-  StorageStatusEvent,
-  DeviceHealthEvent,
-  SystemAlertEvent,
-  LogEntryEvent,
-  AiCountdownEvent,
-  AiSetEvent,
-  AiQuestionEvent,
-  QuizSessionEvent,
-  QuizPublicationEvent,
-  QuizResponsesEvent,
-  UploadJobEvent,
-  UploadPartEvent,
-  ExportJobEvent,
-  UsbVolumesEvent,
-  FirmwareStateEvent,
+// ── §2 union ───────────────────────────────────────────────────────────────
+
+export const zPanelServerEvent = z.discriminatedUnion('event', [
+  z.object({ event: z.literal('recording.state'), payload: zRecordingStatePayload }),
+  z.object({ event: z.literal('recording.segment'), payload: zRecordingSegmentPayload }),
+  z.object({ event: z.literal('recording.artifact'), payload: zRecordingArtifactPayload }),
+  z.object({ event: z.literal('channel.state'), payload: zChannelStatePayload }),
+  z.object({ event: z.literal('sources.status'), payload: zSourcesStatusPayload }),
+  z.object({ event: z.literal('audio.levels'), payload: zAudioLevelsPayload }),
+  z.object({ event: z.literal('audio.control'), payload: zAudioControlPayload }),
+  z.object({ event: z.literal('storage.status'), payload: zStorageStatusPayload }),
+  z.object({ event: z.literal('device.health'), payload: zDeviceHealthPayload }),
+  z.object({ event: z.literal('system.alert'), payload: zSystemAlert }),
+  z.object({ event: z.literal('log.entry'), payload: zLogEntry }),
+  z.object({ event: z.literal('ai.countdown'), payload: zAiCountdownPayload }),
+  z.object({ event: z.literal('ai.set'), payload: zAiSetPayload }),
+  z.object({ event: z.literal('ai.question'), payload: zAiQuestionPayload }),
+  z.object({ event: z.literal('quiz.session'), payload: zQuizSessionPayload }),
+  z.object({ event: z.literal('quiz.publication'), payload: zQuizPublicationPayload }),
+  z.object({ event: z.literal('quiz.responses'), payload: zQuizResponsesPayload }),
+  z.object({ event: z.literal('upload.job'), payload: zUploadJobPayload }),
+  z.object({ event: z.literal('upload.part'), payload: zUploadPartPayload }),
+  z.object({ event: z.literal('export.job'), payload: zExportJobPayload }),
+  z.object({ event: z.literal('usb.volumes'), payload: zUsbVolumesPayload }),
+  z.object({ event: z.literal('firmware.state'), payload: zFirmwareUpdate }),
 ]);
-export type PanelServerEvent = z.infer<typeof PanelServerEvent>;
 
-// ── 2. quiz-service → student app ───────────────────────────────────────────
+export type PanelServerEvent = z.infer<typeof zPanelServerEvent>;
+export type PanelEventName = PanelServerEvent['event'];
 
-/**
- * Student-facing question push (Q-31/Q-33, Z-20/Z-26). NEVER carries
- * correctness before close; `ownAnswer` marks the student's locked attempt on
- * reconnect (Z-14).
- */
-export const QuizQuestionPayload = z.object({
-  publicationId: Ulid,
-  state: z.enum(['open', 'closed', 'none']),
-  prompt: z.string().nullable(),
-  options: z
-    .array(z.object({ id: Ulid, label: OptionLabel, text: z.string() }))
-    .nullable(),
-  ownAnswer: z
-    .object({ selectedOptionId: Ulid, lockedAt: Instant })
-    .nullable(),
-});
-export const QuizQuestionEvent = eventEnvelope('quiz.question', QuizQuestionPayload);
-export type QuizQuestionEvent = z.infer<typeof QuizQuestionEvent>;
-
-/** Own result + own rank ONLY — never the class list (INT-4, QZ-6, INV-SI-2). */
-export const QuizResultPayload = z.object({
-  publicationId: Ulid,
-  isCorrect: z.boolean(),
-  correctOptionId: Ulid, // revealed only after close
-  pointsAwarded: z.number().int().nonnegative(),
-  runningScore: z.number().int().nonnegative(),
-  ownRank: z.number().int().positive(),
-});
-export const QuizResultEvent = eventEnvelope('quiz.result', QuizResultPayload);
-export type QuizResultEvent = z.infer<typeof QuizResultEvent>;
-
-/** Machine 4b connection state (Z-12…Z-14). */
-export const QuizParticipantPayload = z.object({
-  participantId: Ulid,
-  connectionState: ParticipantConnectionState,
-});
-export const QuizParticipantEvent = eventEnvelope('quiz.participant', QuizParticipantPayload);
-export type QuizParticipantEvent = z.infer<typeof QuizParticipantEvent>;
-
-/** Session closed (Z-15): student sees "session ended" + own final result. */
-export const StudentQuizSessionPayload = z.object({
-  state: z.enum(['open', 'closed']),
-  finalScore: z.number().int().nonnegative().nullable(),
-  finalRank: z.number().int().positive().nullable(),
-});
-export const StudentQuizSessionEvent = eventEnvelope(
+/** The closed catalog. Anything not here does not exist (state-machines SM-R-3). */
+export const PANEL_EVENT_NAMES = [
+  'recording.state',
+  'recording.segment',
+  'recording.artifact',
+  'channel.state',
+  'sources.status',
+  'audio.levels',
+  'audio.control',
+  'storage.status',
+  'device.health',
+  'system.alert',
+  'log.entry',
+  'ai.countdown',
+  'ai.set',
+  'ai.question',
   'quiz.session',
-  StudentQuizSessionPayload,
+  'quiz.publication',
+  'quiz.responses',
+  'upload.job',
+  'upload.part',
+  'export.job',
+  'usb.volumes',
+  'firmware.state',
+] as const satisfies readonly PanelEventName[];
+
+/** §1 envelope: `seq` is per-connection and monotonic; a gap forces a full resync. */
+export const zEventEnvelope = zPanelServerEvent.and(
+  z.object({ at: zEventInstant, seq: z.number().int().nonnegative() }),
 );
-export type StudentQuizSessionEvent = z.infer<typeof StudentQuizSessionEvent>;
+export type EventEnvelope = z.infer<typeof zEventEnvelope>;
 
-export const StudentServerEvent = z.discriminatedUnion('event', [
-  QuizQuestionEvent,
-  QuizResultEvent,
-  QuizParticipantEvent,
-  StudentQuizSessionEvent,
-]);
-export type StudentServerEvent = z.infer<typeof StudentServerEvent>;
+// ── §3 WebRTC preview signaling (separate socket, no seq) ───────────────────
 
-// ── 3. WebRTC preview signaling (A-17) — SEPARATE socket, /ws/preview ────────
-// The event channel stays one-way; signaling is request/response by nature so
-// it gets its own socket where client→server messages are allowed
-// (target-architecture §2.1: "negotiated separately from the WS event channel").
-
-export const PreviewClientMessage = z.discriminatedUnion('type', [
+export const zPreviewClientMessage = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('offer'),
-    negotiationId: Ulid, // client-minted per lightbox open
-    roleId: SourceRoleId,
+    negotiationId: zUlid,
+    roleId: zSourceRoleId,
     sdp: z.string(),
   }),
   z.object({
     type: z.literal('ice'),
-    negotiationId: Ulid,
+    negotiationId: zUlid,
     candidate: z.string(),
     sdpMid: z.string().nullable(),
     sdpMLineIndex: z.number().int().nullable(),
   }),
-  z.object({
-    type: z.literal('close'),
-    negotiationId: Ulid,
-  }),
+  z.object({ type: z.literal('close'), negotiationId: zUlid }),
 ]);
-export type PreviewClientMessage = z.infer<typeof PreviewClientMessage>;
 
-export const PreviewServerMessage = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('answer'),
-    negotiationId: Ulid,
-    sdp: z.string(),
-  }),
+export const zPreviewServerMessage = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('answer'), negotiationId: zUlid, sdp: z.string() }),
   z.object({
     type: z.literal('ice'),
-    negotiationId: Ulid,
+    negotiationId: zUlid,
     candidate: z.string(),
     sdpMid: z.string().nullable(),
     sdpMLineIndex: z.number().int().nullable(),
   }),
   z.object({
     type: z.literal('error'),
-    negotiationId: Ulid,
+    negotiationId: zUlid,
     code: z.enum(['source-offline', 'source-unbound', 'busy', 'internal']),
     message: z.string(),
   }),
 ]);
-export type PreviewServerMessage = z.infer<typeof PreviewServerMessage>;
 
-// ── 4. Device ↔ quiz-service sync stream (DM-P5, machine 4d) ────────────────
-// Device-initiated outbound WS to the quiz server (the public zone cannot dial
-// into the campus LAN). Heartbeat every T-QUIZ-HEARTBEAT (5 s); silence beyond
-// T-QUIZ-SYNC-STALE (15 s) ⇒ stale (Z-30).
+export type PreviewClientMessage = z.infer<typeof zPreviewClientMessage>;
+export type PreviewServerMessage = z.infer<typeof zPreviewServerMessage>;
 
-/** Device → quiz-service on connect: watermark for idempotent replay (Z-31/Z-33). */
-export const SyncHello = z.object({
-  type: z.literal('sync.hello'),
-  deviceId: Ulid,
-  quizSessionId: Ulid,
-  /** Highest AnswerSyncRecord.seq the device has durably stored; quiz-service replays everything above it. */
-  answerWatermark: z.number().int().nonnegative(),
-});
-export type SyncHello = z.infer<typeof SyncHello>;
+// ── §4 device <-> quiz-server sync stream ──────────────────────────────────
 
-/** Quiz-service → device: answer batch (ordered by seq). */
-export const SyncAnswers = z.object({
-  type: z.literal('sync.answers'),
-  quizSessionId: Ulid,
-  answers: z.array(
-    z.object({
-      seq: z.number().int().positive(),
-      answerId: Ulid,
-      publicationId: Ulid,
-      studentIdNumber: z.string().max(32),
-      studentDisplayName: z.string().max(128),
-      selectedOptionId: Ulid,
-      isCorrect: z.boolean(),
-      responseTimeMs: z.number().int().nonnegative(),
-      submittedAt: Instant,
+export const zQuizSyncClientMessage = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('sync.hello'),
+    deviceId: zUlid,
+    quizSessionId: zUlid,
+    answerWatermark: z.number().int().nonnegative(),
+  }),
+  z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
+]);
+
+export const zQuizSyncServerMessage = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('sync.answers'),
+    quizSessionId: zUlid,
+    answers: z.array(
+      z.object({
+        seq: z.number().int().nonnegative(),
+        answerId: zUlid,
+        publicationId: zUlid,
+        studentIdNumber: z.string().max(32),
+        studentDisplayName: z.string().max(128),
+        selectedOptionId: zUlid,
+        isCorrect: z.boolean(),
+        responseTimeMs: z.number().int().nonnegative(),
+        submittedAt: zEventInstant,
+      }),
+    ),
+  }),
+  z.object({
+    type: z.literal('sync.participants'),
+    quizSessionId: zUlid,
+    joinedCount: z.number().int().nonnegative(),
+    onlineCount: z.number().int().nonnegative(),
+  }),
+  z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
+]);
+
+// ── §4 note: student-facing events, shared with apps/quiz ──────────────────
+
+export const zStudentServerEvent = z.discriminatedUnion('event', [
+  z.object({
+    event: z.literal('quiz.question'),
+    payload: z.object({
+      publicationId: zUlid,
+      state: z.enum(['open', 'closed', 'none']),
+      prompt: z.string(),
+      options: z.array(
+        z.object({ id: zUlid, label: z.string(), text: z.string() }),
+      ),
+      ownAnswer: zUlid.nullable(),
     }),
-  ),
-});
-export type SyncAnswers = z.infer<typeof SyncAnswers>;
-
-/** Quiz-service → device: joined/online counts (panel joined-count, G-4 denominator). */
-export const SyncParticipants = z.object({
-  type: z.literal('sync.participants'),
-  quizSessionId: Ulid,
-  joinedCount: z.number().int().nonnegative(),
-  onlineCount: z.number().int().nonnegative(),
-});
-export type SyncParticipants = z.infer<typeof SyncParticipants>;
-
-/** Both directions: liveness for machine 4d. */
-export const SyncHeartbeat = z.object({
-  type: z.literal('sync.heartbeat'),
-  at: Instant,
-});
-export type SyncHeartbeat = z.infer<typeof SyncHeartbeat>;
-
-export const QuizSyncServerMessage = z.discriminatedUnion('type', [
-  SyncAnswers,
-  SyncParticipants,
-  SyncHeartbeat,
+  }),
+  z.object({
+    event: z.literal('quiz.result'),
+    payload: z.object({
+      publicationId: zUlid,
+      isCorrect: z.boolean().nullable(),
+      correctOptionId: zUlid,
+      pointsAwarded: z.number().int().nonnegative(),
+      runningScore: z.number().int().nonnegative(),
+      ownRank: z.number().int().nonnegative().nullable(),
+    }),
+  }),
+  z.object({
+    event: z.literal('quiz.participant'),
+    payload: z.object({ connectionState: z.enum(['online', 'offline']) }),
+  }),
+  z.object({
+    event: z.literal('quiz.session'),
+    payload: z.object({
+      state: z.enum(['open', 'closed']),
+      finalScore: z.number().int().nonnegative().nullable(),
+      finalRank: z.number().int().nonnegative().nullable(),
+      answeredCount: z.number().int().nonnegative().nullable(),
+    }),
+  }),
 ]);
-export type QuizSyncServerMessage = z.infer<typeof QuizSyncServerMessage>;
 
-export const QuizSyncClientMessage = z.discriminatedUnion('type', [
-  SyncHello,
-  SyncHeartbeat,
-]);
-export type QuizSyncClientMessage = z.infer<typeof QuizSyncClientMessage>;
+export type StudentServerEvent = z.infer<typeof zStudentServerEvent>;

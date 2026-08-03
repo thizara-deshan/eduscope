@@ -1,9 +1,15 @@
 node_modules/
 dist/
 build/
+.next/
 .env
 *.log
 revamp-guide/
 .agents/
 .claude/
 agent/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo

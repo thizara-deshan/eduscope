@@ -14,6 +14,12 @@ improvisation.
 - Data flows via TanStack Query + the WS store (zustand) only.
 - Commands are **202-async**: the UI reacts to WS state transitions, never
   assumes success. Optimistic UI only where the screen spec explicitly says so.
+- Screens read WS state through `apps/panel/src/store/selectors.ts` only: one
+  atomic selector per field, or `useWsShallow` for a multi-field read. A bare
+  `useWsStore(s => ({ … }))` re-renders on every store notification — zustand v5
+  has no automatic shallow equality.
+- `audio.levels` and other telemetry never enter React state. Subscribe to the
+  transient store imperatively and write a CSS custom property or paint a canvas.
 
 ## 2. Prototype usage (screens with coverage = full/partial)
 

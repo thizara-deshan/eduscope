@@ -1,0 +1,137 @@
+/* ============================================================
+   Eduscope design tokens — ported from /prototype per
+   frontend-conventions §6 and docs/design/screen-inventory.md §8.
+   Custom properties are the system; do NOT convert to Tailwind
+   utilities. Fixed light scheme — no dark mode, no theme toggle.
+   ============================================================ */
+
+:root {
+  /* §8.1 light palette */
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --surface-2: #f4f6fb;
+  --surface-3: #e9edf4;
+  --border: #d8dee9;
+  --border-strong: #c2cad8;
+  --text: #1c2430;
+  --text-muted: #5b6675;
+  --text-faint: #8a94a3;
+
+  /* §8.2 ink scope */
+  --ink: #101319;
+  --ink-2: #191d26;
+  --ink-3: #242a35;
+  --ink-border: #2c333f;
+  --on-ink: #f2f4f8;
+  --on-ink-muted: #9aa4b2;
+  --on-ink-faint: #6b7684;
+
+  /* §8.2 brand + semantics */
+  --accent: #2f6bed;
+  --accent-hover: #285cd0;
+  --accent-soft: rgba(138, 169, 236, 0.12);
+  --on-accent: #ffffff;
+  --brand-red: #e5231f;
+  --record: #e5342e;
+  --record-soft: rgba(229, 52, 46, 0.12);
+  --success: #1c9e6a;
+  --success-soft: rgba(28, 158, 106, 0.14);
+  --warning: #d98a12;
+  --gold: #e0a530;
+  --silver: #7b828e;
+  --bronze: #b06a3a;
+
+  /* §8.2 additions — "we are recording" must not read as "this destroys data".
+     Pending wireframe approval; defined here, used by no scaffold code. */
+  --danger: #c62828;
+  --danger-soft: rgba(198, 40, 40, 0.12);
+  --info: #2f6bed;
+  --info-soft: rgba(47, 107, 237, 0.12);
+
+  /* §8.4 type */
+  --sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
+  --fs-3xs: 11px;  --fs-2xs: 12px; --fs-xs: 13px;   --fs-sm: 14px;
+  --fs-base: 15px; --fs-md: 16px;  --fs-lg: 17px;   --fs-xl: 19px;
+  --fs-2xl: 21px;  --fs-3xl: 24px; --fs-timer: 38px; --fs-display: 46px;
+  --tracking-tight: -0.4px; --tracking-normal: 0; --tracking-wide: 0.4px;
+  --tracking-caps: 1px;     --tracking-caps-lg: 2.5px;
+
+  /* §8.5 spacing — 2px grid */
+  --sp-1: 4px;  --sp-2: 6px;  --sp-3: 8px;  --sp-4: 10px; --sp-5: 12px;
+  --sp-6: 14px; --sp-7: 16px; --sp-8: 18px; --sp-9: 20px; --sp-10: 24px;
+
+  /* §8.6 radii — NOTE: --radius-lg is reassigned from the prototype's 24px
+     to 14px, done here in one commit as §8.6 requires. */
+  --radius-xs: 6px;   --radius-sm: 10px;  --radius-md: 12px; --radius-lg: 14px;
+  --radius: 16px;     --radius-panel: 20px; --radius-xl: 24px;
+  --radius-pill: 999px; --radius-circle: 50%;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-md: 0 4px 10px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16);
+
+  /* §8.7 layout constants */
+  --panel-w: 1280px; --panel-h: 800px; --header-h: 62px; --sidebar-w: 430px;
+  --panelbar-head-h: 54px; --recframe-w: 4px; --modal-w: 680px;
+  --srctile-w: 152px; --tap-min: 44px; --tap-row: 56px; --tap-row-lg: 64px;
+
+  color-scheme: light;
+  font-family: var(--sans);
+  font-size: var(--fs-lg);
+  line-height: 1.45;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* §8.3 — the ink scope RE-DECLARES token values so nested us-* children adapt
+   for free. Do not fork a parallel class set. */
+.us-assistant {
+  --surface: #1e242f;
+  --surface-2: #262d3a;
+  --surface-3: #313a49;
+  --border: #2f3745;
+  --border-strong: #424d5f;
+  --text: #f2f4f8;
+  --text-muted: #9aa4b2;
+  --text-faint: #6e7987;
+  --accent: #5b8cff;
+  --accent-hover: #6f9bff;
+  --accent-soft: rgba(91, 140, 255, 0.16);
+  --record-soft: rgba(255, 91, 83, 0.16);
+  --success-soft: rgba(62, 207, 142, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: #d5d6d9;
+  color: var(--text);
+  overflow: hidden; /* the kiosk page NEVER scrolls; regions scroll internally */
+}
+
+button { font-family: inherit; cursor: pointer; }
+
+/* Every touch target meets the floor. */
+:where(button, a[role="button"], [role="tab"]) { min-height: var(--tap-min); }
+
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes pulse-rec {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* No information may be carried by motion alone (§8.6). */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
