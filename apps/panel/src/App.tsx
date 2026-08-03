@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router';
 import { AuthProvider } from './auth/auth-context.js';
 import { ClientProvider } from './client/client-provider.js';
+import { ScenarioOverlay } from './devtools/scenario-overlay.js';
 import { createQueryClient } from './query/query-client.js';
 import { createRouter } from './routes/router.js';
 import './styles/tokens.css';
@@ -34,6 +35,7 @@ export function App() {
         <AuthProvider>
           <Stage>
             <RouterProvider router={router} />
+            <ScenarioOverlay />
           </Stage>
         </AuthProvider>
       </ClientProvider>

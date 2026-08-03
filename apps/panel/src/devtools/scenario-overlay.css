@@ -1,0 +1,43 @@
+/* Invisible but real: 44px floor, absolute inside .us-panel, never fixed. */
+.us-devhotspot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  opacity: 0;
+  background: transparent;
+  border: 0;
+  z-index: 900;
+}
+
+.us-devoverlay {
+  position: absolute;
+  inset: var(--sp-10);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-10);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.us-devoverlay__head { display: flex; align-items: center; gap: var(--sp-5); }
+.us-devoverlay__list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+
+.us-devoverlay__option {
+  display: grid;
+  grid-template-columns: var(--tap-min) 220px 1fr;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tap-row);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-devoverlay__name { font-family: var(--mono); font-size: var(--fs-sm); }
+.us-devoverlay__desc { color: var(--text-muted); font-size: var(--fs-xs); }
