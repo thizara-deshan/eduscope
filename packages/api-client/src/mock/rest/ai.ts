@@ -91,6 +91,9 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
     },
 
     createQuestion: async (body: QuestionCreate): Promise<CommandAccepted> => {
+      if (!body.options || body.options.length === 0) {
+        throw new ProblemError({ status: 422, code: 'validation.invalid', title: 'createQuestion requires at least one option' });
+      }
       const accepted = accept('createQuestion');
       const questionId = seedId('question');
       const options = body.options.map((o, i) => ({

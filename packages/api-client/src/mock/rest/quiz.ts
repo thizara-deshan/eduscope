@@ -37,7 +37,11 @@ export function createQuizOperations({ world, seed }: RestContext) {
       });
     },
 
-    getLeaderboard: async (query: { sessionId: Ulid }): Promise<Leaderboard> =>
-      validated(zLeaderboard, { ...seed.leaderboard, sessionId: query.sessionId }),
+    getLeaderboard: async (query: { sessionId: Ulid }): Promise<Leaderboard> => {
+      if (!query.sessionId) {
+        throw new ProblemError({ status: 422, code: 'validation.invalid', title: 'getLeaderboard requires sessionId' });
+      }
+      return validated(zLeaderboard, { ...seed.leaderboard, sessionId: query.sessionId });
+    },
   };
 }
