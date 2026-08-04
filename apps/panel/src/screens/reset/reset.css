@@ -1,0 +1,34 @@
+/* S-02 §7 token sheet. No prototype coverage exists for this screen (route B). */
+
+.us-policy__heading {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-faint);
+  margin-bottom: var(--sp-2);
+}
+
+.us-policy__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.us-policyrow {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.us-policyrow--met {
+  color: var(--success);
+}
+
+.us-policyrow--unmet {
+  color: var(--text-faint);
+}
