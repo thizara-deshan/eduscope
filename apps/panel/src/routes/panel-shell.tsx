@@ -1,11 +1,17 @@
 import { Outlet, useLocation } from 'react-router';
 import { KeyboardHost } from '../keyboard/keyboard-host.js';
 import { OverlayHost, OverlayProvider } from '../overlays/overlay-host.js';
+import { AlertBanners } from '../shell/alert-banners.js';
 import { PanelHeader } from '../shell/panel-header.js';
 import { RecordingChrome } from '../shell/recording-chrome.js';
+import { StreamingWhilePaused } from '../shell/streaming-while-paused.js';
 
-/** No header before login (C-1: nothing is readable) and during a forced reset (C-3: 403). */
-const NO_HEADER_PATHS = new Set(['/login', '/login/reset']);
+/**
+ * No header, alerts or streaming-while-paused before login (C-1: nothing is
+ * readable) and during a forced reset (C-3: every authenticated read except
+ * `/auth/change-password` and `/auth/me` answers 403).
+ */
+const AUTH_ROUTE_PATHS = new Set(['/login', '/login/reset']);
 
 /**
  * The layout route element. S-03 (panel shell, chrome & alert host — "panel,
@@ -15,12 +21,14 @@ const NO_HEADER_PATHS = new Set(['/login', '/login/reset']);
  */
 export function PanelShell() {
   const location = useLocation();
-  const showHeader = !NO_HEADER_PATHS.has(location.pathname);
+  const showAuthenticatedChrome = !AUTH_ROUTE_PATHS.has(location.pathname);
 
   return (
     <OverlayProvider>
-      {showHeader && <PanelHeader />}
+      {showAuthenticatedChrome && <PanelHeader />}
       <RecordingChrome />
+      {showAuthenticatedChrome && <AlertBanners />}
+      {showAuthenticatedChrome && <StreamingWhilePaused />}
       <Outlet />
       <OverlayHost />
       <KeyboardHost />

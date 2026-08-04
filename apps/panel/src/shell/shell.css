@@ -204,3 +204,82 @@
   font-size: var(--fs-sm);
   font-weight: 600;
 }
+
+/* ---------- Alert banner host (screen-inventory §2 S-03) ---------- */
+
+.us-alertlane {
+  position: absolute;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  height: var(--tap-row);
+  z-index: 40;
+  pointer-events: none;
+}
+
+.us-alertlane:has(.us-alertbanner) {
+  pointer-events: auto;
+}
+
+.us-alertbanner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: 0 var(--sp-7);
+}
+
+.us-alertbanner--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.us-alertbanner--warning {
+  background: transparent;
+  color: var(--warning);
+}
+
+.us-alertbanner--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.us-alertbanner__text {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.us-alertbanner__count {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.us-alertbanner__ack {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+/* ---------- Still-streaming-while-paused (SM-Q-4) ---------- */
+
+.us-streamingpaused {
+  position: absolute;
+  bottom: var(--sp-8);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  padding: var(--sp-3) var(--sp-6);
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
