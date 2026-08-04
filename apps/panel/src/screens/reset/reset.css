@@ -33,6 +33,17 @@
   margin: 0;
 }
 
+.us-reset__headeraction {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-5);
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
 .us-reset__body {
   display: flex;
   gap: var(--sp-9);
