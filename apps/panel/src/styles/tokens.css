@@ -42,7 +42,8 @@
   --bronze: #b06a3a;
 
   /* §8.2 additions — "we are recording" must not read as "this destroys data".
-     Pending wireframe approval; defined here, used by no scaffold code. */
+     Approved with the S-01 and S-02 wireframes (2026-08-04); S-01 §7 and
+     S-02 §7 are the first consumers. */
   --danger: #c62828;
   --danger-soft: rgba(198, 40, 40, 0.12);
   --info: #2f6bed;

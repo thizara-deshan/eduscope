@@ -1,0 +1,80 @@
+/* S-01 §7, S-02 §7 — the shared auth atoms. Tokens only. */
+
+.us-authmsg {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+  box-sizing: border-box;
+}
+
+.us-authmsg--error {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.us-authmsg--warning {
+  color: var(--warning);
+  background: transparent;
+}
+
+.us-authmsg--info {
+  color: var(--info);
+  background: var(--info-soft);
+}
+
+.us-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.us-field__label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+}
+
+.us-field__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.us-input {
+  height: 48px;
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+  padding: 0 var(--sp-5);
+  box-sizing: border-box;
+  color: var(--text);
+}
+
+.us-input:disabled {
+  opacity: 0.6;
+}
+
+.us-field__reveal {
+  position: absolute;
+  right: var(--sp-2);
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+}
+
+.us-field__reveal:disabled {
+  opacity: 0.6;
+}
