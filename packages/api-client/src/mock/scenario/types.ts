@@ -9,7 +9,9 @@ export type ScenarioName =
   | 'llm-timeout'
   | 'disk-full'
   | 'ws-flap'
-  | 'quiz-network-loss';
+  | 'quiz-network-loss'
+  /** Added with contract v0.2 for Wave 1's auth screens (CG-11, CG-12). */
+  | 'auth-failures';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }

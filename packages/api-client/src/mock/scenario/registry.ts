@@ -5,6 +5,7 @@ import { llmTimeout } from './scripts/llm-timeout.js';
 import { diskFull } from './scripts/disk-full.js';
 import { wsFlap } from './scripts/ws-flap.js';
 import { quizNetworkLoss } from './scripts/quiz-network-loss.js';
+import { authFailures } from './scripts/auth-failures.js';
 import type { ForcedTransition, ScenarioName, ScenarioScript } from './types.js';
 
 /** The catalog, in overlay display order. Extend the scripts; never fork them. */
@@ -16,6 +17,7 @@ const CATALOG: Record<ScenarioName, ScenarioScript> = {
   'disk-full': diskFull,
   'ws-flap': wsFlap,
   'quiz-network-loss': quizNetworkLoss,
+  'auth-failures': authFailures,
 };
 
 export function getScenario(name: ScenarioName): ScenarioScript {

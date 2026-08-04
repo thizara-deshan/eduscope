@@ -5,14 +5,13 @@ import {
 } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
 import { validated, nowIsoZ, seedId } from '../seed/index.js';
-import { SEED_CREDENTIALS } from '../seed/users.js';
 import { requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
 
 const DEFAULT_LIMIT = 20;
 
 export function createUsersOperations(ctx: RestContext) {
-  const { world, engine, seed } = ctx;
+  const { world, engine, seed, credentials } = ctx;
 
   return {
     listUsers: async (query?: {
@@ -56,7 +55,7 @@ export function createUsersOperations(ctx: RestContext) {
         createdAt: nowIsoZ(world.clock),
       });
       seed.users.push(user);
-      SEED_CREDENTIALS[body.username] = body.password;
+      credentials[body.username] = body.password;
       return user;
     },
 
@@ -69,7 +68,7 @@ export function createUsersOperations(ctx: RestContext) {
       if (body.displayName !== undefined) row.displayName = body.displayName;
       if (body.role !== undefined) row.role = body.role;
       if (body.disabled !== undefined) row.disabled = body.disabled;
-      if (body.password !== undefined) SEED_CREDENTIALS[row.username] = body.password;
+      if (body.password !== undefined) credentials[row.username] = body.password;
       return validated(zUser, row);
     },
 

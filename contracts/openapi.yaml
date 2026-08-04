@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eduscope core-api — public REST surface
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contract v0 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
     is built against this contract on a mock adapter before any backend exists
@@ -31,8 +31,11 @@ info:
       decided from `role` server-side on every request (INV-U-4); operations
       marked `x-required-role: admin` reject lecturers with
       `403 not-authorized`. While `mustResetPassword` is true, every surface
-      except `/auth/change-password` and `/auth/me` answers
-      `403 auth.password-reset-required` (INV-U-3).
+      except `/auth/change-password`, `/auth/me` and `/auth/logout` answers
+      `403 auth.password-reset-required` (INV-U-3). `/auth/logout` is exempt
+      because revoking your own session is not what the reset lock protects —
+      the lock exists to stop a half-provisioned account *reaching* the
+      dashboard (v0.2, CG-13 / S02-D-3).
     - **Secrets never appear in any response**: stream keys, upload
       credentials, RTSP passwords, password hashes (INV-ST-1, INV-U-1, PF-17).
     - `x-decision: D-xx` marks paths/schemas whose SHAPE depends on an open
@@ -104,6 +107,11 @@ paths:
       tags: [auth]
       operationId: login
       summary: Unified login for both roles (LP-1); creates an AuthSession
+      description: |
+        `401` carries `auth.invalid-credentials` for a wrong username/password
+        pair and `auth.account-disabled` for a correct pair on a `disabled`
+        User (v0.2, CG-10 / S01-D-3). The two are deliberately distinguishable:
+        S-01 words the second as an account problem, not a credential problem.
       security: []
       requestBody:
         required: true
@@ -142,6 +150,10 @@ paths:
       tags: [auth]
       operationId: logout
       summary: Revoke the current AuthSession (revokedReason=logout)
+      description: |
+        Exempt from the `mustResetPassword` lock (see Conventions → Auth; v0.2,
+        CG-13 / S02-D-3), so S-02's forced-reset screen can genuinely end the
+        session instead of leaving a live one on an abandoned kiosk.
       responses:
         '204': { description: Session revoked. }
 
@@ -1715,6 +1727,7 @@ components:
           description: Stable machine code — see packages/shared ErrorCode for the closed list.
           enum:
             - auth.invalid-credentials
+            - auth.account-disabled
             - auth.session-revoked
             - auth.password-reset-required
             - not-authorized
@@ -1739,10 +1752,31 @@ components:
         detail: { type: string }
         meta:
           type: object
-          description: Named-reason detail (e.g. unbound roleId; recorder owner for LP-6). Never secrets (INV-ST-1).
+          description: |
+            Named-reason detail (e.g. unbound roleId; recorder owner for LP-6).
+            Never secrets (INV-ST-1). Still open-ended; `reason` is the one key
+            with a declared shape (v0.2, CG-11 / S01-D-5).
+          properties:
+            reason:
+              allOf:
+                - $ref: '#/components/schemas/SessionRevokedReason'
+              description: |
+                Set on `auth.session-revoked` only, and set on every occurrence
+                of it — it is what lets a client word "your session ended"
+                correctly instead of vaguely (S-01 `session expired`). `takeover`
+                is R-21's `AuthSession.revokedReason`; S-06 reads the same
+                vocabulary on the other side of that event.
           additionalProperties: true
 
     # ── enums (closed sets — adding a value is a contract bump) ──
+    SessionRevokedReason:
+      type: string
+      enum: [expired, logout, takeover, admin]
+      description: |
+        Why an AuthSession stopped being valid — the value of
+        `Problem.meta.reason` on `auth.session-revoked`. Mirrors
+        `AuthSession.revokedReason` (domain model), so `takeover` here and
+        R-21's takeover are the same fact.
     SourceRoleId:
       type: string
       enum: [presentation, lecturer-cam, students-cam, mic-lecturer, mic-room]
@@ -1902,7 +1936,19 @@ components:
       required: [currentPassword, newPassword]
       properties:
         currentPassword: { type: string }
-        newPassword: { type: string, minLength: 8, maxLength: 256 }
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 256
+          pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)'
+          description: |
+            Composition is legacy parity (B-42): ≥8 characters **and** at least
+            one digit, one uppercase and one lowercase letter (v0.2, CG-12 /
+            S02-D-1). Length lives in minLength/maxLength; `pattern` carries
+            only the three composition rules, so the two never drift.
+            A violation is `422 validation.invalid`. S-02's `password-policy.ts`
+            is the client mirror of exactly this rule and must not diverge — a
+            checklist that drifts promises acceptance the server will refuse.
 
     # ── recording (Context C) ──
     RecordingStateSnapshot:

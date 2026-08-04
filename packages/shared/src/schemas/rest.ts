@@ -29,8 +29,14 @@ export type Page<T> = { items: T[]; nextCursor: string | null };
 // keeps unknown keys instead of stripping them.
 const zOpenObject = z.object({}).catchall(z.unknown());
 
+// Problem.meta is no longer *bare* open-ended: since v0.2 (CG-11 / S01-D-5) it
+// declares one typed key, `reason: SessionRevokedReason`, alongside
+// `additionalProperties: true`. So the override is built FROM the generated
+// shape rather than replacing it with `zOpenObject` — replacing it would throw
+// the contract's own typing away and re-open the drift this file exists to
+// close. Adding another declared key to `meta` upstream needs no edit here.
 export const zProblem = generated.zProblem.extend({
-  meta: zOpenObject.optional(),
+  meta: generated.zProblem.shape.meta.unwrap().catchall(z.unknown()).optional(),
 });
 
 export const zLogEntry = generated.zLogEntry.extend({

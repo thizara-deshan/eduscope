@@ -16,6 +16,7 @@ export const zProblem = z.object({
     status: z.number().int(),
     code: z.enum([
         'auth.invalid-credentials',
+        'auth.account-disabled',
         'auth.session-revoked',
         'auth.password-reset-required',
         'not-authorized',
@@ -39,8 +40,22 @@ export const zProblem = z.object({
     ]),
     title: z.string(),
     detail: z.string().optional(),
-    meta: z.object({}).optional()
+    meta: z.object({
+        reason: z.enum([
+            'expired',
+            'logout',
+            'takeover',
+            'admin'
+        ]).optional()
+    }).optional()
 });
+
+export const zSessionRevokedReason = z.enum([
+    'expired',
+    'logout',
+    'takeover',
+    'admin'
+]);
 
 export const zSourceRoleId = z.enum([
     'presentation',
@@ -319,7 +334,7 @@ export const zRefreshResponse = z.object({
 
 export const zChangePasswordRequest = z.object({
     currentPassword: z.string(),
-    newPassword: z.string().min(8).max(256)
+    newPassword: z.string().min(8).max(256).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
 });
 
 export const zRecordingStateSnapshot = z.object({

@@ -1,10 +1,9 @@
 import {
-  zLoginResponse, zRefreshResponse, zUser,
+  zChangePasswordRequest, zLoginResponse, zRefreshResponse, zUser,
   type ChangePasswordRequest, type LoginRequest, type LoginResponse,
   type RefreshResponse, type User,
 } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
-import { SEED_CREDENTIALS } from '../seed/users.js';
 import { validated } from '../seed/index.js';
 import type { RestContext } from './index.js';
 
@@ -44,7 +43,7 @@ function issueTokenPair() {
 }
 
 export function createAuthOperations(ctx: RestContext) {
-  const { world, engine, seed } = ctx;
+  const { world, engine, seed, credentials } = ctx;
 
   return {
     login: async (body: LoginRequest): Promise<LoginResponse> => {
@@ -52,11 +51,22 @@ export function createAuthOperations(ctx: RestContext) {
       if (refusal) throw new ProblemError(refusal);
 
       const user = seed.users.find((u) => u.username === body.username);
-      if (!user || SEED_CREDENTIALS[body.username] !== body.password) {
+      if (!user || credentials[body.username] !== body.password) {
         throw new ProblemError({
           status: 401,
           code: 'auth.invalid-credentials',
           title: 'Invalid username or password',
+        });
+      }
+      // Contract v0.2 (CG-10 / S01-D-3). Checked AFTER the credential pair, as
+      // openapi.yaml's `login` description words it: you must already know the
+      // password to learn that the account is disabled, which is the narrow
+      // enumeration S01-D-3 accepted. No session is created.
+      if (user.disabled) {
+        throw new ProblemError({
+          status: 401,
+          code: 'auth.account-disabled',
+          title: 'Account is not active',
         });
       }
       world.data['auth.currentUserId'] = user.id;
@@ -71,11 +81,26 @@ export function createAuthOperations(ctx: RestContext) {
       const refusal = engine.onCommand('refreshToken');
       if (refusal) throw new ProblemError(refusal);
       if (!body.refreshToken) {
-        throw new ProblemError({ status: 401, code: 'auth.session-revoked', title: 'Session revoked' });
+        // Contract v0.2 (CG-11 / S01-D-5): `auth.session-revoked` always names
+        // its reason, so S-01 can word `session expired` instead of guessing.
+        // `expired` is the ordinary case; `takeover` (R-21), `admin` and
+        // `logout` arrive through the scenario engine — see scripts/auth-failures.ts.
+        throw new ProblemError({
+          status: 401,
+          code: 'auth.session-revoked',
+          title: 'Session revoked',
+          meta: { reason: 'expired' },
+        });
       }
       return validated(zRefreshResponse, { tokens: issueTokenPair() });
     },
 
+    /**
+     * Never gated on `mustResetPassword`: contract v0.2 exempts `/auth/logout`
+     * from the reset lock alongside `/auth/change-password` and `/auth/me`
+     * (CG-13 / S02-D-3), so S-02's Sign out genuinely revokes rather than
+     * leaving a live session on an abandoned kiosk.
+     */
     logout: async (): Promise<void> => {
       const refusal = engine.onCommand('logout');
       if (refusal) throw new ProblemError(refusal);
@@ -88,15 +113,30 @@ export function createAuthOperations(ctx: RestContext) {
     changePassword: async (body: ChangePasswordRequest): Promise<void> => {
       const refusal = engine.onCommand('changePassword');
       if (refusal) throw new ProblemError(refusal);
+
+      // Contract v0.2 (CG-12 / S02-D-1): ≥8 + digit + uppercase + lowercase,
+      // legacy parity with B-42. Validated with the schema GENERATED from
+      // openapi.yaml rather than a hand-written regex, so this validator cannot
+      // drift from the contract that S-02's `password-policy.ts` mirrors —
+      // drift is the one defect that screen cannot tolerate. Body validation
+      // precedes the credential check, as a 422 is about the request, not the user.
+      if (!zChangePasswordRequest.safeParse(body).success) {
+        throw new ProblemError({
+          status: 422,
+          code: 'validation.invalid',
+          title: 'New password does not meet the password policy',
+        });
+      }
+
       const user = currentUser(ctx);
-      if (SEED_CREDENTIALS[user.username] !== body.currentPassword) {
+      if (credentials[user.username] !== body.currentPassword) {
         throw new ProblemError({
           status: 401,
           code: 'auth.invalid-credentials',
           title: 'Current password is incorrect',
         });
       }
-      SEED_CREDENTIALS[user.username] = body.newPassword;
+      credentials[user.username] = body.newPassword;
       const row = seed.users.find((u) => u.id === user.id)!;
       row.mustResetPassword = false;
       return undefined;

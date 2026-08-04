@@ -22,23 +22,44 @@ export type CommandAccepted = {
 /**
  * Stable machine code — see packages/shared ErrorCode for the closed list.
  */
-export type Code = 'auth.invalid-credentials' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
+export type Code = 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
 
 export type Problem = {
     status: number;
     /**
      * Stable machine code — see packages/shared ErrorCode for the closed list.
      */
-    code: 'auth.invalid-credentials' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
+    code: 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
     title: string;
     detail?: string;
     /**
-     * Named-reason detail (e.g. unbound roleId; recorder owner for LP-6). Never secrets (INV-ST-1).
+     * Named-reason detail (e.g. unbound roleId; recorder owner for LP-6).
+     * Never secrets (INV-ST-1). Still open-ended; `reason` is the one key
+     * with a declared shape (v0.2, CG-11 / S01-D-5).
+     *
      */
     meta?: {
-        [key: string]: unknown;
+        /**
+         * Set on `auth.session-revoked` only, and set on every occurrence
+         * of it — it is what lets a client word "your session ended"
+         * correctly instead of vaguely (S-01 `session expired`). `takeover`
+         * is R-21's `AuthSession.revokedReason`; S-06 reads the same
+         * vocabulary on the other side of that event.
+         *
+         */
+        reason?: SessionRevokedReason;
+        [key: string]: unknown | SessionRevokedReason | undefined;
     };
 };
+
+/**
+ * Why an AuthSession stopped being valid — the value of
+ * `Problem.meta.reason` on `auth.session-revoked`. Mirrors
+ * `AuthSession.revokedReason` (domain model), so `takeover` here and
+ * R-21's takeover are the same fact.
+ *
+ */
+export type SessionRevokedReason = 'expired' | 'logout' | 'takeover' | 'admin';
 
 /**
  * Canonical vocabulary (domain model §4.5). mic-room reserved, unbound in V1 (INV-SR-2).
@@ -165,6 +186,16 @@ export type RefreshResponse = {
 
 export type ChangePasswordRequest = {
     currentPassword: string;
+    /**
+     * Composition is legacy parity (B-42): ≥8 characters **and** at least
+     * one digit, one uppercase and one lowercase letter (v0.2, CG-12 /
+     * S02-D-1). Length lives in minLength/maxLength; `pattern` carries
+     * only the three composition rules, so the two never drift.
+     * A violation is `422 validation.invalid`. S-02's `password-policy.ts`
+     * is the client mirror of exactly this rule and must not diverge — a
+     * checklist that drifts promises acceptance the server will refuse.
+     *
+     */
     newPassword: string;
 };
 

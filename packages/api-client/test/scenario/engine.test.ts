@@ -27,7 +27,10 @@ describe('scenario engine', () => {
     for (const s of listScenarios()) createScenarioEngine(s).reset();
   });
 
-  it('ships exactly the seven catalog scripts', () => {
+  it('ships exactly the catalog scripts, in overlay order', () => {
+    // Wave 0 shipped the first seven (frontend-conventions §4). `auth-failures`
+    // was appended with contract v0.2 for Wave 1's auth screens — the catalog is
+    // extended, never forked, so this list grows by append and by nothing else.
     expect(listScenarios().map((s) => s.name)).toEqual([
       'happy',
       'start-fails',
@@ -36,6 +39,7 @@ describe('scenario engine', () => {
       'disk-full',
       'ws-flap',
       'quiz-network-loss',
+      'auth-failures',
     ]);
   });
 

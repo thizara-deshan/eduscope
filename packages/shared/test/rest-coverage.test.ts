@@ -86,4 +86,37 @@ describe('rest schema coverage', () => {
       ownerUserId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
     });
   });
+
+  // ── contract v0.2 (docs/design/contract-amendments.md, 2026-08-04) ──
+
+  it('CG-10: auth.account-disabled is a Problem code', () => {
+    expect(rest.zProblem.shape.code.options).toContain('auth.account-disabled');
+  });
+
+  it('CG-11: Problem.meta.reason is typed and closed, and the catchall survives it', () => {
+    const revoked = {
+      status: 401,
+      code: 'auth.session-revoked',
+      title: 'Session revoked',
+      meta: { reason: 'takeover', revokedBy: 'D. Admin' },
+    };
+    // The override in rest.ts must keep BOTH: the declared key stays typed, and
+    // undeclared keys are still preserved rather than stripped.
+    expect(rest.zProblem.parse(revoked).meta).toEqual({
+      reason: 'takeover',
+      revokedBy: 'D. Admin',
+    });
+    expect(rest.zSessionRevokedReason.options).toEqual(['expired', 'logout', 'takeover', 'admin']);
+    expect(() => rest.zProblem.parse({ ...revoked, meta: { reason: 'because' } })).toThrow();
+  });
+
+  it('CG-12: newPassword is legacy parity — 8+ with a digit, an upper and a lower (B-42)', () => {
+    const ok = (newPassword: string) =>
+      rest.zChangePasswordRequest.safeParse({ currentPassword: 'x', newPassword }).success;
+    expect(ok('Lecture-hall-7')).toBe(true);
+    expect(ok('Short1A')).toBe(false); // < 8
+    expect(ok('alllowercase1')).toBe(false); // no uppercase
+    expect(ok('ALLUPPERCASE1')).toBe(false); // no lowercase
+    expect(ok('NoDigitsHere')).toBe(false); // no digit
+  });
 });

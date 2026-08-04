@@ -8,6 +8,7 @@ import { createRestOperations } from './rest/index.js';
 import { createScenarioEngine, getScenario } from './scenario/registry.js';
 import type { ScenarioName, WorldSeed } from './scenario/types.js';
 import { createSeed, type Seed } from './seed/index.js';
+import { createCredentialStore } from './seed/users.js';
 import { createConnectionController } from './events/connection.js';
 import { createEnvelopeStream } from './events/emitter.js';
 import { createPreviewChannel } from './events/preview.js';
@@ -84,7 +85,10 @@ export function createMockClient(
     // requires.
     bootstrapFromSeed(world, seed, script.seed ?? {});
 
-    rest = createRestOperations({ world, engine, seed });
+    // Minted here, beside `createSeed()`, so it has exactly the seed's
+    // lifetime: a `switchScenario` rebuilds the world, so it must also discard
+    // any password a previous script's run changed.
+    rest = createRestOperations({ world, engine, seed, credentials: createCredentialStore() });
     // `start()` returns void (post-Task-11-fix ConnectionController), unlike
     // the brief's imagined "returns a stop callback" shape — call it for its
     // side effect and push the bound `stop` method itself onto teardown.

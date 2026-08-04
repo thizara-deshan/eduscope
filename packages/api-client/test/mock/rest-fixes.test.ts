@@ -7,6 +7,7 @@ import { ALL_MACHINES } from '../../src/mock/machines/index.js';
 import { createScenarioEngine } from '../../src/mock/scenario/engine.js';
 import { getScenario } from '../../src/mock/scenario/registry.js';
 import { createSeed } from '../../src/mock/seed/index.js';
+import { createCredentialStore } from '../../src/mock/seed/users.js';
 import { createRestOperations } from '../../src/mock/rest/index.js';
 
 /**
@@ -34,7 +35,12 @@ function build() {
   for (const m of ALL_MACHINES) world.registerMachine(m);
   const engine = createScenarioEngine(getScenario('happy'));
   const seed = createSeed();
-  const ops = createRestOperations({ world, engine, seed }) as unknown as EduscopeClient;
+  const ops = createRestOperations({
+    world,
+    engine,
+    seed,
+    credentials: createCredentialStore(),
+  }) as unknown as EduscopeClient;
   return { world, ops, seed };
 }
 

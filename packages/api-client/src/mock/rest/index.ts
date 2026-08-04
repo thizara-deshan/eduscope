@@ -2,6 +2,7 @@ import type { PanelOperationId } from '@eduscope/shared';
 import type { ScenarioEngine } from '../scenario/engine.js';
 import type { MockWorld } from '../world.js';
 import type { Seed } from '../seed/index.js';
+import type { CredentialStore } from '../seed/users.js';
 import { createAuthOperations } from './auth.js';
 import { createRecordingOperations } from './recording.js';
 import { createChannelsOperations } from './channels.js';
@@ -22,6 +23,13 @@ export interface RestContext {
   readonly world: MockWorld;
   readonly engine: ScenarioEngine;
   readonly seed: Seed;
+  /**
+   * Deliberately a sibling of `seed`, not a member of it: `Seed` is the
+   * contract-valid entity graph, and no entity in it may carry a password
+   * (INV-U-1). The reference is readonly; the map itself is mutable, because
+   * `changePassword`/`updateUser` write to it.
+   */
+  readonly credentials: CredentialStore;
 }
 
 /** One factory per contracts/openapi.yaml tag; all 77 PanelOperationIds land in the merged object below. */
