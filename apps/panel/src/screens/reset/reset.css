@@ -1,5 +1,66 @@
 /* S-02 §7 token sheet. No prototype coverage exists for this screen (route B). */
 
+.us-reset {
+  height: calc(var(--panel-h) - var(--osk-h, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  transition: height 0.2s ease;
+}
+
+.us-reset__card {
+  width: var(--modal-w);
+  padding: var(--sp-10);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.us-reset__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--sp-7);
+}
+
+.us-reset__title {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  margin: 0;
+}
+
+.us-reset__body {
+  display: flex;
+  gap: var(--sp-9);
+  align-items: flex-start;
+}
+
+.us-reset__col--left {
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.us-reset__col--right {
+  width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.us-reset__reason {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--info-soft);
+  border-radius: var(--radius-md);
+  padding: var(--sp-5);
+}
+
 .us-policy__heading {
   font-size: var(--fs-2xs);
   font-weight: 700;
