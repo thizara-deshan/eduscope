@@ -41,3 +41,22 @@
 
 .us-devoverlay__name { font-family: var(--mono); font-size: var(--fs-sm); }
 .us-devoverlay__desc { color: var(--text-muted); font-size: var(--fs-xs); }
+
+.us-devoverlay__transport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.us-devoverlay__transport button {
+  min-height: var(--tap-min);
+}
+
+/* Hidden, not display:none, so it stays queryable (data-recording-state). */
+.us-devoverlay__mirror {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

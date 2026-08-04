@@ -1,11 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { listScenarios, type ScenarioName } from '@eduscope/api-client';
 import { useMockClient } from '../client/client-provider.js';
+import { useRecordingState } from '../store/selectors.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useLongPress } from './use-long-press.js';
 import './scenario-overlay.css';
 
 const LONG_PRESS_MS = 2_000;
+
+/**
+ * Two scaffold-only seams (W1-D-5, moved here from `App.tsx`'s `ScaffoldShell`):
+ *  - `data-recording-state` mirrors the WS store so e2e asserts on STATE, not
+ *    on screen markup that later waves replace wholesale.
+ *  - `window.__renderCount` counts commits so Gate 1e can prove telemetry
+ *    never renders.
+ * Moving both here (rather than leaving them unconditional in App.tsx) means
+ * they inherit this overlay's MOCK_ADAPTER gate — neither reaches a kiosk build.
+ */
+declare global {
+  interface Window {
+    __renderCount?: number;
+  }
+}
 
 /**
  * The scenario dev overlay (frontend-conventions §4, screen-inventory Wave 0).
@@ -21,9 +37,18 @@ const LONG_PRESS_MS = 2_000;
  */
 export function ScenarioOverlay() {
   const client = useMockClient();
+  const recordingState = useRecordingState();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ScenarioName>(client?.scenario ?? 'happy');
   const longPress = useLongPress(LONG_PRESS_MS, () => setOpen(true));
+
+  // Gate 1e counts COMMITS of this component to prove telemetry never
+  // renders. It lives in an effect, not the render body: StrictMode renders
+  // twice and throws one away, so a counter incremented during render reports
+  // 2x per commit and mutates module state from a function that must stay pure.
+  useEffect(() => {
+    window.__renderCount = (window.__renderCount ?? 0) + 1;
+  });
 
   if (!client) return null;
 
@@ -33,8 +58,13 @@ export function ScenarioOverlay() {
     setActive(name);
   };
 
+  // Dev tool only — refusals are caught and ignored; S-04 renders them for
+  // real once the wave that owns it lands.
+  const swallow = (p: Promise<unknown>) => void p.catch(() => {});
+
   return (
     <>
+      <div data-recording-state={recordingState} className="us-devoverlay__mirror" />
       <button
         type="button"
         data-testid="scenario-hotspot"
@@ -69,6 +99,38 @@ export function ScenarioOverlay() {
               </li>
             ))}
           </ul>
+          <div className="us-devoverlay__transport">
+            <button
+              type="button"
+              data-testid="e2e-start-recording"
+              onClick={() => swallow(client.startRecording())}
+            >
+              Start
+            </button>
+            <button type="button" data-testid="dev-pause" onClick={() => swallow(client.pauseRecording())}>
+              Pause
+            </button>
+            <button type="button" data-testid="dev-resume" onClick={() => swallow(client.resumeRecording())}>
+              Resume
+            </button>
+            <button type="button" data-testid="dev-stop" onClick={() => swallow(client.stopRecording())}>
+              Stop
+            </button>
+            <button
+              type="button"
+              data-testid="dev-meeting-on"
+              onClick={() => swallow(client.enableChannel('meeting'))}
+            >
+              Meeting on
+            </button>
+            <button
+              type="button"
+              data-testid="dev-meeting-off"
+              onClick={() => swallow(client.disableChannel('meeting'))}
+            >
+              Meeting off
+            </button>
+          </div>
         </div>
       )}
     </>

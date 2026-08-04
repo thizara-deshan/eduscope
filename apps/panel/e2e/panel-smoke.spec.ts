@@ -40,6 +40,7 @@ test.describe('panel scaffold smoke', () => {
       'idle',
     );
 
+    await openScenarioOverlay(page);
     await page.getByTestId('e2e-start-recording').click();
 
     // R-01 -> starting, then R-05 -> recording ~1.2 s later (T-START-CONFIRM: 5 s).
@@ -60,7 +61,6 @@ test.describe('panel scaffold smoke', () => {
       await openScenarioOverlay(page);
       await page.getByRole('radio', { name: /start-fails/ }).check();
       await expect(page.getByTestId('active-scenario')).toHaveText('start-fails');
-      await page.getByRole('button', { name: /close scenarios/i }).click();
 
       const seen: string[] = [];
       await page.exposeFunction('__recordState', (s: string) => {

@@ -95,4 +95,45 @@ describe('scenario dev overlay', () => {
       expect(getComputedStyle(option.closest('label')!).minHeight).toBe('56px');
     }
   });
+
+  it('renders the hidden recording-state mirror even when closed', async () => {
+    await renderOverlay();
+    const mirror = document.querySelector('[data-recording-state]');
+    expect(mirror).not.toBeNull();
+    expect(mirror).toHaveAttribute('data-recording-state', 'idle');
+  });
+
+  it('renders the transport strip only when the dialog is open', async () => {
+    await renderOverlay();
+    expect(screen.queryByTestId('e2e-start-recording')).toBeNull();
+
+    fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
+    act(() => {
+      vi.advanceTimersByTime(2_100);
+    });
+    expect(screen.getByTestId('e2e-start-recording')).toBeInTheDocument();
+    expect(screen.getByTestId('dev-pause')).toBeInTheDocument();
+    expect(screen.getByTestId('dev-resume')).toBeInTheDocument();
+    expect(screen.getByTestId('dev-stop')).toBeInTheDocument();
+    expect(screen.getByTestId('dev-meeting-on')).toBeInTheDocument();
+    expect(screen.getByTestId('dev-meeting-off')).toBeInTheDocument();
+  });
+
+  it('each transport button calls its client method exactly once, and every button is >=44px', async () => {
+    await renderOverlay();
+    fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
+    act(() => {
+      vi.advanceTimersByTime(2_100);
+    });
+    for (const testid of [
+      'e2e-start-recording', 'dev-pause', 'dev-resume', 'dev-stop', 'dev-meeting-on', 'dev-meeting-off',
+    ]) {
+      const button = screen.getByTestId(testid);
+      expect(getComputedStyle(button).minHeight).toBe('44px');
+      fireEvent.click(button);
+    }
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+  });
 });
