@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router';
+import { KeyboardHost } from '../keyboard/keyboard-host.js';
 import { OverlayHost, OverlayProvider } from '../overlays/overlay-host.js';
 
 /**
@@ -13,6 +14,7 @@ export function PanelShell() {
       {/* Wave 1: <PanelHeader/> and the recording frame mount here. */}
       <Outlet />
       <OverlayHost />
+      <KeyboardHost />
     </OverlayProvider>
   );
 }
