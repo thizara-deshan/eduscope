@@ -1,9 +1,15 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import type { UserRole } from '@eduscope/shared';
 import { RequireRole } from '../auth/require-role.js';
+import { LoginScreen } from '../screens/login/login-screen.js';
 import { PanelShell } from './panel-shell.js';
 import { RouteError } from './route-error.js';
 import { ScreenPlaceholder } from './screens.js';
+
+/** Screens with a real implementation. Everything else is still a placeholder. */
+const SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
+  'S-01': () => <LoginScreen />,
+};
 
 interface RouteSpec {
   readonly path: string;
@@ -34,7 +40,8 @@ export const ROUTES: readonly RouteSpec[] = [
 ];
 
 const screenRoutes: RouteObject[] = ROUTES.map(({ path, screen, title, gate }) => {
-  const element = <ScreenPlaceholder id={screen} title={title} />;
+  const Real = SCREEN_ELEMENTS[screen];
+  const element = Real ? <Real /> : <ScreenPlaceholder id={screen} title={title} />;
   return {
     path,
     element:
