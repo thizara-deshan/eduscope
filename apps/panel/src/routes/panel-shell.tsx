@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router';
 import { KeyboardHost } from '../keyboard/keyboard-host.js';
 import { OverlayHost, OverlayProvider } from '../overlays/overlay-host.js';
 import { PanelHeader } from '../shell/panel-header.js';
+import { RecordingChrome } from '../shell/recording-chrome.js';
 
 /** No header before login (C-1: nothing is readable) and during a forced reset (C-3: 403). */
 const NO_HEADER_PATHS = new Set(['/login', '/login/reset']);
@@ -19,6 +20,7 @@ export function PanelShell() {
   return (
     <OverlayProvider>
       {showHeader && <PanelHeader />}
+      <RecordingChrome />
       <Outlet />
       <OverlayHost />
       <KeyboardHost />
