@@ -283,3 +283,21 @@
   font-size: var(--fs-xs);
   font-weight: 700;
 }
+
+/* ---------- Offline marker (U-2, state-machines §5.5) ---------- */
+
+.us-offline {
+  position: absolute;
+  top: calc((var(--header-h) - 20px) / 2);
+  left: var(--sp-8);
+  z-index: 30;
+  color: var(--on-ink-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* The dimming hook — later waves' live regions opt in via this attribute. */
+.us-shell--stale [data-live] {
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
