@@ -207,3 +207,56 @@ Discovery cross-refs added; outcomes are verbatim from the seed register.
 | A-20 | Recordings library rules | Lecturers + admins play; only admins delete; auto-delete after 14 days. | Governs matrix §1 FM row, §2c rows, §3 cleanup row; disk-pressure detail is D-15 |
 | A-21 | User management | Bulk Excel import required; admin section for IT staff; no migration from old devices. | Matrix §1a UM row (B-44 validation is the baseline contract); role collapse feeds D-20 |
 | A-22 | Projector question flow | Send-to-projector = overlay/switch from slides passthrough to question + join QR; simultaneously live on the quiz app. Leaderboard never on projector. | Matrix §4 projector rows |
+
+---
+
+## 5. Decided during wireframe approval — S-01 / S-02 (2026-08-04)
+
+Nine questions surfaced while designing **S-01 Login** (§9 **W-13**) and
+**S-02 Forced password reset** (§9 **W-1**) — the three that shape the
+wireframes, plus six that were slated to land here as `D-22`…`D-27`. All nine
+were **answered in session and none remains open**, so none becomes a `D-xx`
+register entry. They are recorded below as eight decisions (Sign out and the
+`/auth/logout` exemption resolved together). This register is the single index of
+decisions taken; the full rationale, wireframes and consequences live in
+[S-01-design.md](../design/screens/S-01-design.md) and
+[S-02-design.md](../design/screens/S-02-design.md).
+
+Four of the six imply a **contract change**. Those are listed again in §5.2
+because they block Wave 1 and are not yet in `contracts/openapi.yaml`.
+
+### 5.1 Outcomes
+
+| Id | Question | Outcome | Contract change? |
+|----|----------|---------|------------------|
+| **S01-D-1** | The prototype's role picker is removed (role comes from `getMe`, LP-1) — what fills the hole in the card? | **Nothing.** The card shrinks. Only `login` and `refreshToken` carry `security: []`, so S-01 has no readable data at all before a successful POST — `getProvisioning` (hall name), `/health` and `getMe` are all bearer-gated. A device-identity block would need a new kiosk runtime-config surface, and B-46's disposition explicitly rejects baking device values into the frontend. The reclaimed ~90 px becomes a permanently-reserved message slot | no |
+| **S02-D-1** | Password policy — the contract enforces `minLength: 8` only; B-42 enforced ≥8 + digit + upper + lower | **Legacy parity**: ≥8 + digit + uppercase + lowercase. No security regression against the system being replaced, and no retraining. The server rule and the client's `password-policy.ts` must be byte-identical or the live checklist promises acceptance it cannot deliver | **yes — §5.2 #3** |
+| **S02-D-2** | `ChangePasswordRequest` requires `currentPassword` even on the forced path — does the user re-type the password they entered at S-01 seconds earlier? | **Yes — three fields on both paths.** Replaying the captured password would hold plaintext in JS memory across a route transition on a shared kiosk *and* would still need the three-field form as a fallback for a reload or restored token, so it builds both forms to save one field | no |
+| **S01-D-3** | `Problem.code` has no disabled-account code, but S-01 specifies a distinct message — and a distinct message is account enumeration | **Add `auth.account-disabled` and show the message.** Enumeration is a weak threat when the attacker must already be standing at a kiosk in a lecture hall on the campus LAN, and INT-1 named account flows a V1 must-have precisely because *"my password stopped working"* was a real support burden | **yes — §5.2 #2** |
+| **S01-D-5** | `auth.session-revoked` cannot distinguish expiry from logout-elsewhere from an **R-21** takeover, but S-01's `session expired` state must show *why* | **`Problem.meta.reason`** = `expired \| logout \| takeover \| admin`. `Problem` already carries a free-form `meta`, so this is additive and leaves the closed `code` enum alone — and it is the only option that carries R-21's takeover through to the screen, which W-2 (S-06) needs anyway | **yes — §5.2 #1** |
+| **S02-D-3** | `/auth/logout` is not exempt from `403 auth.password-reset-required`, so a user parked on S-02 cannot end their session | **Exempt it.** Revoking your own session is not a surface the reset lock protects — the lock exists to stop a half-provisioned account *reaching* the dashboard, and logging out is the opposite of that. Without the exemption, an abandoned kiosk carries a live `AuthSession` until expiry | **yes — §5.2 #4** |
+| **S02-D-4** | Password-visibility reveal — where, given it may only be an explicit ≥44 px button? | **S-02's *New password* field only.** It is the one field where a typo is unrecoverable and the confirm field can say *that* you mistyped but never *what* you typed. Every other placement adds bystander exposure in a lecture hall for no ergonomic gain | no |
+| **S02-D-8** | S-02's `voluntary` path is specified as "reached from the header menu", but S-03 enumerates only a logout control — there is no menu | **S-03's header user name becomes a `▾` menu** with two ≥56 px rows: *Change password* → `/login/reset` carrying `state.from`, and *Sign out*. Smallest change that satisfies LP-2's second half; the header already hosts logout and already shows the user | no |
+
+### 5.2 Contract changes these decisions imply (v0.2)
+
+All four are **additive** and all four **block Wave 1**. They also belong in
+[screen-inventory §10](../design/screen-inventory.md#10-contract-gaps) as CG
+rows; the design docs name them but deliberately do not edit §10.
+
+| # | File | Change | From |
+|---|------|--------|------|
+| 1 | `contracts/openapi.yaml` — `Problem.code` | Add `auth.account-disabled` | S01-D-3 |
+| 2 | `contracts/openapi.yaml` — `Problem` | Add `meta.reason`: `expired \| logout \| takeover \| admin`, set on `auth.session-revoked`. **No change to the closed `code` enum** | S01-D-5 |
+| 3 | `contracts/openapi.yaml` — `ChangePasswordRequest.newPassword` | Enforce ≥8 **+ digit + uppercase + lowercase** server-side; today the schema carries `minLength: 8` and nothing else | S02-D-1 |
+| 4 | `contracts/openapi.yaml` — §Auth prose (lines 33-35) | Add `/auth/logout` to the `mustResetPassword` exemption list, alongside `/auth/change-password` and `/auth/me` | S02-D-3 |
+
+### 5.3 Also closed by these wireframes
+
+The two new semantic colours flagged in
+[screen-inventory §8.2](../design/screen-inventory.md#82-color--ink-scope-semantics-brand)
+as *"needing approval with the wireframes"* — `--danger`/`--danger-soft` and
+`--info`/`--info-soft` — are consumed by both screens (S-01's `rejected` and
+`backend unreachable`, S-02's `mismatch` and forced-reason block). They already
+sit in `apps/panel/src/styles/tokens.css:44-48` marked pending. **Approving these
+two designs closes that item.**
