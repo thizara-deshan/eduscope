@@ -185,4 +185,77 @@ This section, committed alongside `e2e/s02-reset.spec.ts` and the fix commit (re
 
 ## S-03 — Panel shell, chrome & alert host
 
-*(recorded by Task 19)*
+**Common preconditions:** `pnpm typecheck`/`lint`/`test`/`build` all exit 0 (`28 files, 192 tests`), `pnpm --filter @eduscope/panel preview` serves the build.
+
+### Step 1 — Playwright, `e2e/s03-shell.spec.ts`
+
+| # | Test | Result |
+|---|---|---|
+| 1 | primary journey — happy: header (hall, clock, user), Start → Pause → Resume → Stop → Saved → idle chrome | ✅ pass (**required a real fix, see below**) |
+| 2 | failure — start-fails: chrome reaches `error`, red frame never appears (MutationObserver) | ✅ pass (**required a real fix, see below**) |
+| 3 | ws-flap: after `T-WS-STALE` the reconnecting marker appears and the frame is retained | ✅ pass |
+| 4 | disk-full: a `storage.critical` banner renders (verbatim from the payload) | ✅ pass (**required a real fix, see below**) |
+| 5 | layout invariance: `<Outlet/>`'s box is byte-identical with and without a banner | ✅ pass |
+| 6 | no header at `/login`/`/login/reset`; header present at `/` | ✅ pass |
+
+`pnpm --filter @eduscope/panel e2e s03-shell` → **6 passed** (35.4s — the ws-flap test alone needs ~33s since the script's first drop is scripted at 15s and `T-WS-STALE` is another 10s).
+
+### Step 2 — Testing Library, one test per enumerated state
+
+`pnpm --filter @eduscope/panel test src/shell src/routes src/devtools` → **60 passed** across 9 files, covering: idle/recording/paused/saving(stopping+finalizing)/saved/error chrome, panel-offline (frame retained), the banner host (per-severity, cold render, acknowledge, cleared, duplicate-merge), still-streaming-while-paused, the two-row user menu, and no-header on the two auth routes.
+
+### Step 3 — Boundary lint and the Wave-0 gates
+
+```
+pnpm lint && pnpm test tools/eslint-rules/gate-boundary.test.ts && pnpm gate
+```
+Result: exit 0; boundary gate **3 passed**; `pnpm gate` → **5 passed** (panel 1a/1b/1e + quiz 1c/1d) — confirms Task 12's probe move stayed harmless.
+
+### Step 4 — Scenario demo checklist (live, 1280×800)
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `idle chrome` | `happy`, signed in | Header only, no frame, no notch |
+| 2 | `recording chrome` | Overlay → Start | 4px `--record` frame + `RECORDING` notch (confirmed live and via e2e) |
+| 3 | `paused chrome` | → Pause | Amber frame + `PAUSED`, dot animation stopped (e2e) |
+| 4 | `saving chrome` | → Stop | Neutral frame + `SAVING…`, sub-caption differs stopping (0.9s) vs finalizing (1.4s) (e2e) |
+| 5 | `saved` | let it finish | Transient `Saved`, then idle chrome (e2e) |
+| 6 | `error` | `start-fails` → Start | Error card with a plain-language cause; red frame never appeared (e2e, MutationObserver) |
+| 7 | `panel offline` (U-2) | `ws-flap`, wait past 10s stale | Reconnecting marker; frame retained (e2e) |
+| 8 | Banner · info | `happy` on load | Seeded `firmware.update-available`, `--info` treatment (confirmed live) |
+| 9 | Banner · warning + error | `disk-full`, → Start | `storage.critical` banner renders; recording never proceeds (e2e) — **see the text-content caveat below** |
+| 10 | Banner · machine-raised error | `pipeline-crash-midway`, → Start | Not separately demonstrated this pass — same banner mechanism as row 9, already proven end to end |
+| 11 | Acknowledge | Tap a banner's acknowledge | Banner hides immediately (**required a real fix, see below**); may legitimately re-raise after `T-ALERT-REEVALUATE` (30s, INV-SA-1) |
+| 12 | Still streaming while paused | Overlay → Meeting on → Start → Pause | Unit-tested (`streaming-while-paused.test.tsx`); not separately re-driven live this pass |
+| 13 | User menu | Header ▾ | Two ≥56px rows: Change password → S-02 voluntary; Sign out → `/login` (confirmed live and via e2e in the wave-exit run) |
+| 14 | No header | `/login`, `/login/reset` | Confirmed (e2e) |
+
+**Defects found and fixed during this gate** (all real, all found live — none caught by the pre-existing unit-test suite, which tests each component in isolation and never assembled the full authenticated shell + overlay + banners + chrome together):
+
+1. **`RecordingChrome` rendered the same red "RECORDING" frame during `starting` as during confirmed `recording`.** Screen-inventory §2 S-03 has no enumerated chrome for `starting` at all (it goes straight from idle to recording chrome), and B-12 requires a failed start never read as recording. Since `start-fails` substitutes R-06 for the *would-be* R-05 confirmation, the session sits in `starting` for ~1.2s before failing — during which the frame was incorrectly already showing red. Fixed by treating `starting` the same as `idle` (no frame at all) until `recording` is confirmed. Guarded with a new unit test.
+2. **The scenario overlay's `choose()` handler reset the WS store *after* switching scenarios**, not before. The new scenario's bootstrap (e.g. `disk-full`'s seeded critical storage pressure) raises its alerts *synchronously* inside `switchScenario()` itself, and the panel's event subscription ingests them just as synchronously — resetting afterward wiped out exactly the alerts the new scenario had just raised. `disk-full`'s `storage.critical` banner never reached the UI as a result. Fixed by reordering: reset the store, *then* switch.
+3. **Acknowledging a banner did nothing.** The mock's `acknowledgeAlert` only stamps `acknowledgedBy`, never `clearedAt` (contract-honest — INV-SA-1 documents that a still-true condition should re-raise, not be permanently suppressed server-side), and `listAlerts()` has `staleTime: Infinity` with nothing invalidating it, so a re-fetch would have returned the same never-cleared row anyway. Dismissal has to be local UI state. Fixed `AlertBanners` to track dismissed ids client-side ("hide for now", exactly what the contract's own wording for acknowledge says) rather than waiting on a server round-trip that was never going to change anything. Guarded with a new unit test.
+
+**Known gap, flagged rather than papered over:** the `storage.critical`/`storage.warning` alerts raised by the mock's storage-pressure machine (`mock/machines/health.ts`, `mock/machines/recording.ts`) go through a generic fallback (`world.ts`'s `buildAlert()`) that sets `title: code` literally — i.e. the banner in row 9 above reads `"storage.critical"`, not a plain-language sentence naming the real retention-policy percentage. This is a **pre-existing Wave-0 mock gap**, not touched by any Wave-1 task's file list (only the seeded, static alerts — `firmware.update-available`, `source.degraded` — carry real copy). The **frontend's own behavior is correct and is what Task 15 tests**: `AlertBanners` renders `title`/`detail` verbatim with no hardcoding, proven with a fixture that does carry a policy percentage. Satisfying INV-RP-1 in the mock itself (a dedicated alert-text builder for the two storage codes, referencing the real `RetentionPolicy`) is out of this wave's scope and is flagged for whoever owns `packages/api-client`'s mock machines.
+
+### Step 5 — Visual review against the prototype and tokens, 1280×800
+
+| Check | Result |
+|---|---|
+| Header 62px, dark `--ink`, brand left, clock centred, user right | ✅ computed `height: 62px`, `background: rgb(16,19,25)` (`--ink`) |
+| Logout replaced by the `▾` menu | ✅ `aria-haspopup="menu"` confirmed live and via e2e |
+| Clock ≥19px with tabular numerals | ✅ computed `font-size: 19px` |
+| Frame `--radius-panel` (20px), `position: absolute`, never `fixed` | ✅ (`recording-chrome.test.tsx`) |
+| Notch reads identically in all three captions | ✅ one component, `RECORDING`/`PAUSED`/`SAVING…` via a shared class |
+| Banner lane fixed 56px, overlays rather than pushes | ✅ computed `height: 56px`, `position: absolute`; layout-invariance e2e test confirms the Outlet never moves |
+| Every dismiss/acknowledge target ≥44px with an `aria-label` | ✅ (`alert-banners.test.tsx`) |
+| Reduced motion — recording state still unambiguous with the pulse frozen | Inherited from the global `tokens.css:135` rule; the notch's caption text (not the dot) is what carries the state, so nothing is lost |
+| Every value traces to `tokens.css`; `us-*` semantic classes, no Tailwind | ✅ throughout `shell.css` |
+
+### Step 6 — Wave exit condition
+
+screen-inventory §11 Wave 1: *"A user can log in, be forced to reset, and see live chrome."* Demonstrated as one unbroken Playwright run: `/login` → sign in as `n.silva` → forced reset → `/` → Start → recording chrome → Stop → `Saved` → header ▾ → Sign out → `/login`. **Passed in a single run, no manual steps skipped.**
+
+### Step 7 — Recorded
+
+This section, committed alongside `e2e/s03-shell.spec.ts` and the fix commit (recording-chrome starting-state, scenario-overlay reset ordering, alert-banners local dismiss).

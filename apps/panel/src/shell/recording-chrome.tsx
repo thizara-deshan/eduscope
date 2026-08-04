@@ -26,9 +26,13 @@ export function RecordingChrome(): JSX.Element | null {
     return undefined;
   }, [state]);
 
-  if (state === 'idle') return null;
+  // B-12: a failed start must never read as recording. `starting` has no
+  // enumerated chrome of its own (screen-inventory §2 S-03 goes straight from
+  // idle to recording) — showing it as `idle` here, rather than folding it
+  // into the red frame below, is what keeps a `starting -> error` run from
+  // ever having painted red at all.
+  if (state === 'idle' || state === 'starting') return null;
 
-  // B-12: a failed start must never read as recording — no frame at all here.
   if (state === 'error') {
     return (
       <div className="us-rec-error" data-testid="recording-error">

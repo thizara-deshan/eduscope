@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { SystemAlert } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
@@ -29,12 +30,20 @@ export function AlertBanners(): JSX.Element {
   const query = useQuery({ queryKey: ['alerts'], queryFn: () => client.listAlerts() });
   const storeAlerts = useWsShallow((s) => s.alerts);
 
+  // Acknowledge is "hide for now", not "fix" (INV-SA-1): the mock's
+  // `acknowledgeAlert` only stamps `acknowledgedBy`, never `clearedAt` — a
+  // still-true condition is meant to re-raise at T-ALERT-REEVALUATE (30s),
+  // so dismissal has to be LOCAL UI state, not a server round-trip the panel
+  // waits on (found live: acknowledging did nothing, since the cached
+  // `listAlerts` result never carried a cleared flag to react to).
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
+
   const merged = new Map<string, SystemAlert>();
   for (const alert of query.data?.items ?? []) merged.set(alert.id, alert);
   for (const alert of Object.values(storeAlerts)) merged.set(alert.id, alert);
 
   const active = Array.from(merged.values())
-    .filter((a) => !a.clearedAt)
+    .filter((a) => !a.clearedAt && !dismissed.has(a.id))
     .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
 
   if (active.length === 0) return <div className="us-alertlane" data-testid="alert-lane" />;
@@ -62,7 +71,10 @@ export function AlertBanners(): JSX.Element {
           type="button"
           className="us-alertbanner__ack"
           aria-label={`Acknowledge ${top.title}`}
-          onClick={() => void client.acknowledgeAlert(top.id)}
+          onClick={() => {
+            void client.acknowledgeAlert(top.id);
+            setDismissed((s) => new Set(s).add(top.id));
+          }}
         >
           ✕
         </button>

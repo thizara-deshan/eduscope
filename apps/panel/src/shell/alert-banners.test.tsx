@@ -78,6 +78,17 @@ describe('AlertBanners', () => {
     expect(acknowledgeAlert).toHaveBeenCalledWith('alert-1');
   });
 
+  it('acknowledge actually hides the banner (INV-SA-1 "hide for now") even though the mock never sets clearedAt', async () => {
+    // The mock's acknowledgeAlert only stamps acknowledgedBy — the re-fetched
+    // listAlerts() would still return this alert forever, so dismissal must
+    // be local UI state, not dependent on the server round-trip settling.
+    const acknowledgeAlert = vi.fn(() => Promise.resolve(makeAlert()));
+    renderBanners(vi.fn(() => Promise.resolve({ items: [makeAlert()] })), acknowledgeAlert);
+    await waitFor(() => expect(screen.getByTestId('alert-banner')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Acknowledge/ }));
+    await waitFor(() => expect(screen.queryByTestId('alert-banner')).toBeNull());
+  });
+
   it("the lane's computed height is 56px with one banner and with three", async () => {
     renderBanners(vi.fn(() => Promise.resolve({ items: [makeAlert()] })));
     await waitFor(() => expect(screen.getByTestId('alert-banner')).toBeInTheDocument());

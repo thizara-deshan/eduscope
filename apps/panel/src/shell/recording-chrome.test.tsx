@@ -23,6 +23,13 @@ describe('RecordingChrome', () => {
     expect(screen.queryByTestId('recording-notch')).toBeNull();
   });
 
+  it('starting — no frame either (B-12: a start that then fails must never have read as recording)', () => {
+    setRecording('starting');
+    render(<RecordingChrome />);
+    expect(screen.queryByTestId('recording-frame')).toBeNull();
+    expect(screen.queryByTestId('recording-notch')).toBeNull();
+  });
+
   it('recording chrome — 4px --record frame + RECORDING notch', () => {
     setRecording('recording');
     render(<RecordingChrome />);

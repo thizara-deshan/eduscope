@@ -53,8 +53,14 @@ export function ScenarioOverlay() {
   if (!client) return null;
 
   const choose = (name: ScenarioName) => {
-    client.switchScenario(name);
+    // reset() BEFORE switchScenario(): the new world's bootstrap (seeded
+    // storage pressure, etc.) emits its events SYNCHRONOUSLY inside
+    // switchScenario() itself, and the panel's events$ subscription ingests
+    // them just as synchronously. Resetting afterward wiped out exactly the
+    // alerts the new scenario had just raised (found live — disk-full's
+    // storage.critical alert never reached the banner host).
     useWsStore.getState().reset();
+    client.switchScenario(name);
     setActive(name);
   };
 
