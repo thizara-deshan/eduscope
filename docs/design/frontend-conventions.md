@@ -41,6 +41,13 @@ improvisation.
   scrolling only — the page itself never scrolls.
 - Touch targets ≥ 44 px; no hover-only affordances anywhere.
 - On-screen keyboard (react-simple-keyboard) for text fields on the panel app.
+  **The host ships with S-01 in Wave 1 and every later screen inherits it** —
+  its contract is [S-01-design.md §3](screens/S-01-design.md): mounted once,
+  `position: absolute` inside `.us-panel` (never `fixed`), and it publishes its
+  reserved height as the CSS custom property **`--osk-h`** (`0px` closed,
+  `380px` open). Screens size themselves with
+  `calc(var(--panel-h) - var(--osk-h))` and therefore **never re-render when the
+  keyboard opens**. Do not thread keyboard state through props or context.
 - aria-labels on all icon-only buttons.
 
 ## 4. States & scenarios

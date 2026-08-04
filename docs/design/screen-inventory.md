@@ -337,6 +337,20 @@ given the data at all (INV-QZ-3, INV-LB-3).
   bottom bars with a fixed 56 px lane. Dismiss targets ≥44 px. The recording
   frame is `position: absolute` inside `.us-panel`, **never** `position: fixed`
   (prototype CLAUDE.md). Clock is read at arm's length: ≥ 19 px.
+- **Requirements added by the S-01 / S-02 wireframe gate (2026-08-04).** Both
+  are binding on this screen and are specified in
+  [S-01-design.md §12](screens/S-01-design.md) and
+  [S-02-design.md §12](screens/S-02-design.md):
+  1. **No header on `/login` and `/login/reset`.** Both routes sit inside the
+     `PanelShell` layout route, but neither can populate the header — before
+     login nothing is readable at all (only `login` and `refreshToken` carry
+     `security: []`), and during a forced reset `getProvisioning` answers
+     `403 auth.password-reset-required`. A header with an empty hall slot is
+     worse than no header.
+  2. **The user name becomes a `▾` menu** with two ≥56 px rows — *Change
+     password* → `/login/reset` carrying `state.from`, and *Sign out*. This is
+     the entry point for S-02's `voluntary` mode (S02-D-8); without it LP-2's
+     change-password half has no door.
 - **Build order.** **Wave 1**, in parallel with S-01. Depends on: scaffold WS
   store + scenario overlay. Blocks: every dashboard screen.
 
@@ -1801,26 +1815,36 @@ Everything with prototype coverage **none**, plus the three redesign decisions
 that change an existing prototype screen. Nothing in this list may be built
 before the wireframe is approved (revamp-guide prompt 07 "Done when").
 
-| # | Screen | Why it has no design | Blocks |
-|---|---|---|---|
-| W-1 | **S-02** Forced password reset | Parity §5.1 item 3; User Management only *adds* users today | Any user-management demo |
-| W-2 | **S-06** Recorder lock & takeover | Parity §5.1 item 5; legacy enforced it in the UI, which is why it needs redesigning as a server-enforced view | J-1 multi-user story |
-| W-3 | **S-12** Power-off confirm | Parity §5.1 item 6; lived on the retired Menu page | — |
-| W-4 | **S-20** Quiz join / QR card | New (A-22); **placement in a full 430 px column is the open question** | J-3 |
-| W-5 | **S-21** Recordings library | Parity §5.1 item 1 — the largest gap in the product | S-22, S-23, S-24 |
-| W-6 | **S-22** Recording detail & player | Same row; authenticated playback is new (B-37) | — |
-| W-7 | **S-23** USB export flow | Parity §5.1 items 1 + 10; drive picking and real progress are both new | — |
-| W-8 | **S-24** Delete recording confirm | Parity §2c delete row | — |
-| W-9 | **S-35** Upload queue | Parity §5.1 item 2 | G-3 demo |
-| W-10 | **S-36** Device & Identity | Parity §5.1 items 8, 9, 11 | J-5 |
-| W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); also blocked on CG-1 | J-3 |
-| W-12 | **S-42** Projector overlay | New (A-11/A-22); a legibility problem, not a UI problem; also blocked on CG-2 | J-2 |
-| W-13 | **S-01** Login — *redesign* | Removing the prototype's role picker leaves a hole in the card layout | Wave 1 |
-| W-14 | **S-05** Dashboard — *`ai disabled` layout* | With the AI flag off (INT-10 — the go-live default) the main column is empty; what replaces it is undesigned | Wave 2 |
-| W-15 | **S-11** Room Controls — *placeholder marking* | G-5 forbids controls that pretend to work; how the five `[D-10]` rows signal "not connected yet" is a design decision | Wave 2 |
+| # | Screen | Why it has no design | Blocks | Status | Approved design |
+|---|---|---|---|---|---|
+| W-1 | **S-02** Forced password reset | Parity §5.1 item 3; User Management only *adds* users today | Any user-management demo | ✅ **closed** 2026-08-04 | [S-02-design.md](screens/S-02-design.md) |
+| W-2 | **S-06** Recorder lock & takeover | Parity §5.1 item 5; legacy enforced it in the UI, which is why it needs redesigning as a server-enforced view | J-1 multi-user story | open — Wave 2 | — |
+| W-3 | **S-12** Power-off confirm | Parity §5.1 item 6; lived on the retired Menu page | — | open — Wave 2 | — |
+| W-4 | **S-20** Quiz join / QR card | New (A-22); **placement in a full 430 px column is the open question** | J-3 | open — Wave 4 | — |
+| W-5 | **S-21** Recordings library | Parity §5.1 item 1 — the largest gap in the product | S-22, S-23, S-24 | open — Wave 5 | — |
+| W-6 | **S-22** Recording detail & player | Same row; authenticated playback is new (B-37) | — | open — Wave 5 | — |
+| W-7 | **S-23** USB export flow | Parity §5.1 items 1 + 10; drive picking and real progress are both new | — | open — Wave 5 | — |
+| W-8 | **S-24** Delete recording confirm | Parity §2c delete row | — | open — Wave 5 | — |
+| W-9 | **S-35** Upload queue | Parity §5.1 item 2 | G-3 demo | open — Wave 5 | — |
+| W-10 | **S-36** Device & Identity | Parity §5.1 items 8, 9, 11 | J-5 | open — Wave 6 | — |
+| W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); also blocked on CG-1 | J-3 | open — Wave 7 | — |
+| W-12 | **S-42** Projector overlay | New (A-11/A-22); a legibility problem, not a UI problem; also blocked on CG-2 | J-2 | open — Wave 8 | — |
+| W-13 | **S-01** Login — *redesign* | Removing the prototype's role picker leaves a hole in the card layout | Wave 1 | ✅ **closed** 2026-08-04 | [S-01-design.md](screens/S-01-design.md) |
+| W-14 | **S-05** Dashboard — *`ai disabled` layout* | With the AI flag off (INT-10 — the go-live default) the main column is empty; what replaces it is undesigned | Wave 2 | open — Wave 2 | — |
+| W-15 | **S-11** Room Controls — *placeholder marking* | G-5 forbids controls that pretend to work; how the five `[D-10]` rows signal "not connected yet" is a design decision | Wave 2 | open — Wave 2 | — |
 
-Also needing sign-off, though not screens: the two new semantic colors
-(`--danger`, `--info`) in §8.2, and the radius-rename choice in §8.6.
+Also needing sign-off, though not screens:
+
+- **The two new semantic colors** (`--danger`/`--danger-soft`, `--info`/`--info-soft`)
+  in §8.2 — ✅ **approved 2026-08-04** with W-1 and W-13. Both are consumed by
+  S-01 (`rejected`, `backend unreachable`) and S-02 (`mismatch`, forced-reason
+  block), and already ship in `apps/panel/src/styles/tokens.css`.
+- **The radius-rename choice** in §8.6 — ✅ **taken at Wave 0**: `tokens.css`
+  performed the rename in one commit, so `--radius-lg` is 14 px and
+  `--radius-xl` is 24 px throughout.
+
+> **Wave 2 carries four wireframe rows (W-2, W-3, W-14, W-15)** — more design
+> work than Wave 1 had. Budget a Route B run before its plan run.
 
 ---
 
@@ -1828,23 +1852,67 @@ Also needing sign-off, though not screens: the two new semantic colors
 
 Screens that need data the contract does not have. **No endpoint has been
 invented anywhere in this document.** Each row states the blocked screen and the
-smallest change that unblocks it — for prompt 06 to accept or reject as a v0.2
-bump.
+smallest change that unblocks it.
 
-| # | Gap | Blocked screens | Severity | Smallest fix |
-|---|---|---|---|---|
-| **CG-1** | **The student-facing REST surface does not exist.** events.md open item C-6: join, register (name + student ID, `[D-21]`), and answer submission (Z-21/Z-22) are quiz-service-owned and have no contract file. Only the *event* payloads exist (`StudentServerEvent`) | S-37, S-38, S-39, S-40, S-41 | **Blocking** for `apps/quiz` | The proposed `contracts/quiz-app.yaml` in v0.2 |
-| **CG-2** | **The projector overlay has no data path to the question body.** `quiz.publication` carries `publicationId` + `questionId` only (`QuizPublicationPayload`); the prompt, options and correct option live behind `GET /ai/publications`, a bearer-authenticated panel route. The projector consumer is an internal pipeline-manager surface with no user token | S-42 | **Blocking** for the projector | Either extend `QuizPublicationPayload` with the rendered question payload, or define an internal projector read route in the core-api ↔ pipeline-manager API (Phase 3) |
-| **CG-3** | **No way for a client to declare a scoped subscription.** events.md §1 scopes `log.entry` to "connections that subscribed to the live log view" and `usb.volumes` to "sessions with the export flow open" — but the same section states clients send **no** WS messages. There is no defined mechanism | S-34 (live tail), S-23 (hotplug) | Medium — screens work by polling, which §5 forbids | State that `GET /logs` and `GET /exports/targets` mark the calling `AuthSession` as subscribed for a TTL, or add a subscribe REST call |
-| **CG-4** | **Roster sync (PF-8) has no admin-visible status.** `User.source` distinguishes institute accounts, but nothing exposes last-run time, counts, or failures. Parity §5.1 item 11 flags exactly this ("its admin visibility/config has no design") | S-32, S-36 | Low — Auth/System `LogEntry`s are a workable stopgap via S-34 | `GET /settings/roster-sync` returning last run + outcome, or accept logs-only and say so |
-| **CG-5** | **`GET /recordings` cannot be filtered by owner, date or title.** Params are `cursor`, `limit`, `state`, `includeDeleted`. An admin looking at every lecturer's 14 days of recordings has scroll as the only tool | S-21 | Low | Add `?q=`, `?ownerUserId=`, `?from=`/`?to=` to `listRecordings` |
-| **CG-6** | **No device restart command.** Only `POST /device/power-off` exists. Parity §5.1 item 6 words the gap as "power off / **restart** control", and a kiosk that can only be power-cycled by walking to the rack is an operational cost | S-12 | Low — PRD LP-13 says power-off only, so this may be correct as-is | Either add `POST /device/restart` (same R-22 refusal) or confirm power-off-only in the wireframe |
-| **CG-7** | **No merge-retry endpoint.** State-machines RA-07 defines `cmd.recording.retry-merge` (admin) for a `failed` artifact, and S-22 renders that state — but no REST operation binds it. `POST /recordings/{id}/retry-merge` is missing from openapi.yaml | S-22, S-21 (badge action) | Medium — the state is reachable and has no exit | Bind RA-07 to a path in v0.2 |
-| **CG-8** | **Deleting the last admin / oneself is unguarded in the contract.** `DELETE /users/{userId}` documents `403` for non-admins but no rule against removing the only admin account, which would brick administration | S-32 | Low | Document a `409 users.last-admin` refusal |
-| **CG-9** | **The AI studio cannot show what a question was generated from.** `QuestionSet` records `inputWindow`, `slideCaptureIds`, `modelId`, `promptVersion` (domain model §8.3), but no screen surfaces provenance and no endpoint returns the transcript window | — (none blocked) | None — listed only so it is a deliberate omission, not an oversight | No action in v0 |
+**How to read Status.** A CG row is a *question*, not a decision:
 
-Gaps **CG-1** and **CG-2** are the only two that hard-block a build wave.
-CG-3 and CG-7 should land in a v0.2 bump before Wave 5/6.
+| Status | Meaning |
+|---|---|
+| `open` | Nobody has ruled. The "Smallest fix" column is a **suggestion** — a design run may reject it |
+| ✅ `answered` | A wireframe gate decided it. **Resolved by** points at the design doc holding the decision and its rationale — never restated here |
+| ✅ `applied vX` | The decision is in `contracts/openapi.yaml`, zod is regenerated, and the mock adapter matches |
+
+**A gap is answerable only once its screen has an approved wireframe.** Deciding
+`GET /recordings?q=` before anyone has drawn the recordings library would invent
+an endpoint to fit a screen that does not exist — the one thing this document
+has not done. So gaps close **wave by wave**, at each Route B gate, not in one
+sitting. See [§11](#11-build-order) for which wave owns which row.
+
+Rows **CG-10…CG-13** were not visible at prompt-07 time: they were discovered
+*during* the S-01/S-02 design runs, because a screen only reveals what data it
+needs once it is drawn. Expect every future Route B run to add rows here.
+
+| # | Gap | Blocked screens | Severity | Smallest fix | Status | Resolved by |
+|---|---|---|---|---|---|---|
+| **CG-1** | **The student-facing REST surface does not exist.** events.md open item C-6: join, register (name + student ID, `[D-21]`), and answer submission (Z-21/Z-22) are quiz-service-owned and have no contract file. Only the *event* payloads exist (`StudentServerEvent`) | S-37, S-38, S-39, S-40, S-41 | **Blocking** for `apps/quiz` | The proposed `contracts/quiz-app.yaml` in v0.2 | open — **Wave 7 hard-block**; needs the quiz-service design (Phase 3) and `[D-21]` | — |
+| **CG-2** | **The projector overlay has no data path to the question body.** `quiz.publication` carries `publicationId` + `questionId` only (`QuizPublicationPayload`); the prompt, options and correct option live behind `GET /ai/publications`, a bearer-authenticated panel route. The projector consumer is an internal pipeline-manager surface with no user token | S-42 | **Blocking** for the projector | Either extend `QuizPublicationPayload` with the rendered question payload, or define an internal projector read route in the core-api ↔ pipeline-manager API (Phase 3) | open — **Wave 8 hard-block**; needs prompts 10/11 | — |
+| **CG-3** | **No way for a client to declare a scoped subscription.** events.md §1 scopes `log.entry` to "connections that subscribed to the live log view" and `usb.volumes` to "sessions with the export flow open" — but the same section states clients send **no** WS messages. There is no defined mechanism | S-34 (live tail), S-23 (hotplug) | Medium — screens work by polling, which §5 forbids | State that `GET /logs` and `GET /exports/targets` mark the calling `AuthSession` as subscribed for a TTL, or add a subscribe REST call | open — answer at the W-7 / W-9 gates (Wave 5/6) | — |
+| **CG-4** | **Roster sync (PF-8) has no admin-visible status.** `User.source` distinguishes institute accounts, but nothing exposes last-run time, counts, or failures. Parity §5.1 item 11 flags exactly this ("its admin visibility/config has no design") | S-32, S-36 | Low — Auth/System `LogEntry`s are a workable stopgap via S-34 | `GET /settings/roster-sync` returning last run + outcome, or accept logs-only and say so | open — Wave 6; **not answerable in-house**, coupled to `[D-02b]` (institute owns it) | — |
+| **CG-5** | **`GET /recordings` cannot be filtered by owner, date or title.** Params are `cursor`, `limit`, `state`, `includeDeleted`. An admin looking at every lecturer's 14 days of recordings has scroll as the only tool | S-21 | Low | Add `?q=`, `?ownerUserId=`, `?from=`/`?to=` to `listRecordings` | open — answer at the W-5 gate (Wave 5) | — |
+| **CG-6** | **No device restart command.** Only `POST /device/power-off` exists. Parity §5.1 item 6 words the gap as "power off / **restart** control", and a kiosk that can only be power-cycled by walking to the rack is an operational cost | S-12 | Low — PRD LP-13 says power-off only, so this may be correct as-is | Either add `POST /device/restart` (same R-22 refusal) or confirm power-off-only in the wireframe | open — answer at the W-3 gate (Wave 2); likely a *confirm*, since PRD LP-13 says power-off only | — |
+| **CG-7** | **No merge-retry endpoint.** State-machines RA-07 defines `cmd.recording.retry-merge` (admin) for a `failed` artifact, and S-22 renders that state — but no REST operation binds it. `POST /recordings/{id}/retry-merge` is missing from openapi.yaml | S-22, S-21 (badge action) | Medium — the state is reachable and has no exit | Bind RA-07 to a path in v0.2 | open — answer at the W-6 gate (Wave 5) | — |
+| **CG-8** | **Deleting the last admin / oneself is unguarded in the contract.** `DELETE /users/{userId}` documents `403` for non-admins but no rule against removing the only admin account, which would brick administration | S-32 | Low | Document a `409 users.last-admin` refusal | open — Wave 6. The invariant is decidable now; **how S-32 presents the refusal is not** | — |
+| **CG-9** | **The AI studio cannot show what a question was generated from.** `QuestionSet` records `inputWindow`, `slideCaptureIds`, `modelId`, `promptVersion` (domain model §8.3), but no screen surfaces provenance and no endpoint returns the transcript window | — (none blocked) | None — listed only so it is a deliberate omission, not an oversight | No action in v0 | ✅ **closed** — no action in v0, by this row's own ruling | this document |
+| **CG-10** | **No disabled-account error code.** S-01 enumerates a `disabled account` state whose message is *not* a credential error ("This account is not active — ask your administrator"), but `Problem.code` is a closed enum with nothing that can produce it. `Problem['code']` is a generated TypeScript union, so the state is a **compile error**, not merely undocumented | S-01 | **Blocking** for Wave 1 | Add `auth.account-disabled` to `Problem.code` | ✅ **answered** — add it; enumeration is an accepted trade (S01-D-3) | [S-01-design.md](screens/S-01-design.md) §9 #1 |
+| **CG-11** | **A revoked session cannot say why.** `auth.session-revoked` cannot distinguish an idle expiry from a logout elsewhere from **R-21**'s `AuthSession.revokedReason = takeover`, but S-01's `session expired` state is specified to show the reason | S-01, S-06 (W-2) | Medium — the state renders, but always with the vaguest wording | Add `meta.reason` to the `auth.session-revoked` Problem | ✅ **answered** — `meta.reason: expired \| logout \| takeover \| admin`. `Problem.meta` is already open, so **no change to the closed `code` enum** (S01-D-5) | [S-01-design.md](screens/S-01-design.md) §9 #2 |
+| **CG-12** | **The password policy is weaker than the system it replaces.** `ChangePasswordRequest.newPassword` carries `minLength: 8` and nothing else; legacy B-42 enforced ≥8 **+ digit + upper + lower**. S-02's live checklist must mirror the server rule exactly or it promises acceptance it cannot deliver | S-02, S-33 (import) | **Blocking** for Wave 1 — a checklist with no server rule behind it is a lie | Enforce the legacy composition rules server-side | ✅ **answered** — legacy parity: ≥8 + digit + uppercase + lowercase (S02-D-1) | [S-02-design.md](screens/S-02-design.md) §9 #3 |
+| **CG-13** | **You cannot log out of a forced password reset.** §Auth exempts only `/auth/change-password` and `/auth/me` from `403 auth.password-reset-required`, so `/auth/logout` is refused. A lecturer who abandons a reset on a shared kiosk leaves a live `AuthSession` until expiry | S-02 | **Blocking** for Wave 1 — S-02's Sign out control cannot work | Add `/auth/logout` to the `mustResetPassword` exemption list | ✅ **answered** — exempt it; revoking your own session is not what the reset lock protects (S02-D-3) | [S-02-design.md](screens/S-02-design.md) §9 #4 |
+
+Gaps **CG-1** and **CG-2** are the only two that hard-block a build wave *by
+missing an entire surface*. **CG-10…CG-13 block Wave 1** and are already
+answered — they need only the amendment run (prompt 06b) to reach `applied`.
+CG-3 and CG-7 should land before Wave 5/6.
+
+### 10.1 When the contract actually changes
+
+The contract is amended **after a wave's design run and before its plan run** —
+never during a plan, and never speculatively. A plan says *"build these screens
+against `contracts/`"*; if the contract lacks what the screen needs, the plan
+either stalls or invents, and inventing is what this pipeline forbids. The
+plan's own exit gate includes contract-honesty tests that validate mock
+responses against zod schemas **generated from `openapi.yaml`** — so a wrong
+contract makes the gate unpassable by construction.
+
+| Bump | Carries | Timing |
+|---|---|---|
+| `v0.2` | CG-10, CG-11, CG-12, CG-13 | **before Wave 1's plan run** |
+| `v0.3` | CG-6, if the W-3 wireframe asks for restart | before Wave 2's plan run |
+| `v0.4` | CG-3, CG-5, CG-7 | before Wave 5's plan run |
+| *(tbd)* | CG-4, CG-8 | before Wave 6's plan run |
+| *(tbd)* | CG-1 — a whole `contracts/quiz-app.yaml` | before Wave 7 |
+| **`v1.0`** | **Everything, reconciled** — prompt 12 drift review | Phase 3, once, both owners sign off |
+
+Waves 3 and 4 need no contract change at all.
 
 ---
 
