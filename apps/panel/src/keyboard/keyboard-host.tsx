@@ -78,12 +78,20 @@ export function KeyboardHost(): JSX.Element {
   }
 
   return (
-    <div ref={ref} className="us-osk" data-testid="keyboard-host"
-      onMouseDown={(e) => e.preventDefault()}
-      onPointerDown={(e) => e.preventDefault()}
-    >
+    // This outer node is the ref anchor and must always be mounted (it needs
+    // to exist before `open` ever becomes true), but it must NEVER carry the
+    // `.us-osk` visual treatment itself — that class is 380px tall with an
+    // opaque background, so applying it unconditionally left a solid dark
+    // block sitting over the bottom of the screen even while closed, with
+    // nothing inside it. Only the panel below, rendered exclusively while
+    // `open`, gets that styling.
+    <div ref={ref} data-testid="keyboard-host">
       {open && (
-        <>
+        <div
+          className="us-osk"
+          onMouseDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => e.preventDefault()}
+        >
           <div className="us-osk__row">
             <button
               type="button"
@@ -104,7 +112,7 @@ export function KeyboardHost(): JSX.Element {
               theme="hg-theme-default us-osk__keys"
             />
           </div>
-        </>
+        </div>
       )}
     </div>
   );

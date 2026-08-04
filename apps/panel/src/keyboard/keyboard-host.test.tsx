@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardHost, OSK_OPEN_PX } from './keyboard-host.js';
-import { useOskField } from './use-keyboard.js';
+import { useKeyboardStore, useOskField } from './use-keyboard.js';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
@@ -43,6 +43,14 @@ async function pressKey(button: string): Promise<void> {
 }
 
 describe('KeyboardHost', () => {
+  // `useKeyboardStore` is a module-level singleton (deliberately, per its own
+  // docs — it changes a few times per screen, not per keystroke). Left-open
+  // state from one test would otherwise leak into the next test's fresh
+  // render.
+  beforeEach(() => {
+    useKeyboardStore.setState({ open: false, layout: 'default', target: null });
+  });
+
   it('is closed by default and --osk-h reads 0px on .us-panel', () => {
     render(
       <Panel>
@@ -143,17 +151,28 @@ describe('KeyboardHost', () => {
     expect(onCommit.mock.calls.length).toBe(commitsBefore);
   });
 
-  it('pointerdown on the host is default-prevented', () => {
+  it('pointerdown on the open keyboard panel is default-prevented', () => {
     render(
       <Panel>
         <TextField />
       </Panel>,
     );
-    const host = screen.getByTestId('keyboard-host');
+    fireEvent.focus(screen.getByLabelText('field'));
+    const panel = document.querySelector('.us-osk');
+    expect(panel).not.toBeNull();
     const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
     act(() => {
-      host.dispatchEvent(event);
+      panel!.dispatchEvent(event);
     });
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('closed by default, the keyboard host has no visible panel at all (no leftover block)', () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    expect(document.querySelector('.us-osk')).toBeNull();
   });
 });
