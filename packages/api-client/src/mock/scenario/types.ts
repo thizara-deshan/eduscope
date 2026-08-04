@@ -21,8 +21,12 @@ export interface ForcedTransition {
   readonly on: ForcedTrigger;
   /** 1-based occurrence to act on. Omit to apply on every occurrence. */
   readonly nth?: number;
-  /** Run this instead, or cancel the transition / reject the command. */
-  readonly replace: TransitionId | 'refuse';
+  /**
+   * Run this transition instead, refuse the command with a `Problem`, or fail
+   * the request at the TRANSPORT layer with no body at all (W1-D-1). Only
+   * `'unreachable'` reaches `onTransport`; only `'refuse'` reaches `onCommand`.
+   */
+  readonly replace: TransitionId | 'refuse' | 'unreachable';
   /** Required when `replace === 'refuse'` and the trigger is a command. */
   readonly refusal?: Problem;
   /** Override the scheduled delay so demos are not spec-length. */

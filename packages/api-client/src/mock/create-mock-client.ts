@@ -1,10 +1,12 @@
 import type { EduscopeClient, PreviewChannel } from '../client.js';
+import { TransportError } from '../errors.js';
 import { createEmitter, type ConnectionStatus, type EventStream } from '../stream.js';
 import type { Clock } from './clock.js';
 import { createWallClock } from './clock.js';
 import { ALL_MACHINES, BOUND_SOURCE_ROLES, sourceTransitionId } from './machines/index.js';
 import type { MachineId, Transition } from './machines/types.js';
 import { createRestOperations } from './rest/index.js';
+import type { ScenarioEngine } from './scenario/engine.js';
 import { createScenarioEngine, getScenario } from './scenario/registry.js';
 import type { ScenarioName, WorldSeed } from './scenario/types.js';
 import { createSeed, type Seed } from './seed/index.js';
@@ -62,13 +64,18 @@ export function createMockClient(
   let world!: MockWorld;
   let rest!: ReturnType<typeof createRestOperations>;
   let connection!: ReturnType<typeof createConnectionController>;
+  let engine!: ScenarioEngine;
+  // Cached so `client.login === client.login`. A fresh closure per property
+  // access would break every dependency array that captures one operation.
+  let wrapped = new Map<string, (...args: never[]) => Promise<unknown>>();
 
   function build(name: ScenarioName): void {
     for (const stop of teardown) stop();
     teardown = [];
 
     const script = getScenario(name);
-    const engine = createScenarioEngine(script);
+    engine = createScenarioEngine(script);
+    wrapped = new Map();
     engine.reset();
 
     const seed = createSeed(script.seed);
@@ -145,7 +152,23 @@ export function createMockClient(
     get(target, prop: string, receiver) {
       if (prop in target) return Reflect.get(target, prop, receiver);
       const op = rest[prop as keyof typeof rest];
-      return typeof op === 'function' ? op : undefined;
+      if (typeof op !== 'function') return undefined;
+      const cached = wrapped.get(prop);
+      if (cached) return cached;
+      /**
+       * The transport check sits HERE, not in each of the 77 operations: a
+       * transport failure is by definition the request not arriving, so it
+       * cannot be the responsibility of the code that would have handled it.
+       */
+      const fn = (...args: never[]): Promise<unknown> => {
+        const fault = engine.onTransport(prop);
+        if (!fault) return op(...args);
+        return new Promise((_resolve, reject) => {
+          setTimeout(() => reject(new TransportError(prop)), fault.delayMs);
+        });
+      };
+      wrapped.set(prop, fn);
+      return fn;
     },
     has: (target, prop) => prop in target || prop in rest,
     ownKeys: (target) => [...Reflect.ownKeys(target), ...Object.keys(rest)],

@@ -20,3 +20,20 @@ export class ProblemError extends Error {
     this.problem = problem;
   }
 }
+
+/**
+ * A request that never reached an application layer: no status, no
+ * `application/problem+json` body, nothing to name in a refusal message.
+ *
+ * This is the distinction S-01's `backend unreachable` turns on — "the device is
+ * up and core-api is not" (screen-inventory §2 S-01) is NOT a refusal, and
+ * rendering it as one would tell a lecturer their credentials were wrong.
+ */
+export class TransportError extends Error {
+  readonly operation: string;
+  constructor(operation: string) {
+    super(`${operation}: the device API is unreachable`);
+    this.name = 'TransportError';
+    this.operation = operation;
+  }
+}

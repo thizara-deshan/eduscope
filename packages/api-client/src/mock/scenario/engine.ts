@@ -7,6 +7,12 @@ export interface ScenarioEngine {
   intercept(id: TransitionId): TransitionId | null;
   /** Called by each mock REST method before it runs its CommandPlan. */
   onCommand(operationId: string): Problem | null;
+  /**
+   * Transport-layer fault, checked by the REST proxy BEFORE the operation runs.
+   * Separate from `onCommand` because a transport failure has no Problem body
+   * (see errors.ts TransportError). Returns how long to fail after, or null.
+   */
+  onTransport(operationId: string): { delayMs: number } | null;
   trace(): readonly TraceEntry[];
   reset(): void;
   readonly script: ScenarioScript;
@@ -45,8 +51,15 @@ export function createScenarioEngine(script: ScenarioScript): ScenarioEngine {
     },
 
     onCommand(operationId) {
-      const hit = match((f) => 'command' in f.on && f.on.command === operationId);
-      if (!hit || hit.rule.replace !== 'refuse') return null;
+      // `f.replace === 'refuse'` is part of the PREDICATE, not a post-filter:
+      // match() consumes an `nth` the moment its predicate passes, so a rule
+      // filtered afterwards would still have burned its own occurrence here and
+      // never fired in onTransport. No existing script pairs a command trigger
+      // with a TransitionId replacement, so narrowing this changes no behaviour.
+      const hit = match(
+        (f) => 'command' in f.on && f.on.command === operationId && f.replace === 'refuse',
+      );
+      if (!hit) return null;
       return (
         hit.rule.refusal ?? {
           status: 409,
@@ -54,6 +67,13 @@ export function createScenarioEngine(script: ScenarioScript): ScenarioEngine {
           title: `Refused by scenario "${script.name}"`,
         }
       );
+    },
+
+    onTransport(operationId) {
+      const hit = match(
+        (f) => 'command' in f.on && f.on.command === operationId && f.replace === 'unreachable',
+      );
+      return hit ? { delayMs: hit.rule.delayMs ?? 0 } : null;
     },
 
     trace: () => log,

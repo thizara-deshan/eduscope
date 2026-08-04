@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zProblem } from '@eduscope/shared';
 import { createMockClient } from '../../src/mock/create-mock-client.js';
-import { ProblemError } from '../../src/errors.js';
+import { ProblemError, TransportError } from '../../src/errors.js';
 
 /**
  * The four contract v0.2 amendments (CG-10…CG-13), proved at the mock boundary.
@@ -124,7 +124,12 @@ describe('CG-12 — the password policy is legacy parity (B-42)', () => {
     });
     switching.switchScenario('auth-failures');
     // switchScenario rebuilds the world and the seed; credentials share that
-    // lifetime, so the seeded temp password is live again.
+    // lifetime, so the seeded temp password is live again. `auth-failures`
+    // also rebuilds the scenario counters (W1-D-1), so the fresh script's
+    // `login` nth:1 unreachable rule fires on this first post-switch attempt.
+    await expect(
+      switching.login({ username: 'n.silva', password: 'temp-pass-1', client: 'panel' }),
+    ).rejects.toBeInstanceOf(TransportError);
     await expect(
       switching.login({ username: 'n.silva', password: 'temp-pass-1', client: 'panel' }),
     ).resolves.toMatchObject({ mustResetPassword: true });
@@ -142,6 +147,11 @@ describe('CG-12 — the password policy is legacy parity (B-42)', () => {
     // S-02 §5: unreachable in practice if password-policy.ts mirrors the server
     // correctly, which is precisely why it needs a scenario to be demonstrable.
     const scripted = createMockClient('auth-failures');
+    // W1-D-1: this script's `login` nth:1 unreachable rule fires on the very
+    // first login attempt, before the changePassword rule under test.
+    await expect(
+      scripted.login({ username: 'n.silva', password: 'temp-pass-1', client: 'panel' }),
+    ).rejects.toBeInstanceOf(TransportError);
     await scripted.login({ username: 'n.silva', password: 'temp-pass-1', client: 'panel' });
     const problem = await refusalOf(() =>
       scripted.changePassword({ currentPassword: 'temp-pass-1', newPassword: 'Lecture-hall-7' }),

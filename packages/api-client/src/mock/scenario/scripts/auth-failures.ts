@@ -1,18 +1,16 @@
 import type { ScenarioScript } from '../types.js';
 
 /**
- * The two auth states that contract v0.2 made expressible but that no ordinary
+ * The auth states that contract v0.2 made expressible but that no ordinary
  * mock interaction can produce (S-01 §10, S-02 §10 — "no scenario script
- * exercises an auth failure").
+ * exercises an auth failure"), plus the two Wave-1 additions below (W1-D-1,
+ * W1-D-6): S-01's `backend unreachable` transport fault, and a `getProvisioning`
+ * refusal so `session expired` (takeover) has a live producer reachable from a
+ * normal sign-in rather than only from a forced `refreshToken` refusal.
  *
  * The other v0.2 states need no script: `disabled account` is reachable by
  * logging in as the seeded `r.fonseka` (CG-10), and Sign out on the forced
  * reset screen is reachable because `/auth/logout` is exempt (CG-13).
- *
- * NOT covered: S-01's `backend unreachable`. That is a transport failure, not a
- * named `Problem`, and the engine has no transport-level primitive — inventing
- * one is a scenario-engine change, not a contract amendment. It stays Wave-1
- * work (see docs/design/contract-amendments.md, 2026-08-04).
  */
 export const authFailures: ScenarioScript = {
   name: 'auth-failures',
@@ -45,6 +43,31 @@ export const authFailures: ScenarioScript = {
         status: 422,
         code: 'validation.invalid',
         title: 'New password does not meet the password policy',
+      },
+    },
+    {
+      // S-01 `backend unreachable` (S-01 §5): a transport failure, not a
+      // Problem. The delay does two jobs — it holds `submitting` on screen long
+      // enough to review the pending affordance, and it makes the recovery
+      // (auto-retry succeeds on attempt 2) the demo rather than a dead end.
+      on: { command: 'login' },
+      nth: 1,
+      replace: 'unreachable',
+      delayMs: 1_200,
+    },
+    {
+      // S-01 `session expired`, takeover wording (CG-11 / R-21). getProvisioning
+      // is S-03's first authenticated read, so refusing it once is the shortest
+      // honest path from "an administrator took the recorder" to the login
+      // screen wording it. `nth: 1` so the next sign-in is not thrown out again.
+      on: { command: 'getProvisioning' },
+      nth: 1,
+      replace: 'refuse',
+      refusal: {
+        status: 401,
+        code: 'auth.session-revoked',
+        title: 'Session revoked',
+        meta: { reason: 'takeover' },
       },
     },
   ],
