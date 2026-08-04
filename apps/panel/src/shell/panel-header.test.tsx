@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
@@ -8,6 +8,7 @@ import { ProblemError } from '@eduscope/api-client';
 import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../auth/auth-context.js';
 import { ClientContext } from '../client/client-provider.js';
+import { createQueryClient } from '../query/query-client.js';
 import '../styles/tokens.css';
 import { PanelHeader } from './panel-header.js';
 
@@ -27,7 +28,11 @@ function makeUser(overrides: Partial<User> = {}): User {
 }
 
 function renderHeader(getProvisioning: (...args: never[]) => Promise<unknown>) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // The REAL query client factory, deliberately — its default retry:1 is what
+  // silently swallowed the takeover refusal in production (found live in the
+  // browser gate; `useProvisioning`'s own `retry: false` is the fix this
+  // guards).
+  const queryClient = createQueryClient();
   const stub = { getProvisioning } as unknown as EduscopeClient;
   const router = createMemoryRouter(
     [
