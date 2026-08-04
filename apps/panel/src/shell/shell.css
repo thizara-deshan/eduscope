@@ -1,0 +1,113 @@
+/* S-03 header, clock and user menu (screen-inventory §2 S-03, S-02 §12). */
+
+.us-header {
+  position: relative;
+  flex: 0 0 auto;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: 0 var(--sp-8);
+  background: var(--ink);
+  color: var(--on-ink);
+  z-index: 20;
+}
+
+.us-header__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.us-header__logo {
+  color: var(--brand-red);
+  font-size: var(--fs-md);
+  font-weight: 800;
+  letter-spacing: var(--tracking-wide);
+}
+
+.us-header__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--ink-border);
+}
+
+.us-header__hall {
+  color: var(--on-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.us-clock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.us-clock__time {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--on-ink);
+}
+
+.us-clock__date {
+  font-size: var(--fs-xs);
+  color: var(--on-ink-muted);
+  border-left: 1px solid var(--ink-border);
+  padding-left: var(--sp-4);
+}
+
+.us-usermenu {
+  position: relative;
+  margin-left: auto;
+}
+
+.us-usermenu__trigger {
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--ink-border);
+  background: transparent;
+  color: var(--on-ink);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+.us-usermenu__popup {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.us-usermenu__item {
+  min-height: var(--tap-row);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-6);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-base);
+  text-align: left;
+}
+
+.us-usermenu__item:hover {
+  background: var(--surface-2);
+}

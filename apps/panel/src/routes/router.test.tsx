@@ -1,27 +1,40 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { EduscopeClient } from '@eduscope/api-client';
 import { AuthProvider } from '../auth/auth-context.js';
+import { ClientContext } from '../client/client-provider.js';
 import { ROUTES, routeObjects } from './router.js';
 
+// PanelHeader (S-03) reads useClient() on every route except the two auth
+// routes, so every render here needs a stub client — getProvisioning hangs
+// deliberately: these tests assert on the SCREEN, not on the header's
+// eventually-resolved hall name.
 function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const stub = { getProvisioning: vi.fn(() => new Promise(() => {})) } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   return render(
-    <AuthProvider
-      initialUser={{
-        id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
-        username: 'a.perera',
-        displayName: 'A. Perera',
-        role,
-        source: 'local',
-        mustResetPassword: false,
-        disabled: false,
-        lastLoginAt: null,
-        createdAt: '2026-01-01T00:00:00+00:00',
-      }}
-    >
-      <RouterProvider router={router} />
-    </AuthProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ClientContext.Provider value={stub}>
+        <AuthProvider
+          initialUser={{
+            id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+            username: 'a.perera',
+            displayName: 'A. Perera',
+            role,
+            source: 'local',
+            mustResetPassword: false,
+            disabled: false,
+            lastLoginAt: null,
+            createdAt: '2026-01-01T00:00:00+00:00',
+          }}
+        >
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ClientContext.Provider>
+    </QueryClientProvider>,
   );
 }
 
