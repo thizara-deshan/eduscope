@@ -41,6 +41,9 @@ test.describe('S-01 Login', () => {
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.us-panel')!).getPropertyValue('--osk-h').trim()))
       .toBe('380px');
+    // `.us-login`'s height is CSS-transitioned (200ms) off the --osk-h change;
+    // the property flips instantly but the layout settles a beat later.
+    await page.waitForTimeout(300);
 
     const box = await page.getByRole('button', { name: 'Log In' }).boundingBox();
     expect(box).not.toBeNull();

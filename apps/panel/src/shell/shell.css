@@ -10,7 +10,13 @@
   padding: 0 var(--sp-8);
   background: var(--ink);
   color: var(--on-ink);
-  z-index: 20;
+  /* Above .us-alertlane (z-index 40): a descendant's z-index (the user menu
+     popup, 1000) is scoped to its NEAREST positioned ancestor's own stacking
+     context, so raising the header's own value is what actually lets the
+     popup paint over the alert lane rather than under it (found live —
+     "Change password" was unclickable behind a seeded alert banner). Still
+     below .us-recnotch (55), which must stay on top of everything. */
+  z-index: 45;
 }
 
 .us-header__brand {
