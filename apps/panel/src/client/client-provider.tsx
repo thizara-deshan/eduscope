@@ -3,7 +3,13 @@ import { createRealClient } from '@eduscope/api-client';
 import type { EduscopeClient, MockClient, ScenarioName } from '@eduscope/api-client';
 import { useWsStore } from '../store/ws-store.js';
 
-const ClientContext = createContext<EduscopeClient | null>(null);
+/**
+ * Exported ONLY for tests that need a synchronous stub client (`use-login`,
+ * `use-change-password`, …) — `ClientProvider` itself always constructs its
+ * client asynchronously (the comment below explains why), which is unusable
+ * with fake timers. Application code must go through `useClient()`.
+ */
+export const ClientContext = createContext<EduscopeClient | null>(null);
 
 /**
  * THE only place in apps/panel that constructs a client. Everything else takes
