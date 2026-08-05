@@ -24,6 +24,16 @@ describe('per-switch world seeds (W2-D-1)', () => {
     client.dispose();
   });
 
+  it('keeps the signed-in lecturer identity stable across a dev scenario switch', async () => {
+    const client = createMockClient('happy');
+    const before = await client.getMe();
+
+    client.switchScenario('pipeline-crash-midway');
+
+    expect(await client.getMe()).toMatchObject({ id: before.id, username: before.username });
+    client.dispose();
+  });
+
   it('lets the override win over the script seed', async () => {
     const client = createMockClient('disk-full', { seed: { storagePressure: 'warning' } });
     expect((await client.getStorageOverview()).pressure).toBe('warning');

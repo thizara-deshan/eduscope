@@ -1,5 +1,14 @@
 import { zUser, type User } from '@eduscope/shared';
-import { SEED_EPOCH, seedId, validated } from './index.js';
+import { SEED_EPOCH, validated } from './index.js';
+
+// User identity must outlive a disposable mock world: the panel's auth
+// context remains mounted while the developer overlay calls switchScenario().
+const USER_IDS = {
+  lecturer: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+  admin: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
+  silva: '01ARZ3NDEKTSV4RRFFQ69G5FAX',
+  fonseka: '01ARZ3NDEKTSV4RRFFQ69G5FAY',
+} as const;
 
 /**
  * Two accounts exercise the ordinary paths (`a.perera` lecturer,
@@ -14,7 +23,7 @@ import { SEED_EPOCH, seedId, validated } from './index.js';
 export function createUsersSeed(): User[] {
   const rows: User[] = [
     {
-      id: seedId('user-lecturer'),
+      id: USER_IDS.lecturer,
       username: 'a.perera',
       displayName: 'A. Perera',
       role: 'lecturer',
@@ -25,7 +34,7 @@ export function createUsersSeed(): User[] {
       createdAt: SEED_EPOCH,
     },
     {
-      id: seedId('user-admin'),
+      id: USER_IDS.admin,
       username: 'admin',
       displayName: 'Device Administrator',
       role: 'admin',
@@ -36,7 +45,7 @@ export function createUsersSeed(): User[] {
       createdAt: SEED_EPOCH,
     },
     {
-      id: seedId('user-silva'),
+      id: USER_IDS.silva,
       username: 'n.silva',
       displayName: 'N. Silva',
       role: 'lecturer',
@@ -47,7 +56,7 @@ export function createUsersSeed(): User[] {
       createdAt: SEED_EPOCH,
     },
     {
-      id: seedId('user-fonseka'),
+      id: USER_IDS.fonseka,
       username: 'r.fonseka',
       displayName: 'R. Fonseka',
       role: 'lecturer',
