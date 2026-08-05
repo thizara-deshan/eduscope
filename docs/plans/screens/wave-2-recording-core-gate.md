@@ -455,3 +455,52 @@ a preview issues no recording command. No enumerated S-10 row is missing.
   becomes unavailable, with a focused virtual-clock regression.
 
 The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## S-11 — Room Controls bar
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s11-room` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/room` | exit 0 — **45 passed** across 7 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+| forbidden-import grep for `not-connected-*.tsx` | zero matches |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | Three regions, applied mute, and collapse | ✅ pass |
+| 2 | Failed mute preserves Live truth and names the direction | ✅ pass |
+| 3 | Expanded idle bar remains within 168px | ✅ pass |
+| 4 | Tab order contains exactly Advanced, Collapse, Lecturer Mic, Power off | ✅ pass |
+| 5 | S-11 and S-09 read and update one shared microphone truth | ✅ pass |
+| 6 | NOT CONNECTED makes no on/off/level/temperature claims | ✅ pass |
+
+### Testing Library state matrix
+
+The focused room suite covers live, muted, pending, apply failed, mic offline,
+U-1, U-2 and U-5; collapsed, expanded and Advanced-visible bar states; applied
+truth; the shared control; and all three anti-placebo invariants. No enumerated
+S-11 row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `collapsed` | `happy` | ROOM CONTROLS head with Advanced and Show controls |
+| 2 | `expanded` | Show controls | MICROPHONE, POWER and NOT CONNECTED regions within 168px |
+| 3 | `advanced visible` | Either role | Unit-tested shared Advanced entry |
+| 4 | mic `live` | `happy` | Switch on; Live |
+| 5 | mic `muted` | Tap switch | Switch off; Muted |
+| 6 | mic `pending` | Tap switch | Unit-tested pending lock with unmoved applied truth |
+| 7 | mic `apply failed` | World → Mic changes fail to apply | Still live failure copy and applied switch position |
+| 8 | mic `offline` | Pipeline scenario; ~20s | Unit-tested disabled row with inline reason |
+| 9 | mic U-2 | `ws-flap`; 10s | Unit-tested not-connected reason |
+| 10 | `[D-10]` region | Always | Five inert rows, one notice, no interaction or state claims |
+
+The remaining-task visual review was omitted by explicit user direction.
