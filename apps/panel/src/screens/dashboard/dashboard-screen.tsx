@@ -1,5 +1,7 @@
 import { useAuth } from '../../auth/auth-context.js';
 import { useProvisioning } from '../../shell/use-provisioning.js';
+import { useRecordingState } from '../../store/selectors.js';
+import { SessionLayout } from '../session/session-layout.js';
 import { IdleHero } from './idle-hero.js';
 import { useStartRecording } from './use-start-recording.js';
 import './dashboard.css';
@@ -8,6 +10,14 @@ export function DashboardScreen(): JSX.Element {
   const auth = useAuth();
   const provisioning = useProvisioning();
   const start = useStartRecording();
+  const recordingState = useRecordingState();
+  const isLiveSession = recordingState === 'starting'
+    || recordingState === 'recording'
+    || recordingState === 'paused'
+    || recordingState === 'stopping'
+    || recordingState === 'finalizing';
+
+  if (isLiveSession) return <SessionLayout />;
 
   return (
     <main

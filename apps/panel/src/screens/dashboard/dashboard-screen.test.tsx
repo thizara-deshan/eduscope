@@ -16,12 +16,23 @@ const user: User = {
   lastLoginAt: null, createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-function renderDashboard() {
+function renderDashboard(recordingState = 'idle') {
   useWsStore.getState().reset();
-  useWsStore.setState({ recording: { state: 'idle' } as never });
+  useWsStore.setState({ recording: {
+    state: recordingState,
+    sessionId: user.id,
+    ownerUserId: user.id,
+    ownerDisplayName: user.displayName,
+    startedAt: recordingState === 'recording' ? '2026-08-05T10:00:00Z' : null,
+    recordedDurationMs: 0,
+  } as never });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const client = {
-    getProvisioning: vi.fn(() => Promise.resolve({ hallDisplayName: 'Lecture Hall A' })),
+    getProvisioning: vi.fn(() => Promise.resolve({
+      hallDisplayName: 'Lecture Hall A',
+      featureFlags: { aiQuizEnabled: false },
+      llmEndpoint: null,
+    })),
     startRecording: vi.fn(() => Promise.resolve({ resolveBySec: 10 })),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
@@ -46,5 +57,15 @@ describe('DashboardScreen', () => {
     renderDashboard();
     expect(screen.getByTestId('sources-bar-slot')).toBeInTheDocument();
     expect(screen.getByTestId('room-bar-slot')).toBeInTheDocument();
+  });
+
+  it('renders S-05 for an owner with a live recording', () => {
+    renderDashboard('recording');
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-05');
+  });
+
+  it('returns to S-04 when recording is completed', () => {
+    renderDashboard('completed');
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
   });
 });
