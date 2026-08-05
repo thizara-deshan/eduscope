@@ -17,6 +17,8 @@ import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
 import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
+export { isMockPreviewFrame } from './events/preview.js';
+
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
   /** The merged `WorldSeed` this world is actually running (W2-D-1). */
