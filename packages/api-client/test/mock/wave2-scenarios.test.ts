@@ -26,7 +26,9 @@ describe('per-switch world seeds (W2-D-1)', () => {
 
   it('keeps the signed-in user identity stable across a dev scenario switch', async () => {
     const client = createMockClient('happy');
-    const { user: before } = await client.login({ username: 'admin', password: 'battery-staple' });
+    const { user: before } = await client.login({
+      username: 'admin', password: 'battery-staple', client: 'panel',
+    });
 
     client.switchScenario('pipeline-crash-midway');
 
