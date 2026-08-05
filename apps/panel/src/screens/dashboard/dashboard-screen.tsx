@@ -4,6 +4,7 @@ import { useOverlays } from '../../overlays/overlay-host.js';
 import { useProvisioning } from '../../shell/use-provisioning.js';
 import { useIsStale, useRecordingSession } from '../../store/selectors.js';
 import { SessionLayout } from '../session/session-layout.js';
+import { SourcesBar } from '../sources/sources-bar.js';
 import { IdleHero } from './idle-hero.js';
 import { LockCard } from './lock-card.js';
 import { TakeoverConfirm } from './takeover-confirm.js';
@@ -15,7 +16,7 @@ import './dashboard.css';
 function BottomBarSlots(): JSX.Element {
   return (
     <div className="us-dashboard__bars" aria-label="Room controls">
-      <div className="us-dashboard__bar-slot" data-testid="sources-bar-slot" />
+      <div className="us-dashboard__bar-slot" data-testid="sources-bar-slot"><SourcesBar /></div>
       <div className="us-dashboard__bar-slot" data-testid="room-bar-slot" />
     </div>
   );
@@ -30,18 +31,28 @@ export function DashboardScreen(): JSX.Element {
   const stale = useIsStale();
   const overlays = useOverlays();
 
-  if (lock.kind === 'owned') return <SessionLayout />;
+  if (lock.kind === 'owned') {
+    return (
+      <div className="us-dashboard">
+        <div className="us-dashboard__main"><SessionLayout /></div>
+        <BottomBarSlots />
+      </div>
+    );
+  }
 
   if (lock.kind === 'takenOver') {
     return (
-      <div className="us-takenoversession">
-        <TakeoverNotice
-          kind="new-owner"
-          priorOwnerDisplayName={lock.priorOwnerDisplayName}
-          byDisplayName={null}
-          at={lock.at}
-        />
-        <SessionLayout />
+      <div className="us-dashboard">
+        <div className="us-dashboard__main us-takenoversession">
+          <TakeoverNotice
+            kind="new-owner"
+            priorOwnerDisplayName={lock.priorOwnerDisplayName}
+            byDisplayName={null}
+            at={lock.at}
+          />
+          <SessionLayout />
+        </div>
+        <BottomBarSlots />
       </div>
     );
   }

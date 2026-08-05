@@ -1,5 +1,5 @@
 import { createElement, Fragment, type ReactNode } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -64,6 +64,7 @@ function renderDashboard({
   const client = {
     getProvisioning: vi.fn(never), listChannels: vi.fn(never),
     listLayoutPresets: vi.fn(never), getStorageOverview: vi.fn(never),
+    listSourceRoles: vi.fn(never), getSourcesStatus: vi.fn(never),
     startRecording: vi.fn(() => Promise.resolve({ resolveBySec: 10 })),
     takeoverRecording: vi.fn(never), pauseRecording: vi.fn(never),
     resumeRecording: vi.fn(never), stopRecording: vi.fn(never),
@@ -155,7 +156,7 @@ describe('DashboardScreen', () => {
     expect(screen.getByTestId('takeover-notice')).toHaveTextContent(
       'An administrator took over this recording. R. Fernando took over at 14:12.',
     );
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(within(screen.getByTestId('lock-card')).queryByRole('button')).toBeNull();
   });
 
   it('shows third-party takeover attribution without an action', () => {
@@ -167,7 +168,7 @@ describe('DashboardScreen', () => {
       },
     });
     expect(screen.getByText('Taken over by R. Fernando.')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(within(screen.getByTestId('lock-card')).queryByRole('button')).toBeNull();
   });
 
   it('renders S-05 for the original owner before takeover', () => {
