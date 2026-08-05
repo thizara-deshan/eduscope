@@ -1,20 +1,7 @@
 import { TimerCard } from '../transport/timer-card.js';
+import { CaptureAssuranceCard } from './capture-assurance-card.js';
 import { useAiEnabled } from './use-ai-enabled.js';
 import './session.css';
-
-function CaptureAssuranceSlot(): JSX.Element {
-  return (
-    <section
-      className="us-sessionlayout__capture-slot"
-      data-testid="capture-assurance-slot"
-      data-replaced-by="Task 11"
-      aria-label="Capture assurance"
-    >
-      <h1>Capture assurance</h1>
-      <p>Capture status will appear here.</p>
-    </section>
-  );
-}
 
 export function SessionLayout(): JSX.Element {
   const aiEnabled = useAiEnabled();
@@ -38,7 +25,7 @@ export function SessionLayout(): JSX.Element {
             AI Quiz Studio
           </div>
         ) : (
-          <CaptureAssuranceSlot />
+          <CaptureAssuranceCard />
         )}
       </div>
       <aside

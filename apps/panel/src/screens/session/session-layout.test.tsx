@@ -1,11 +1,13 @@
 import { createElement, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
+import { OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { SessionLayout } from './session-layout.js';
@@ -36,28 +38,35 @@ function renderSession(aiEnabled: boolean | undefined) {
   }
   const client = {
     getProvisioning: vi.fn(() => new Promise<never>(() => undefined)),
+    listChannels: vi.fn(() => new Promise<never>(() => undefined)),
+    listLayoutPresets: vi.fn(() => new Promise<never>(() => undefined)),
+    getStorageOverview: vi.fn(() => new Promise<never>(() => undefined)),
     pauseRecording: vi.fn(), resumeRecording: vi.fn(), stopRecording: vi.fn(),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     QueryClientProvider,
     { client: queryClient },
     createElement(ClientContext.Provider, { value: client },
-      createElement(AuthProvider, { initialUser: user, children })),
+      createElement(AuthProvider, {
+        initialUser: user,
+        children: createElement(MemoryRouter, null,
+          createElement(OverlayProvider, null, children)),
+      })),
   );
   return render(<SessionLayout />, { wrapper });
 }
 
 describe('SessionLayout', () => {
-  it('mounts the capture-assurance slot, not S-13, when AI is disabled', () => {
+  it('mounts Capture Assurance, not S-13, when AI is disabled', () => {
     const view = renderSession(false);
-    expect(screen.getByTestId('capture-assurance-slot')).toBeInTheDocument();
+    expect(screen.getByTestId('capture-assurance-card')).toBeInTheDocument();
     expect(view.container.querySelector('[data-screen="S-13"]')).toBeNull();
   });
 
   it('mounts the Wave 4 S-13 slot, not capture assurance, when AI is enabled', () => {
     const view = renderSession(true);
     expect(view.container.querySelector('[data-screen="S-13"][data-wave="4"]')).toBeInTheDocument();
-    expect(screen.queryByTestId('capture-assurance-slot')).toBeNull();
+    expect(screen.queryByTestId('capture-assurance-card')).toBeNull();
   });
 
   it('never mounts the insights wrapper in either layout', () => {
