@@ -55,7 +55,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
    * registered machine 5a instance at all, so `world.state()` throws for it.
    * That "not registered" case, and an explicit `state === 'unbound'`, both
    * map to the contract's dedicated `source-unbound` code; a *registered*
-   * role that just isn't `online` yet (offline/unknown/degraded) maps to
+   * role that is unavailable (offline/unknown) maps to
    * `source-offline` instead — these are two different codes for a reason,
    * do not collapse them into one.
    */
@@ -67,7 +67,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
       return 'source-unbound';
     }
     if (state === 'unbound') return 'source-unbound';
-    if (state === 'online') return null;
+    if (state === 'online' || state === 'degraded') return null;
     return 'source-offline';
   }
 
@@ -85,7 +85,11 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
   const unsubscribe = world.subscribeEvents((envelope) => {
     if (envelope.event !== 'sources.status' || !current) return;
     const payload = envelope.payload as { roleId: string; state: string };
-    if (payload.roleId !== current.roleId || payload.state === 'online') return;
+    if (
+      payload.roleId !== current.roleId
+      || payload.state === 'online'
+      || payload.state === 'degraded'
+    ) return;
     const dying = current;
     endCurrent();
     emitter.emit({
