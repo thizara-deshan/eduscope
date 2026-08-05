@@ -202,3 +202,95 @@ No enumerated row is missing.
    until the next close event.
 
 The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## S-05 — Dashboard, session (AI disabled)
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s05-session` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/session` | exit 0 — **91 passed** across 8 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+| `pnpm --filter @eduscope/panel build` | exit 0 |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | `happy`, AI disabled: assured verdict → PC preview opens as S-10 → close → density, tier and all three tile states unchanged | ✅ pass |
+| 2 | `pipeline-crash-midway`: CAM 1 reaches tier 4 with the R-SRC-1 reassurance; tile x-order is unchanged | ✅ pass |
+| 3 | Both bottom bars expanded: capture card retains a ≥388px client box, has no internal overflow, and `.us-dashboard__main` does not clip | ✅ pass |
+| 4 | Recording-blocked Room Controls uses the approved safety-copy envelope, **≤194px** | ✅ pass |
+| 5 | One lecturer-camera fault reads *Reconnecting* on both S-05 and S-09 | ✅ pass |
+| 6 | AI enabled/disabled stable S-05 runs: header, recording frame, sidebar and both bars have identical bounding boxes; only main-column content changes | ✅ pass |
+
+### Testing Library state matrix
+
+| Enumerated state / invariant | Covered by |
+|---|---|
+| `assured` | tier 1 sentence and all-online fold cases |
+| `attention` (source/channel/storage) | exhaustive fold rows and rendered tier 3 verdict |
+| `problem` (source/channel/storage) | tier 4 rows, mic tie-break and R-SRC-1 reassurance |
+| `checking` | cold, unknown-source, preflight, null-storage and stale rows |
+| `paused` | exact paused sentence and no false reassurance |
+| `stopping / finalizing` | exact saving sentence; tiles freeze |
+| U-1 | four-block card-local skeleton with tier 2 verdict |
+| U-2 | stale input degrades the fold to tier 2 |
+| U-3 | populated store/query rows remain mounted without a skeleton flash |
+| U-4 / U-5 inapplicable | exactly three tile buttons; no non-tile card action exists |
+| §13 exhaustive fold | 64 pure fold tests, including unknown outranking online and mic-offline tie-break |
+| generated policy | disk row renders byte figures and the retention-policy sentence from payload data |
+| density | ResizeObserver drives comfortable/dense without omitting any fact |
+| AI layout choice | Capture Assurance and S-13 are mutually exclusive; TimerCard/sidebar remain in both |
+
+No enumerated row is missing.
+
+### Scenario demo checklist
+
+All S-05 rows use the World strip's **AI disabled (INT-10 go-live default)**
+unless the row explicitly compares the AI-enabled layout.
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `assured` | `happy` → Start | *Everything this lecture needs is working*; three live tiles |
+| 2 | `attention` (source) | `pipeline-crash-midway` → wait ~5 s | CAM 1 reads *Reconnecting* in both S-05 and S-09; tile position is unchanged |
+| 2b | `attention` (storage) | World → Storage warning | Unit-covered generated sentence: *The disk is filling up.* |
+| 3 | `problem` (source) | pipeline scenario → wait ~12 s | *CAM 1 has no signal.* plus *Your lecture is still recording.*; no tile reorder |
+| 4 | `problem` (mic) | same scenario → wait ~20 s | Unit-covered mic-specific silence sentence wins the tier-4 tie |
+| 5 | `checking` | `ws-flap` / cold input | Unit-covered tier 2 *Checking the room…* with no false colour claim |
+| 6 | `paused` | Pause | Unit-covered amber paused sentence; live source facts remain |
+| 7 | `stopping / finalizing` | Stop | Unit-covered saving sentence and non-tappable tiles |
+| 8 | U-1 | unresolved card data | Unit-covered four-block skeleton in the card's own shape |
+| 9 | U-2 | stale input | Unit-covered verdict degradation to tier 2 |
+| 10 | U-3 | reconnect/resync | Store/query tests retain populated rows without a skeleton flash |
+| 11 | dense density | expand both bars | Browser proves ≥388px card, no card overflow and no main clipping |
+
+### Approved gate adaptations
+
+- Task 18's safety explanation requires a **194px** Room Controls envelope
+  while recording is non-terminal. This gate asserts `≤194px` for S-05; the
+  ordinary idle/available bar remains `≤168px`.
+- The World strip changes provisioning through `switchScenario()`, which
+  disposes the active mock world. Layout invariance is therefore compared
+  across two independently started stable S-05 runs rather than pretending the
+  harness supports a hot provisioning update.
+
+### Defects found and fixed during this gate
+
+1. **World-strip changes left REST query truth stale.** `switchScenario()`
+   rebuilt WebSocket state but the mounted TanStack Query cache still reported
+   the prior world's provisioning, so checking AI disabled continued to render
+   S-13. The dev overlay now invalidates all REST-backed queries after a world
+   rebuild; its focused regression proves the provisioning row is invalidated.
+2. **The dense session grid clipped by 184px.** With both bars open, the main
+   slot was 390px but CSS grid's automatic minimum expanded its scroll height
+   to 574px. The row and both grid children now admit shrinking, and the
+   documented both-bars-open density spends no vertical session padding, which
+   preserves the capture card's 388px floor without document or main-region
+   clipping.
+
+The remaining-task visual review was omitted by explicit user direction.
