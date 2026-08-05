@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { listScenarios, type ScenarioName, type WorldSeed } from '@eduscope/api-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMockClient } from '../client/client-provider.js';
 import { useRecordingState } from '../store/selectors.js';
 import { useWsStore } from '../store/ws-store.js';
@@ -37,6 +38,7 @@ declare global {
  */
 export function ScenarioOverlay() {
   const client = useMockClient();
+  const queryClient = useQueryClient();
   const recordingState = useRecordingState();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ScenarioName>(client?.scenario ?? 'happy');
@@ -62,6 +64,10 @@ export function ScenarioOverlay() {
     // storage.critical alert never reached the banner host).
     useWsStore.getState().reset();
     client.switchScenario(name, nextSeed);
+    // REST-backed rows (provisioning, presets, roles, storage) belong to the
+    // disposable world too. Without invalidation a World-strip change updated
+    // WS truth but left screens rendering the previous world's query cache.
+    void queryClient.invalidateQueries();
     setActive(name);
     setSeed(nextSeed);
   };
