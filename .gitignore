@@ -9,6 +9,7 @@ revamp-guide/
 .claude/
 agent/
 .turbo/
+.worktrees/
 coverage/
 playwright-report/
 test-results/
