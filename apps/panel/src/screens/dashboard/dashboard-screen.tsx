@@ -3,6 +3,7 @@ import { DangerButton } from '../../danger/danger-button.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { useProvisioning } from '../../shell/use-provisioning.js';
 import { useIsStale, useRecordingSession } from '../../store/selectors.js';
+import { RoomControlsBar } from '../room/room-controls-bar.js';
 import { SessionLayout } from '../session/session-layout.js';
 import { SourcesBar } from '../sources/sources-bar.js';
 import { IdleHero } from './idle-hero.js';
@@ -17,7 +18,7 @@ function BottomBarSlots(): JSX.Element {
   return (
     <div className="us-dashboard__bars" aria-label="Room controls">
       <div className="us-dashboard__bar-slot" data-testid="sources-bar-slot"><SourcesBar /></div>
-      <div className="us-dashboard__bar-slot" data-testid="room-bar-slot" />
+      <div className="us-dashboard__bar-slot" data-testid="room-bar-slot"><RoomControlsBar /></div>
     </div>
   );
 }

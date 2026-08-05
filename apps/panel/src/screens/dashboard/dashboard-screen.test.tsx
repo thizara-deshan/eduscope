@@ -89,10 +89,11 @@ describe('DashboardScreen', () => {
     expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
   });
 
-  it('reserves both bottom-bar slots on the dashboard', () => {
+  it('mounts both bottom bars on the dashboard', () => {
     renderDashboard();
     expect(screen.getByTestId('sources-bar-slot')).toBeInTheDocument();
     expect(screen.getByTestId('room-bar-slot')).toBeInTheDocument();
+    expect(screen.getByTestId('room-controls-bar')).toBeInTheDocument();
   });
 
   it('renders the locked lecturer remedy without an action', () => {
