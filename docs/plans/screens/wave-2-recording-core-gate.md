@@ -504,3 +504,102 @@ S-11 row is missing.
 | 10 | `[D-10]` region | Always | Five inert rows, one notice, no interaction or state claims |
 
 The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## S-12 — Power-off confirm
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s12-poweroff` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/room src/shell src/store` | exit 0 — **99 passed** across 16 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+| `pnpm gate` | exit 0 — **5 passed**: panel 1a/1b/1e and quiz 1c/1d; Gate 1b covers nine scripts |
+| `pnpm typecheck` | exit 0 across all four projects |
+| `pnpm test` | exit 0 — **848 passed** across 90 files |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | Accepted shutdown fills the panel and suppresses U-2 beyond `T-WS-STALE` | ✅ pass |
+| 2 | Recording begun behind the confirm produces the shared reason and lecture-focus remedy | ✅ pass |
+| 3 | Destruction requires three taps: expand, entry, confirm | ✅ pass |
+| 4 | Live recording disables the entry with its reason inline | ✅ pass |
+| 5 | `poweroff-not-halted` traverses other refusal, not-halted, retry and acceptance | ✅ pass |
+| 6 | A 202 leaves the pending dialog mounted | ✅ pass |
+
+### Testing Library state matrix
+
+The focused suite covers all ten S-12 rows, the blocked/refused copy identity,
+expected-drop suppression and its ordinary-disconnect inverse, the not-halted
+ceiling, requester-banner suppression, and no optimistic close. No enumerated
+S-12 row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `entry available` | `happy` idle; expand Room Controls | Quiet Power off entry in the POWER region |
+| 2 | `entry blocked` | Start a recording | Disabled entry, inline shared reason, Go to the lecture |
+| 3 | `entry disconnected` | `ws-flap`; 10s | Unit-covered not-connected reason |
+| 4 | `confirm` | Tap Power off | Hall-naming dialog; Cancel receives focus |
+| 5 | `pending` | Confirm | Powering off…; both actions locked; dialog remains |
+| 6 | `refused (recording)` | Open idle dialog; dev Start; wait for S-05; confirm | Shared reason and neutral lecture jump; no destructive action |
+| 7 | `accepted` | Confirm while idle | Assertive Shutting down terminal; no reconnecting marker |
+| 8 | `accepted, not halted` | `poweroff-not-halted`; second attempt | Not-halted line and one Try again |
+| 9 | `refused (other)` | Same scenario; first attempt | Problem title and Close replacing destruction |
+| 10 | U-1 | Cold recording snapshot | Unit-covered disabled entry until truth arrives |
+| 11 | requester banner suppression | Cause recording refusal while dialog is open | Refusal stays in the dialog; shell banner is suppressed for its lifetime |
+
+The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## Wave 2 exit condition — J-1
+
+### Happy path
+
+The combined S-04 and S-07 gates demonstrate the unbroken path on `happy` with
+AI disabled: login → S-04 → Start → starting without a recording frame → S-05
+with red chrome and assured Capture Assurance → Pause with frozen digits →
+Resume with ticking digits → Stop → Saving… → Saved → S-04. Mock transition
+timing is deterministic: start confirmation **1.2s**, pause **250ms**, resume
+confirmation **1.05s**, and Stop-to-Saved **2.5s**.
+
+### Failure path
+
+The S-04 `start-fails` gate demonstrates both attempts without a frame: the
+first Start is refused immediately with the named Students Camera reason and no
+session row; the second enters starting and reaches the plain-language error in
+**1.2s**. MutationObservers prove the red frame never appears, and mock/unit
+coverage proves no phantom library row is created.
+
+### Cross-screen couplings
+
+| Coupling | Assertion |
+|---|---|
+| One elapsed rule across S-07 and S-06 | Task 22 focused dashboard/transport coverage |
+| One `AudioControl` truth across S-09 and S-11 | S-11 E2E shared-control journey and room/audio unit tests |
+| One `sources.status` truth across S-09 and S-05 | S-05 E2E compares the same lecturer-camera health word in both surfaces |
+| S-11 168px envelope → S-05 388px floor | S-11 height E2E plus S-05 both-bars-open floor E2E |
+
+## States with no live producer
+
+| State | Why | Coverage |
+|---|---|---|
+| S-10 `busy` | One lightbox cannot create two concurrent negotiations on one connection | Testing Library |
+| S-10 `internal` | No honest staged server-internal failure exists in the mock | Testing Library |
+| S-10 `source-unbound` | The only unbound role is not rendered as a tappable tile | Testing Library |
+| S-07 `not owner` | S-06 routes a non-owner to the lock card instead | Testing Library |
+| S-04 `recovery pending` | The contract has no distinct recovery snapshot | Testing Library |
+
+## Contract gaps found in passing
+
+- **Candidate CG — boot recovery visibility (W2-D-8).** The contract cannot
+  distinguish a boot recovery from a cold pending snapshot. Wave 2 does not
+  invent a producer or amend the contract; this remains a candidate row for
+  the Wave-3 contract amendment.
