@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eduscope core-api — public REST surface
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contract v0 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
     is built against this contract on a mock adapter before any backend exists
@@ -495,12 +495,19 @@ paths:
     put:
       tags: [sources]
       operationId: updateAudioControl
-      summary: Set gain/mute; applied to real hardware, result pushed as audio.control
+      summary: Set gain/mute; applied to real hardware, result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
       description: |
         Room Controls master mute writes the same `muted` field — one control,
         one truth (LP-14, [D-10]). 202 because application to the ALSA path is
         asynchronous; the audio.control event carries appliedState
         applied|failed (never assumed success — B-55/B-12 lessons).
+
+        v0.3, CG-15: while the recording session is non-terminal, only the
+        session owner or an admin may call this — `403 not-authorized`
+        otherwise. Previously ungated, which let a non-owner mute the
+        lecturer's microphone mid-lecture (B-15's defect, reproduced here —
+        S06-D-5). No session is non-terminal means no owner to protect, so the
+        guard does not apply outside a session.
       x-decision: D-10
       parameters: [{ $ref: '#/components/parameters/roleId' }]
       requestBody:
@@ -510,6 +517,7 @@ paths:
             schema: { $ref: '#/components/schemas/AudioControlUpdate' }
       responses:
         '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/Problem' }
 
   # ─────────────────────────── recordings ───────────────────────────
@@ -783,6 +791,17 @@ paths:
       tags: [device]
       operationId: powerOffDevice
       summary: LP-13 confirmed power-off — REFUSED server-side while a session is non-terminal (R-22)
+      description: |
+        v0.3, CG-16: this command has NO resolving event. events.md §10 is a
+        closed catalog and holds none for power-off, because a successful
+        halt's only observable outcome is the device ceasing to answer — there
+        is nothing left to emit it. `resolveBySec` is therefore NOT the usual
+        "failure rendered after this many seconds without a resolving event"
+        (`CommandAccepted.resolveBySec`'s general description); for this
+        operation specifically it is the **not-halted** threshold: if the
+        transport is still open when it elapses, the device plausibly did not
+        halt, and the caller may retry (S12-D-2). The transport closing IS the
+        resolution.
       responses:
         '202': { $ref: '#/components/responses/CommandAccepted' }
         '409':
@@ -1954,7 +1973,7 @@ components:
     RecordingStateSnapshot:
       type: object
       description: REST mirror of the recording.state event (machine 1a).
-      required: [state, startReason, sessionId, title, ownerUserId, ownerDisplayName, startedAt, recordedDurationMs, segmentIndex, segmentCount, pauseCount, takeoverBy, errorCode, errorMessage]
+      required: [state, startReason, sessionId, title, ownerUserId, ownerDisplayName, startedAt, recordedDurationMs, segmentIndex, segmentCount, pauseCount, takeoverBy, takeoverAt, takeoverByDisplayName, errorCode, errorMessage]
       properties:
         state: { $ref: '#/components/schemas/RecordingWireState' }
         startReason:
@@ -1975,6 +1994,12 @@ components:
         pauseCount: { type: [integer, 'null'] }
         takeoverBy:
           oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
+        takeoverAt:
+          oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
+          description: v0.3, CG-14 — set by R-21 alongside takeoverBy. Travels on the snapshot rather than via listUsers because the displaced lecturer cannot call an admin-only route to resolve either value (S06-D-4).
+        takeoverByDisplayName:
+          type: [string, 'null']
+          description: v0.3, CG-14 — set by R-21 alongside takeoverBy. See takeoverAt.
         errorCode: { type: [string, 'null'] }
         errorMessage: { type: [string, 'null'] }
         adopted:

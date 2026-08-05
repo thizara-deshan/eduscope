@@ -50,6 +50,8 @@ describe('rest schema coverage', () => {
       segmentCount: null,
       pauseCount: null,
       takeoverBy: null,
+      takeoverAt: null,
+      takeoverByDisplayName: null,
       errorCode: null,
       errorMessage: null,
     };

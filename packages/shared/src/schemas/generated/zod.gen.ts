@@ -383,6 +383,14 @@ export const zRecordingStateSnapshot = z.object({
         zUlid,
         z.null()
     ]),
+    takeoverAt: z.union([
+        zInstant,
+        z.null()
+    ]),
+    takeoverByDisplayName: z.union([
+        z.string(),
+        z.null()
+    ]),
     errorCode: z.union([
         z.string(),
         z.null()

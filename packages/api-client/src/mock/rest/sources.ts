@@ -7,12 +7,12 @@ import {
   type Ulid,
 } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
-import { BOUND_SOURCE_ROLES } from '../machines/index.js';
+import { BOUND_SOURCE_ROLES, isRecordingNonTerminal } from '../machines/index.js';
 import type { Transition } from '../machines/types.js';
 import { RESOLVE_BY_SEC } from '../commands.js';
 import { validated, nowIsoZ } from '../seed/index.js';
 import { PAYLOAD_BUILDERS, nextUlid } from '../world.js';
-import { requireAdmin } from './auth.js';
+import { currentUser, requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
 
 export function createSourcesOperations(ctx: RestContext) {
@@ -91,6 +91,20 @@ export function createSourcesOperations(ctx: RestContext) {
     updateAudioControl: async (roleId: SourceRoleId, body: AudioControlUpdate): Promise<CommandAccepted> => {
       const refusal = engine.onCommand('updateAudioControl');
       if (refusal) throw new ProblemError(refusal);
+      // v0.3, CG-15 (S06-D-5): owner or admin only, while a session is
+      // non-terminal — B-15 was this exact control enforced client-side only.
+      // No non-terminal session means no owner to protect (S-06 §9 #2).
+      if (isRecordingNonTerminal(world)) {
+        const me = currentUser(ctx);
+        const ownerUserId = world.data['session.ownerUserId'] as string | undefined;
+        if (me.role !== 'admin' && me.id !== ownerUserId) {
+          throw new ProblemError({
+            status: 403,
+            code: 'not-authorized',
+            title: 'Only the recording owner or an administrator can change audio controls right now.',
+          });
+        }
+      }
       const row = seed.audioControls.find((a) => a.roleId === roleId);
       if (!row) {
         throw new ProblemError({ status: 422, code: 'validation.invalid', title: `No audio control for ${roleId}` });

@@ -22,11 +22,16 @@ export interface ForcedTransition {
   /** 1-based occurrence to act on. Omit to apply on every occurrence. */
   readonly nth?: number;
   /**
-   * Run this transition instead, refuse the command with a `Problem`, or fail
-   * the request at the TRANSPORT layer with no body at all (W1-D-1). Only
-   * `'unreachable'` reaches `onTransport`; only `'refuse'` reaches `onCommand`.
+   * Run this transition instead, refuse the command with a `Problem`, fail
+   * the request at the TRANSPORT layer with no body at all (W1-D-1), or
+   * accept it and never resolve it (v0.3, CG-16 — `powerOffDevice`'s
+   * "accepted, not halted" state, S12-D-2: the command has no resolving
+   * event, so the ONLY way a scenario can force that branch is to suppress
+   * whatever side effect would otherwise resolve it — for powerOffDevice,
+   * the transport closing). Only `'unreachable'` reaches `onTransport`; only
+   * `'refuse'` reaches `onCommand`; only `'stall'` reaches `onStall`.
    */
-  readonly replace: TransitionId | 'refuse' | 'unreachable';
+  readonly replace: TransitionId | 'refuse' | 'unreachable' | 'stall';
   /** Required when `replace === 'refuse'` and the trigger is a command. */
   readonly refusal?: Problem;
   /** Override the scheduled delay so demos are not spec-length. */

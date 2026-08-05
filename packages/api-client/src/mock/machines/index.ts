@@ -1,4 +1,4 @@
-import { recordingMachine } from './recording.js';
+import { recordingMachine, isRecordingNonTerminal } from './recording.js';
 import { channelTransitionId, meetingChannelMachine, streamingChannelMachine } from './channel.js';
 import { aiCountdownMachine, aiPublicationMachine, aiQuestionMachine, aiSetMachine } from './ai.js';
 import { quizSessionMachine, quizSyncMachine } from './quiz.js';
@@ -65,7 +65,7 @@ export const ALL_MACHINES: readonly MachineDef[] = [
   ...BOUND_SOURCE_ROLES.map(sourceMachine),
 ];
 
-export { recordingMachine, sourceMachine, sourceTransitionId, storageMachine, captureCardMachine };
+export { recordingMachine, isRecordingNonTerminal, sourceMachine, sourceTransitionId, storageMachine, captureCardMachine };
 export { meetingChannelMachine, streamingChannelMachine, channelTransitionId };
 export { aiCountdownMachine, aiSetMachine, aiQuestionMachine, aiPublicationMachine };
 export { quizSessionMachine, quizSyncMachine };

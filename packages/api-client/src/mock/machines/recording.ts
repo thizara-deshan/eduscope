@@ -127,6 +127,11 @@ export const recordingMachine: MachineDef = {
   ],
 };
 
+/** state-machines §1.2 — non-terminal = a session is live (starting|recording|paused|stopping|finalizing). Shared by CG-15 (updateAudioControl) and CG-16/R-22 (powerOffDevice). */
+export function isRecordingNonTerminal(w: MockWorld): boolean {
+  return !recordingMachine.terminal.includes(w.state(M)) && w.state(M) !== recordingMachine.initial;
+}
+
 PAYLOAD_BUILDERS['recording.state'] = (w: MockWorld) => ({
   state: w.state(M),
   startReason: (w.data['session.startReason'] as string | undefined) ?? null,
@@ -140,6 +145,11 @@ PAYLOAD_BUILDERS['recording.state'] = (w: MockWorld) => ({
   segmentCount: (w.data['session.segmentCount'] as number | undefined) ?? null,
   pauseCount: (w.data['session.pauseCount'] as number | undefined) ?? null,
   takeoverBy: (w.data['session.takeoverBy'] as string | undefined) ?? null,
+  // v0.3, CG-14 — set alongside takeoverBy by rest/recording.ts's
+  // takeoverRecording BEFORE R-21 is scheduled (S06-D-4); R-21 itself does not
+  // touch ownerUserId (C-1) and carries no per-call data to set these from.
+  takeoverAt: (w.data['session.takeoverAt'] as string | undefined) ?? null,
+  takeoverByDisplayName: (w.data['session.takeoverByDisplayName'] as string | undefined) ?? null,
   errorCode: (w.data['session.errorCode'] as string | undefined) ?? null,
   errorMessage: (w.data['session.errorMessage'] as string | undefined) ?? null,
 });

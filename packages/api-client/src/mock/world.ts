@@ -60,6 +60,21 @@ export class MockWorld {
     return [...this.latest.values()];
   }
 
+  /**
+   * Seed-only: sets a machine's current state directly, bypassing `apply()`'s
+   * legality check and running no effects. A LIVE command must always go
+   * through `apply()` — this exists only so bootstrap can start the world
+   * already mid-lifecycle (e.g. a lecture already `recording`, owned by
+   * someone else, for the locked-view states), which no legal single
+   * transition reaches from `initial` and which must not carry a real
+   * transition's `fire` effects (those would re-fire later against a state
+   * they no longer agree with).
+   */
+  seedState(machine: MachineId, state: string): void {
+    if (!this.states.has(machine)) throw new Error(`machine not registered: ${machine}`);
+    this.states.set(machine, state);
+  }
+
   schedule(id: TransitionId, afterMs: number): void {
     this.clock.setTimeout(() => {
       this.apply(id);

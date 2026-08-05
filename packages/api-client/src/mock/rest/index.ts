@@ -3,6 +3,7 @@ import type { ScenarioEngine } from '../scenario/engine.js';
 import type { MockWorld } from '../world.js';
 import type { Seed } from '../seed/index.js';
 import type { CredentialStore } from '../seed/users.js';
+import type { ConnectionController } from '../events/connection.js';
 import { createAuthOperations } from './auth.js';
 import { createRecordingOperations } from './recording.js';
 import { createChannelsOperations } from './channels.js';
@@ -30,6 +31,14 @@ export interface RestContext {
    * `changePassword`/`updateUser` write to it.
    */
   readonly credentials: CredentialStore;
+  /**
+   * Optional so existing hand-built `RestContext`s (tests that construct one
+   * without a live connection lifecycle, e.g. rest-fixes.test.ts) keep
+   * typechecking. Only `rest/device.ts`'s `powerOffDevice` reads it
+   * (v0.3, CG-16) — everything else that already worked without a connection
+   * reference keeps working without one.
+   */
+  readonly connection?: ConnectionController;
 }
 
 /** One factory per contracts/openapi.yaml tag; all 77 PanelOperationIds land in the merged object below. */
