@@ -19,9 +19,11 @@ import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
+  /** The merged `WorldSeed` this world is actually running (W2-D-1). */
+  readonly worldSeed: WorldSeed;
   readonly world: MockWorld;
-  /** Dev-overlay only: rebuild the world under a different script, live. */
-  switchScenario(name: ScenarioName): void;
+  /** Dev-overlay only: rebuild the world under a different script and/or seed, live. */
+  switchScenario(name: ScenarioName, seed?: Partial<WorldSeed>): void;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface MockClient extends EduscopeClient {
  */
 export function createMockClient(
   scenario: ScenarioName = 'happy',
-  options: { clock?: Clock } = {},
+  options: { clock?: Clock; seed?: Partial<WorldSeed> } = {},
 ): MockClient {
   const clock = options.clock ?? createWallClock();
   // Envelope forwarding, connection-lifetime `seq` stamping and snapshot replay
@@ -60,6 +62,9 @@ export function createMockClient(
   };
 
   let current: ScenarioName = scenario;
+  // Re-derived on every build so `worldSeed` always describes the world that
+  // is actually running, not the last override a caller happened to pass.
+  let effectiveSeed!: WorldSeed;
   let teardown: (() => void)[] = [];
   let world!: MockWorld;
   let rest!: ReturnType<typeof createRestOperations>;
@@ -69,7 +74,7 @@ export function createMockClient(
   // access would break every dependency array that captures one operation.
   let wrapped = new Map<string, (...args: never[]) => Promise<unknown>>();
 
-  function build(name: ScenarioName): void {
+  function build(name: ScenarioName, seedOverride: Partial<WorldSeed> = {}): void {
     for (const stop of teardown) stop();
     teardown = [];
 
@@ -78,7 +83,17 @@ export function createMockClient(
     wrapped = new Map();
     engine.reset();
 
-    const seed = createSeed(script.seed);
+    const merged: WorldSeed = {
+      storagePressure: 'ok',
+      aiEnabled: true,
+      quizAvailable: true,
+      recordingOwnedByOtherUser: false,
+      audioApplyFails: false,
+      ...script.seed,
+      ...seedOverride,
+    };
+    effectiveSeed = merged;
+    const seed = createSeed(merged);
     world = new MockWorld({ clock, intercept: engine.intercept });
     for (const machine of ALL_MACHINES) world.registerMachine(machine);
 
@@ -90,7 +105,7 @@ export function createMockClient(
     // `getSourcesStatus()` and command refusals each read a different "truth"
     // for the same world instead of the one shared mock world the design
     // requires.
-    bootstrapFromSeed(world, seed, script.seed ?? {});
+    bootstrapFromSeed(world, seed, merged);
 
     // Built before `rest` (moved ahead of it for v0.3 / CG-16 — device.ts's
     // powerOffDevice needs a live `connection` reference to close the
@@ -120,22 +135,33 @@ export function createMockClient(
     teardown.push(connection.stop);
     teardown.push(startAudioLevels(world, BOUND_SOURCE_ROLES));
 
+    // W2-D-2: transitions this script DRIVES. Scheduled last so the world is
+    // fully bootstrapped (every bound role already `online`) before the first
+    // fault fires, and through `world.schedule` so a `switchScenario` discards
+    // them with the world they were scheduled against.
+    for (const entry of script.timeline ?? []) {
+      world.schedule(entry.transition, entry.afterMs);
+    }
+
     // events.md §1: the server emits the current snapshot on subscribe.
     seedSnapshot(world, seed);
     current = name;
   }
 
-  build(scenario);
+  build(scenario, options.seed ?? {});
 
   const client = {
     get scenario() {
       return current;
     },
+    get worldSeed(): WorldSeed {
+      return effectiveSeed;
+    },
     get world() {
       return world;
     },
-    switchScenario(name: ScenarioName) {
-      build(name);
+    switchScenario(name: ScenarioName, seed?: Partial<WorldSeed>) {
+      build(name, seed ?? {});
     },
 
     events$: envelopes.events$,

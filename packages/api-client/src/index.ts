@@ -9,5 +9,5 @@ export {
   createScenarioEngine, extendScenario, getScenario, listScenarios,
 } from './mock/scenario/registry.js';
 export type {
-  ForcedTransition, ScenarioName, ScenarioScript,
+  ForcedTransition, ScenarioName, ScenarioScript, TimelineEntry, WorldSeed,
 } from './mock/scenario/types.js';

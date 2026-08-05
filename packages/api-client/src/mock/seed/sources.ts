@@ -4,6 +4,7 @@ import {
   type AudioControl, type ChannelConfig, type LayoutPreset, type PhysicalInput,
   type SourceBinding, type SourceRole, type SourceStatus,
 } from '@eduscope/shared';
+import type { WorldSeed } from '../scenario/types.js';
 import { SEED_EPOCH, seedId, validated } from './index.js';
 
 export interface SourcesSeed {
@@ -16,7 +17,8 @@ export interface SourcesSeed {
   readonly layoutPresets: LayoutPreset[];
 }
 
-export function createSourcesSeed(): SourcesSeed {
+export function createSourcesSeed(overrides: Partial<WorldSeed> = {}): SourcesSeed {
+  const applyFails = overrides.audioApplyFails ?? false;
   const sourceRoles = (
     [
       { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
@@ -79,14 +81,16 @@ export function createSourcesSeed(): SourcesSeed {
   ];
 
   // mic-lecturer only in V1 (LP-9) — appliedState is the truth the UI shows.
+  // `audioApplyFails` seeds the world already in the failed state so S-11 §5.1
+  // state 4 renders on FIRST paint, not only after a round trip (W2-D-4).
   const audioControls = [
     validated(zAudioControl, {
       roleId: 'mic-lecturer',
       gain: 72,
       muted: false,
-      appliedState: 'applied',
+      appliedState: applyFails ? 'failed' : 'applied',
       lastAppliedAt: SEED_EPOCH,
-      lastError: null,
+      lastError: applyFails ? 'The mixer did not accept the change.' : null,
     }),
   ];
 

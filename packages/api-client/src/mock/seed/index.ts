@@ -70,7 +70,7 @@ export function createSeed(overrides: Partial<WorldSeed> = {}): Seed {
   const seed: Seed = {
     users,
     ...createDeviceSeed(overrides),
-    ...createSourcesSeed(),
+    ...createSourcesSeed(overrides),
     ...createRecordingsSeed(users),
     ...createAiSeed(),
   };
