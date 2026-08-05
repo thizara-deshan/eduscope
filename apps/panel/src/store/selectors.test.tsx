@@ -76,9 +76,17 @@ describe('wave 2 store slices', () => {
     expect(result.current).toEqual(payload);
   });
 
-  it('retains and selects the latest recording.segment', () => {
-    const payload = { sessionId: '01J00000000000000000000000', index: 2 };
-    act(() => useWsStore.getState().ingest(envelope('recording.segment', payload, 0)));
+  it('retains the latest closed segment when the next capturing segment opens', () => {
+    const payload = {
+      sessionId: '01J00000000000000000000000', index: 1,
+      state: 'truncated', endReason: 'crash',
+    };
+    act(() => {
+      useWsStore.getState().ingest(envelope('recording.segment', payload, 0));
+      useWsStore.getState().ingest(envelope('recording.segment', {
+        sessionId: payload.sessionId, index: 2, state: 'capturing', endReason: null,
+      }, 1));
+    });
     const { result } = renderHook(() => useLastSegment());
     expect(result.current).toEqual(payload);
   });

@@ -120,3 +120,85 @@ remain reviewed exceptions rather than prompting a design-system rewrite.
   `npm ci` rebuilt the lockfile-pinned dependencies and the prototype built
   successfully under the available Node 24 runtime.
 
+---
+
+## S-07 — Session transport card
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s07-transport` | exit 0 — **5 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/transport` | exit 0 — **22 passed** across 2 files |
+| `pnpm --filter @eduscope/panel test src/store src/screens/transport` | exit 0 — **34 passed** across 5 files (closed-segment store regression included) |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+| `pnpm --filter @eduscope/panel build` | exit 0 |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | `happy`: digits tick → Pause freezes them for 2 s → Resume ticks → Stop disables both controls + Saving → Saved | ✅ pass |
+| 2 | `pipeline-crash-midway`: R-16 at 40 s → closed-segment seam persists → digits advance → recording frame remains | ✅ pass |
+| 3 | Honest figure: a pause longer than 3 s is excluded from the resumed elapsed duration | ✅ pass |
+| 4 | One-tap Stop: a MutationObserver confirms no `alertdialog` ever enters the DOM | ✅ pass |
+| 5 | U-2 `ws-flap`: stale card disables both commands; a dispatched offline Stop does not replay after reconnect | ✅ pass |
+
+### Testing Library state matrix
+
+| Enumerated state / invariant | Covered by |
+|---|---|
+| `recording` | ticking digits + enabled Pause/Stop in `timer-card.test.tsx` |
+| `paused` | frozen persisted duration, paused note, Resume/Stop |
+| `pause pending` | only Pause reads *Pausing…*; Stop remains available |
+| `resume pending` | only Resume reads *Resuming…*; Stop remains available |
+| `stop pending` | Stop reads *Stopping…*; the other transport is locked |
+| `starting (resume)` | `Starting…` while the active segment has no timing anchor |
+| `stopping / finalizing` | `Saving…`; both controls disabled in both states |
+| `not owner` | transport actions absent; S-06 owns the live layout |
+| `collapsed` | actions absent, small digits class, 44 px expand target |
+| `segment seam` | crash-ended closed segment renders the continuity sentence |
+| U-2 | stale marker and note; both commands disabled; hook issues no offline request |
+| U-4 | `T-CMD-RESOLVE` fake-clock ceiling renders a failure |
+| U-5 | rejected command renders its named reason inline and restores the control |
+| elapsed table | paused, live ticker delta, null anchor, and null persisted duration (`00:00:00`, never `NaN`) |
+
+No enumerated row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `recording` | `happy` → Start | Digits advance locally; Pause + Stop enabled |
+| 2 | `paused` | Pause | Digits freeze; *Recording paused*; Resume + Stop |
+| 3 | `pause` / `resume` / `stop pending` | tap each | Only the pressed command receives its pending label; command lockout is immediate |
+| 4 | `starting (resume)` | Pause → Resume | Brief `Starting…` before R-05 opens segment 2 |
+| 5 | `stopping / finalizing` | Stop | Both controls disabled; *Saving…*; then Saved |
+| 6 | `not owner` | no live producer (S06-D-1) | Unit-rendered only; the product routes a non-owner to S-06 |
+| 7 | `collapsed` | collapse chevron | Unit-covered: small digits, hidden actions, 44 px target |
+| 8 | `segment seam` | `pipeline-crash-midway` → Start → wait ~40 s | Continuity sentence remains after R-17; digits continue and the red frame survives |
+| 9 | U-2 | `ws-flap` → wait through drop + `T-WS-STALE` | Card marked stale, both controls disabled; offline Stop is not replayed after reconnect |
+
+### Defects found and fixed during this gate
+
+1. **The crash scenario never crashed.** Its forced R-16 rule existed, but no
+   timeline entry scheduled R-16. The scenario now schedules it at 40 seconds,
+   with a virtual-clock regression proving the truncated segment and R-17
+   recovery.
+2. **New recordings carried no timing or segment lifecycle.** The mock emitted
+   state names but left `startedAt`, `recordedDurationMs`, segment indices/counts
+   and pause counts null. Transition data reducers now accumulate persisted
+   closed-segment duration, exclude pause/restart gaps, and expose the active
+   segment anchor required for local ticking.
+3. **A developer scenario switch changed the lecturer's identity.** User IDs
+   were regenerated from a module-global counter, so the mounted auth context
+   and rebuilt world disagreed and the owner was routed to S-06. Seeded user IDs
+   are now stable module constants; a regression asserts identity across
+   `switchScenario()`.
+4. **The seam marker was erased synchronously.** R-16's closed crash segment was
+   immediately replaced by R-17's new `capturing` row. The store now defines
+   `lastSegment` as the most recently closed segment, so the marker persists
+   until the next close event.
+
+The remaining-task visual review was omitted by explicit user direction.

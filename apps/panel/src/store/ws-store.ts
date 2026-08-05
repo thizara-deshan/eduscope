@@ -91,7 +91,13 @@ export const useWsStore = create<WsState>((set, get) => ({
               [envelope.payload.roleId]: envelope.payload,
             },
           };
-        case 'recording.segment': return { lastSegment: envelope.payload };
+        // `lastSegment` means the most recently CLOSED segment. Replacing a
+        // crash row immediately with R-17's new capturing row erased S-07's
+        // continuity marker before React could render it.
+        case 'recording.segment':
+          return envelope.payload.state === 'capturing'
+            ? {}
+            : { lastSegment: envelope.payload };
         case 'sources.status':
           return { sources: { ...get().sources, [envelope.payload.roleId]: envelope.payload } };
         case 'channel.state':

@@ -22,19 +22,24 @@ const session = (overrides: Record<string, unknown> = {}) => ({
   errorCode: null, errorMessage: null, ...overrides,
 });
 
-function renderTimer(overrides: Record<string, unknown> = {}, defaultCollapsed = false) {
+function renderTimer(
+  overrides: Record<string, unknown> = {},
+  defaultCollapsed = false,
+  methods: Partial<EduscopeClient> = {},
+) {
   useWsStore.getState().reset();
   useWsStore.setState({ recording: session(overrides) as never });
   const client = {
     pauseRecording: vi.fn(() => Promise.resolve({ resolveBySec: 10 })),
     resumeRecording: vi.fn(() => Promise.resolve({ resolveBySec: 10 })),
     stopRecording: vi.fn(() => Promise.resolve({ resolveBySec: 10 })),
+    ...methods,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     ClientContext.Provider, { value: client },
     createElement(AuthProvider, { initialUser: me, children }),
   );
-  return render(<TimerCard defaultCollapsed={defaultCollapsed} />, { wrapper });
+  return { ...render(<TimerCard defaultCollapsed={defaultCollapsed} />, { wrapper }), client };
 }
 
 describe('TimerCard', () => {
@@ -68,6 +73,20 @@ describe('TimerCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     expect(screen.getByRole('button', { name: 'Pausing…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
+  });
+
+  it('renders resume pending on only the pressed button', () => {
+    renderTimer({ state: 'paused' });
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(screen.getByRole('button', { name: 'Resuming…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
+  });
+
+  it('renders stop pending and locks the other transport', () => {
+    renderTimer();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled();
   });
 
   it('starting a resume renders Starting…', () => {
@@ -111,6 +130,27 @@ describe('TimerCard', () => {
     renderTimer();
     act(() => useWsStore.setState({ lastSegment: { endReason: 'crash' } as never }));
     expect(screen.getByText(/continued after a brief interruption/i)).toBeInTheDocument();
+  });
+
+  it('marks stale data and disables both transport commands (U-2)', () => {
+    renderTimer();
+    act(() => useWsStore.setState({ stale: true }));
+    expect(screen.getByTestId('timer-card')).toHaveAttribute('data-stale', 'true');
+    expect(screen.getByText('Connection is stale')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeDisabled();
+  });
+
+  it('renders a named command failure inline (U-5)', async () => {
+    renderTimer({}, false, {
+      pauseRecording: vi.fn(() => Promise.reject(new Error('Pause was refused by the recorder.'))),
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Pause was refused by the recorder.');
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled();
   });
 
   it('implements the one elapsed-time table without NaN', () => {
