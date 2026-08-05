@@ -15,7 +15,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-5);
-  padding: var(--sp-3) var(--sp-8);
+  padding: var(--sp-1) var(--sp-8);
 }
 
 .us-roombar__title,

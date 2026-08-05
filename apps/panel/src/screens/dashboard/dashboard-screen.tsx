@@ -31,8 +31,11 @@ export function DashboardScreen(): JSX.Element {
   const session = useRecordingSession();
   const stale = useIsStale();
   const overlays = useOverlays();
+  const ownerStartPending = lock.kind === 'owned'
+    && session?.state === 'starting'
+    && (session.startReason === 'initial' || session.startReason === 'recovery');
 
-  if (lock.kind === 'owned') {
+  if (lock.kind === 'owned' && !ownerStartPending) {
     return (
       <div className="us-dashboard">
         <div className="us-dashboard__main"><SessionLayout /></div>

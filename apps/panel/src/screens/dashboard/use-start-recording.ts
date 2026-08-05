@@ -99,18 +99,22 @@ export function useStartRecording(): UseStartRecording {
   }, [clearCeiling, local.kind, session]);
 
   const recoveryPending = session?.state === 'starting' && session.startReason === 'recovery';
+  const initialStartPending = session?.state === 'starting' && session.startReason === 'initial';
   const state: StartState = stale
     ? { kind: 'offline' }
     : session === null
       ? { kind: 'holding', reason: 'cold' }
       : recoveryPending
         ? { kind: 'holding', reason: 'recovery' }
-        : storageBlocksStart && storage
-          ? { kind: 'refused', problem: criticalStorageProblem(storage) }
-          : local;
+        : initialStartPending
+          ? { kind: 'starting' }
+          : storageBlocksStart && storage
+            ? { kind: 'refused', problem: criticalStorageProblem(storage) }
+            : local;
 
   const start = useCallback(() => {
-    if (stale || session === null || recoveryPending || storageBlocksStart || local.kind === 'starting') return;
+    if (stale || session === null || recoveryPending || initialStartPending
+      || storageBlocksStart || local.kind === 'starting') return;
     clearCeiling();
     setLocal({ kind: 'starting' });
     timeoutRef.current = setTimeout(() => {
@@ -134,7 +138,7 @@ export function useStartRecording(): UseStartRecording {
         });
       }
     });
-  }, [clearCeiling, client, local.kind, recoveryPending, session, stale, storageBlocksStart]);
+  }, [clearCeiling, client, initialStartPending, local.kind, recoveryPending, session, stale, storageBlocksStart]);
 
   const dismiss = useCallback(() => {
     clearCeiling();

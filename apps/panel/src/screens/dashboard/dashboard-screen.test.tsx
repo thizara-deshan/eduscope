@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
-import type { RecordingStatePayload, User } from '@eduscope/shared';
+import type { RecordingStatePayload, StorageStatusPayload, User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
 import { OverlayHost, OverlayProvider } from '../../overlays/overlay-host.js';
@@ -46,16 +46,18 @@ const liveRecording: RecordingStatePayload = {
 interface RenderOptions {
   readonly viewer?: User;
   readonly recording?: RecordingStatePayload;
+  readonly storage?: StorageStatusPayload | null;
   readonly stale?: boolean;
 }
 
 function renderDashboard({
   viewer = owner,
   recording = idleRecording,
+  storage = null,
   stale = false,
 }: RenderOptions = {}) {
   useWsStore.getState().reset();
-  useWsStore.setState({ recording, stale });
+  useWsStore.setState({ recording, storage, stale });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(['provisioning'], {
     hallDisplayName: 'Lecture Hall A', featureFlags: { aiQuizEnabled: false }, llmEndpoint: null,
@@ -94,6 +96,45 @@ describe('DashboardScreen', () => {
     expect(screen.getByTestId('sources-bar-slot')).toBeInTheDocument();
     expect(screen.getByTestId('room-bar-slot')).toBeInTheDocument();
     expect(screen.getByTestId('room-controls-bar')).toBeInTheDocument();
+  });
+
+  it('renders storage critical as a disabled Start with payload policy text', () => {
+    renderDashboard({
+      storage: {
+        pressure: 'critical',
+        freeBytes: 50_000_000_000,
+        totalBytes: 500_000_000_000,
+        policy: {
+          maxAgeDays: 90,
+          warningThresholdPct: 70,
+          criticalThresholdPct: 90,
+          earlyDeleteOrder: 'uploaded-oldest-first',
+          neverDeleteUnuploaded: true,
+          refuseStartWhenCritical: true,
+        },
+      },
+    });
+    expect(screen.getByRole('button', { name: 'Start Recording' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('90% critical threshold');
+  });
+
+  it('keeps Start enabled at storage warning pressure', () => {
+    renderDashboard({
+      storage: {
+        pressure: 'warning',
+        freeBytes: 140_000_000_000,
+        totalBytes: 500_000_000_000,
+        policy: {
+          maxAgeDays: 90,
+          warningThresholdPct: 70,
+          criticalThresholdPct: 90,
+          earlyDeleteOrder: 'uploaded-oldest-first',
+          neverDeleteUnuploaded: true,
+          refuseStartWhenCritical: true,
+        },
+      },
+    });
+    expect(screen.getByRole('button', { name: 'Start Recording' })).toBeEnabled();
   });
 
   it('renders the locked lecturer remedy without an action', () => {
@@ -174,6 +215,44 @@ describe('DashboardScreen', () => {
 
   it('renders S-05 for the original owner before takeover', () => {
     renderDashboard({ recording: liveRecording });
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-05');
+  });
+
+  it('keeps an owner initial start on S-04 until recording is confirmed', () => {
+    renderDashboard({
+      recording: {
+        ...liveRecording,
+        state: 'starting',
+        startedAt: null,
+        recordedDurationMs: null,
+      },
+    });
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
+    expect(screen.getByRole('button', { name: /Starting/ })).toBeDisabled();
+  });
+
+  it('keeps boot recovery on S-04 while the prior session is checked', () => {
+    renderDashboard({
+      recording: {
+        ...liveRecording,
+        state: 'starting',
+        startReason: 'recovery',
+        startedAt: null,
+        recordedDurationMs: null,
+      },
+    });
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
+    expect(screen.getByText('Checking the previous session')).toBeInTheDocument();
+  });
+
+  it('keeps an owner resume transition on S-05', () => {
+    renderDashboard({
+      recording: {
+        ...liveRecording,
+        state: 'starting',
+        startReason: 'resume',
+      },
+    });
     expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-05');
   });
 

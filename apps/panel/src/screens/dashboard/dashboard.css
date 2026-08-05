@@ -1,7 +1,8 @@
 .us-dashboard {
   display: flex;
+  height: calc(100% - var(--header-h));
+  min-height: 0;
   flex-direction: column;
-  min-height: 100%;
   color: var(--text);
 }
 
@@ -101,7 +102,7 @@
 
 .us-dashboard__bars {
   display: grid;
-  gap: var(--sp-3);
+  flex: 0 0 auto;
 }
 
 .us-dashboard__bar-slot {
