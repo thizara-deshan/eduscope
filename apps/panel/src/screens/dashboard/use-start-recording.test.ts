@@ -1,5 +1,6 @@
 import { act, createElement, type ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError, TransportError } from '@eduscope/api-client';
@@ -18,9 +19,17 @@ const recording = (overrides: Record<string, unknown> = {}) => ({
 });
 
 function renderStart(startRecording: (...args: never[]) => Promise<unknown>) {
-  const client = { startRecording } as unknown as EduscopeClient;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = {
+    startRecording,
+    getStorageOverview: vi.fn(() => new Promise<never>(() => undefined)),
+  } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) =>
-    createElement(ClientContext.Provider, { value: client, children });
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(ClientContext.Provider, { value: client, children }),
+    );
   return renderHook(() => useStartRecording(), { wrapper });
 }
 
@@ -62,6 +71,34 @@ describe('useStartRecording', () => {
     });
     expect(result.current.state.kind).toBe('refused');
     expect(result.current.state).toMatchObject({ kind: 'refused', problem: { detail: 'Policy limit is 80%.' } });
+  });
+
+  it('blocks a critical-storage start before a tap with policy text from storage.status', () => {
+    const startRecording = vi.fn(() => Promise.resolve({ resolveBySec: 10 }));
+    useWsStore.setState({
+      storage: {
+        pressure: 'critical',
+        freeBytes: 50_000_000_000,
+        totalBytes: 500_000_000_000,
+        policy: {
+          maxAgeDays: 90,
+          warningThresholdPct: 70,
+          criticalThresholdPct: 90,
+          earlyDeleteOrder: 'uploaded-oldest-first',
+          neverDeleteUnuploaded: true,
+          refuseStartWhenCritical: true,
+        },
+      },
+    });
+
+    const { result } = renderStart(startRecording);
+
+    expect(result.current.state).toMatchObject({
+      kind: 'refused',
+      problem: { code: 'storage.critical', detail: expect.stringContaining('90%') },
+    });
+    act(() => result.current.start());
+    expect(startRecording).not.toHaveBeenCalled();
   });
 
   it('maps config.invalid to a named refusal', async () => {

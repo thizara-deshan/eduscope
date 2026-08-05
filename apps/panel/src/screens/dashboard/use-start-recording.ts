@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ProblemError, TransportError } from '@eduscope/api-client';
-import { TIMERS, type Problem } from '@eduscope/shared';
+import { TIMERS, type Problem, type StorageStatusPayload } from '@eduscope/shared';
 import { useClient } from '../../client/client-provider.js';
-import { useIsStale, useRecordingSession } from '../../store/selectors.js';
+import { useIsStale, useRecordingSession, useStorageStatus } from '../../store/selectors.js';
 
 /** screen-inventory §2 S-04's States list, as a discriminated union. */
 export type StartState =
@@ -51,12 +52,30 @@ function checkedProblem(problem: Problem): Problem {
   }
 }
 
+function criticalStorageProblem(storage: StorageStatusPayload): Problem {
+  const threshold = storage.policy.criticalThresholdPct;
+  return {
+    status: 409,
+    code: 'storage.critical',
+    title: 'Not enough free space to start a recording',
+    detail: `Storage has reached the policy's ${threshold}% critical threshold. Free space must be restored before a new recording can start.`,
+  };
+}
+
 export function useStartRecording(): UseStartRecording {
   const client = useClient();
   const session = useRecordingSession();
+  const liveStorage = useStorageStatus();
   const stale = useIsStale();
   const [local, setLocal] = useState<StartState>({ kind: 'ready' });
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const storageQuery = useQuery({
+    queryKey: ['storage-overview'],
+    queryFn: () => client.getStorageOverview(),
+  });
+  const storage = liveStorage ?? storageQuery.data;
+  const storageBlocksStart = storage?.pressure === 'critical'
+    && storage.policy.refuseStartWhenCritical;
 
   const clearCeiling = useCallback(() => {
     if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
@@ -86,10 +105,12 @@ export function useStartRecording(): UseStartRecording {
       ? { kind: 'holding', reason: 'cold' }
       : recoveryPending
         ? { kind: 'holding', reason: 'recovery' }
-        : local;
+        : storageBlocksStart && storage
+          ? { kind: 'refused', problem: criticalStorageProblem(storage) }
+          : local;
 
   const start = useCallback(() => {
-    if (stale || session === null || recoveryPending || local.kind === 'starting') return;
+    if (stale || session === null || recoveryPending || storageBlocksStart || local.kind === 'starting') return;
     clearCeiling();
     setLocal({ kind: 'starting' });
     timeoutRef.current = setTimeout(() => {
@@ -113,7 +134,7 @@ export function useStartRecording(): UseStartRecording {
         });
       }
     });
-  }, [clearCeiling, client, local.kind, recoveryPending, session, stale]);
+  }, [clearCeiling, client, local.kind, recoveryPending, session, stale, storageBlocksStart]);
 
   const dismiss = useCallback(() => {
     clearCeiling();

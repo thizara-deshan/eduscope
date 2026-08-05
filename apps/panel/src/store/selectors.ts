@@ -23,6 +23,7 @@ export const useIsStale = () => useWsStore((s) => s.stale);
 export const useNeedsResync = () => useWsStore((s) => s.needsResync);
 export const useConnectionPhase = () => useWsStore((s) => s.connection?.phase ?? 'connecting');
 export const useStoragePressure = () => useWsStore((s) => s.storage?.pressure ?? 'ok');
+export const useStorageStatus = () => useWsStore((s) => s.storage);
 export const useAiCountdown = () => useWsStore((s) => s.aiCountdown);
 export const useLastSegment = () => useWsStore((s) => s.lastSegment);
 export const useExpectedShutdown = () => useWsStore((s) => s.expectedShutdown);
