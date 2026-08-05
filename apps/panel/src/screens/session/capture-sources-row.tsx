@@ -1,6 +1,7 @@
 import type { SourceRoleId, SourcesStatusPayload } from '@eduscope/shared';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { useRecordingState, useWsShallow } from '../../store/selectors.js';
+import { PreviewLightbox } from '../sources/preview-lightbox.js';
 
 const VIDEO_ROLES = ['presentation', 'lecturer-cam', 'students-cam'] as const;
 
@@ -66,9 +67,7 @@ export function CaptureSourcesRow({ dense }: { readonly dense: boolean }): JSX.E
   const frozen = recordingState === 'stopping' || recordingState === 'finalizing';
 
   const handlePreview = (roleId: SourceRoleId) => {
-    // Task 16 replaces this no-op with the S-10 lightbox node.
-    void overlays;
-    void roleId;
+    overlays.open(<PreviewLightbox roleId={roleId} label={ROLE_LABELS[roleId as keyof typeof ROLE_LABELS]} />);
   };
 
   return (

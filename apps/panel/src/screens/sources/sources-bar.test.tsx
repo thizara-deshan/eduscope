@@ -1,12 +1,12 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement, Fragment, type ReactNode } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { EduscopeClient } from '@eduscope/api-client';
+import type { EduscopeClient, PreviewChannel } from '@eduscope/api-client';
 import type { SourceHealthState, SourceRole, SourceStatus, User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
-import { OverlayProvider } from '../../overlays/overlay-host.js';
+import { OverlayHost, OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { SourcesBar, VIDEO_ROLE_ORDER } from './sources-bar.js';
@@ -34,9 +34,14 @@ function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } 
   useWsStore.setState({ recording: null, stale: false });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const never = () => new Promise<never>(() => undefined);
+  const channel: PreviewChannel = {
+    send: vi.fn(), close: vi.fn(), messages$: { subscribe: () => () => undefined },
+  };
+  const openPreview = vi.fn(() => channel);
   const client = {
     listSourceRoles: vi.fn(options.pending ? never : () => Promise.resolve(roles)),
     getSourcesStatus: vi.fn(options.pending ? never : () => Promise.resolve(statuses(options.states))),
+    openPreview,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     QueryClientProvider,
@@ -44,10 +49,11 @@ function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } 
     createElement(ClientContext.Provider, { value: client },
       createElement(AuthProvider, {
         initialUser: user,
-        children: createElement(OverlayProvider, null, children),
+        children: createElement(OverlayProvider, null,
+          createElement(Fragment, null, children, createElement(OverlayHost))),
       })),
   );
-  return render(<SourcesBar />, { wrapper });
+  return { ...render(<SourcesBar />, { wrapper }), openPreview };
 }
 
 describe('SourcesBar', () => {
@@ -93,5 +99,16 @@ describe('SourcesBar', () => {
     } }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'checking…' })).toBeDisabled());
     expect(screen.getAllByTestId('source-tile')).toHaveLength(3);
+  });
+
+  it('opens the shared S-10 lightbox from an online role tile', async () => {
+    const view = renderBar({ states: ['online', 'online', 'online'] });
+    fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Live' })).toHaveLength(3));
+    const presentation = screen.getAllByTestId('source-tile')
+      .find((tile) => tile.dataset.role === 'presentation');
+    fireEvent.click(presentation!);
+    expect(screen.getByRole('dialog', { name: 'Presentation preview' })).toBeInTheDocument();
+    expect(view.openPreview).toHaveBeenCalledTimes(1);
   });
 });

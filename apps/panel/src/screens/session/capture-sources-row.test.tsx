@@ -1,6 +1,9 @@
+import { Fragment } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { OverlayProvider } from '../../overlays/overlay-host.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { EduscopeClient, PreviewChannel } from '@eduscope/api-client';
+import { ClientContext } from '../../client/client-provider.js';
+import { OverlayHost, OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import { CaptureSourcesRow } from './capture-sources-row.js';
 
@@ -15,7 +18,24 @@ function renderSources() {
     'lecturer-cam': source('lecturer-cam', 'offline'),
     'students-cam': source('students-cam', 'unknown'),
   } as never });
-  return render(<OverlayProvider><CaptureSourcesRow dense={false} /></OverlayProvider>);
+  const channel: PreviewChannel = {
+    send: vi.fn(), close: vi.fn(), messages$: { subscribe: () => () => undefined },
+  };
+  const openPreview = vi.fn(() => channel);
+  const client = { openPreview } as unknown as EduscopeClient;
+  return {
+    ...render(
+      <ClientContext.Provider value={client}>
+        <OverlayProvider>
+          <Fragment>
+            <CaptureSourcesRow dense={false} />
+            <OverlayHost />
+          </Fragment>
+        </OverlayProvider>
+      </ClientContext.Provider>,
+    ),
+    openPreview,
+  };
 }
 
 describe('CaptureSourcesRow', () => {
@@ -27,7 +47,7 @@ describe('CaptureSourcesRow', () => {
   });
 
   it('keeps healthy tiles wired and makes offline or unknown tiles inaccessible to taps', () => {
-    renderSources();
+    const view = renderSources();
     const live = screen.getByRole('button', { name: 'Live' });
     const offline = screen.getByRole('button', { name: 'No signal' });
     const unknown = screen.getByRole('button', { name: 'Checking' });
@@ -35,6 +55,8 @@ describe('CaptureSourcesRow', () => {
     expect(offline).toHaveAttribute('aria-disabled', 'true');
     expect(unknown).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(live);
+    expect(screen.getByRole('dialog', { name: 'PC preview' })).toBeInTheDocument();
+    expect(view.openPreview).toHaveBeenCalledTimes(1);
     fireEvent.click(offline);
     expect(offline).toBeDisabled();
   });

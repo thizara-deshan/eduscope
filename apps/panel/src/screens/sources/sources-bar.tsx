@@ -5,6 +5,7 @@ import { useClient } from '../../client/client-provider.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { useWsShallow } from '../../store/selectors.js';
 import { MicRow } from './mic-row.js';
+import { PreviewLightbox } from './preview-lightbox.js';
 import { SourceTile } from './source-tile.js';
 import './sources.css';
 
@@ -40,9 +41,12 @@ export function SourcesBar(): JSX.Element {
   const sourceStatus = (roleId: SourceRoleId): SourcesStatusPayload | undefined =>
     liveSources[roleId] ?? restStatuses.get(roleId);
   const openPreview = (roleId: SourceRoleId) => {
-    // Task 16 supplies the S-10 overlay node.
-    void overlays;
-    void roleId;
+    overlays.open(
+      <PreviewLightbox
+        roleId={roleId}
+        label={roles.get(roleId)?.displayLabel ?? FALLBACK_LABELS[roleId as keyof typeof FALLBACK_LABELS]}
+      />,
+    );
   };
 
   return (
