@@ -205,6 +205,66 @@ The remaining-task visual review was omitted by explicit user direction.
 
 ---
 
+## S-06 — Recorder lock & takeover
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s06-lock` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/dashboard src/danger` | exit 0 — **161 passed** across 10 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | Admin lock card, running elapsed, Cancel focus, pending state, successful takeover and prior-owner attribution | ✅ pass |
+| 2 | Stop while confirm is open, then confirm: 409 message and destructive action replaced by Close | ✅ pass |
+| 3 | One R-21 state viewed sequentially as the new admin owner and the displaced original owner | ✅ pass |
+| 4 | Lecturer lock card contains no action | ✅ pass |
+| 5 | Confirm footer has a 24px gap and the destructive action is last | ✅ pass |
+| 6 | Recording frame and notch remain visible on the locked view | ✅ pass |
+
+### Testing Library state matrix
+
+The focused suite covers all thirteen S-06 rows, U-1/U-2, all four dialog
+states, the 96-row authority fold, shared revocation copy, unchanged prior-owner
+attribution, and the shared elapsed-time rule. No enumerated row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `locked (lecturer)` | World → Recorder owned by another user; sign in as `n.silva` and finish reset | A. Perera card, no action, owner/admin-only explanation |
+| 2 | `locked (admin)` | Same world; sign in as `admin` | Quiet Take over action; no Stop |
+| 3 | `locked (admin, ending)` | Dev overlay → Stop | Action withdrawn; Saving… |
+| 4 | `locked (starting)` | No live producer | Unit-tested |
+| 5 | `takeover confirm` | Tap Take over | Alert dialog; initial focus on Cancel |
+| 6 | `takeover pending` | Confirm | Taking over…; actions locked |
+| 7 | `takeover refused` (409) | Open confirm; dev overlay → Stop; confirm | Ended message; Close replaces Take over |
+| 8 | `takeover refused` (403) | No live producer | Unit-tested |
+| 9 | `taken over (new owner)` | Complete takeover as admin | S-05 plus A. Perera attribution strip |
+| 10 | `taken over (displaced)` | Sign out admin; sign in as `a.perera` in the same mock world | Lock card plus non-dismissible shared warning sentence |
+| 11 | `taken over (revoked)` | `auth-failures` Wave-1 path | Login uses the same shared first sentence |
+| 12 | `taken over (third party)` | No third seeded actor | Unit-tested |
+| 13 | `session ended while locked` | Dev overlay → Stop; wait for completion | Lock card unmounts and S-04 returns |
+| 14 | U-2 | `ws-flap` | Stale explanation; Take over disabled |
+
+### Approved gate adaptations
+
+- Browser contexts do not share an in-page mock world. The two sides of R-21
+  are therefore proven sequentially in one world: admin takes over and signs
+  out, then A. Perera signs in and sees the displaced-owner state.
+- Mock world rebuilds now carry only `auth.currentUserId`, keeping the mounted
+  UI session and server-side authorization aligned while all other world state
+  remains disposable.
+
+The remaining-task visual review was omitted by explicit user direction.
+
+---
+
 ## S-05 — Dashboard, session (AI disabled)
 
 ### Automated gate
