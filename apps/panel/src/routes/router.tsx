@@ -3,6 +3,7 @@ import type { UserRole } from '@eduscope/shared';
 import { RequireRole } from '../auth/require-role.js';
 import { LoginScreen } from '../screens/login/login-screen.js';
 import { ResetScreen } from '../screens/reset/reset-screen.js';
+import { DashboardScreen } from '../screens/dashboard/dashboard-screen.js';
 import { PanelShell } from './panel-shell.js';
 import { RouteError } from './route-error.js';
 import { ScreenPlaceholder } from './screens.js';
@@ -11,6 +12,7 @@ import { ScreenPlaceholder } from './screens.js';
 const SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-01': () => <LoginScreen />,
   'S-02': () => <ResetScreen />,
+  'S-04': () => <DashboardScreen />,
 };
 
 interface RouteSpec {

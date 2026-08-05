@@ -1,0 +1,108 @@
+.us-dashboard {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--text);
+}
+
+.us-hero {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.us-hero__greeting {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-faint);
+  font-size: var(--fs-2xl);
+}
+
+.us-hero__name {
+  margin: 0 0 var(--sp-10);
+  color: var(--text);
+  font-size: var(--fs-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+}
+
+.us-hero__start {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-6);
+  min-width: 340px;
+  min-height: 110px;
+  padding: 38px 54px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-3xl);
+  font-weight: 700;
+}
+
+.us-hero__startdot {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-circle);
+  background: var(--record);
+}
+
+.us-hero__start:disabled {
+  color: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+}
+
+.us-hero__reason {
+  min-height: var(--tap-row);
+  margin-top: var(--sp-5);
+  color: var(--text-muted);
+}
+
+.us-startrefusal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--danger);
+}
+
+.us-startrefusal a,
+.us-hero__dismiss,
+.us-hero__failure button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+}
+
+.us-hero__dismiss {
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+}
+
+.us-hero__failure {
+  max-width: var(--modal-w);
+  padding: var(--sp-10);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-xl);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.us-dashboard__bars {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.us-dashboard__bar-slot {
+  min-height: var(--panelbar-head-h);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .us-hero__startdot { animation: none; }
+}
