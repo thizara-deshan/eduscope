@@ -1818,8 +1818,8 @@ before the wireframe is approved (revamp-guide prompt 07 "Done when").
 | # | Screen | Why it has no design | Blocks | Status | Approved design |
 |---|---|---|---|---|---|
 | W-1 | **S-02** Forced password reset | Parity §5.1 item 3; User Management only *adds* users today | Any user-management demo | ✅ **closed** 2026-08-04 | [S-02-design.md](screens/S-02-design.md) |
-| W-2 | **S-06** Recorder lock & takeover | Parity §5.1 item 5; legacy enforced it in the UI, which is why it needs redesigning as a server-enforced view | J-1 multi-user story | open — Wave 2 | — |
-| W-3 | **S-12** Power-off confirm | Parity §5.1 item 6; lived on the retired Menu page | — | open — Wave 2 | — |
+| W-2 | **S-06** Recorder lock & takeover | Parity §5.1 item 5; legacy enforced it in the UI, which is why it needs redesigning as a server-enforced view | J-1 multi-user story | ✅ **closed** 2026-08-05 | [S-06-design.md](screens/S-06-design.md) |
+| W-3 | **S-12** Power-off confirm | Parity §5.1 item 6; lived on the retired Menu page | — | ✅ **closed** 2026-08-05 | [S-12-design.md](screens/S-12-design.md) |
 | W-4 | **S-20** Quiz join / QR card | New (A-22); **placement in a full 430 px column is the open question** | J-3 | open — Wave 4 | — |
 | W-5 | **S-21** Recordings library | Parity §5.1 item 1 — the largest gap in the product | S-22, S-23, S-24 | open — Wave 5 | — |
 | W-6 | **S-22** Recording detail & player | Same row; authenticated playback is new (B-37) | — | open — Wave 5 | — |
@@ -1830,8 +1830,8 @@ before the wireframe is approved (revamp-guide prompt 07 "Done when").
 | W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); also blocked on CG-1 | J-3 | open — Wave 7 | — |
 | W-12 | **S-42** Projector overlay | New (A-11/A-22); a legibility problem, not a UI problem; also blocked on CG-2 | J-2 | open — Wave 8 | — |
 | W-13 | **S-01** Login — *redesign* | Removing the prototype's role picker leaves a hole in the card layout | Wave 1 | ✅ **closed** 2026-08-04 | [S-01-design.md](screens/S-01-design.md) |
-| W-14 | **S-05** Dashboard — *`ai disabled` layout* | With the AI flag off (INT-10 — the go-live default) the main column is empty; what replaces it is undesigned | Wave 2 | open — Wave 2 | — |
-| W-15 | **S-11** Room Controls — *placeholder marking* | G-5 forbids controls that pretend to work; how the five `[D-10]` rows signal "not connected yet" is a design decision | Wave 2 | open — Wave 2 | — |
+| W-14 | **S-05** Dashboard — *`ai disabled` layout* | With the AI flag off (INT-10 — the go-live default) the main column is empty; what replaces it is undesigned | Wave 2 | ✅ **closed** 2026-08-05 | [S-05-ai-disabled-design.md](screens/S-05-ai-disabled-design.md) |
+| W-15 | **S-11** Room Controls — *placeholder marking* | G-5 forbids controls that pretend to work; how the five `[D-10]` rows signal "not connected yet" is a design decision | Wave 2 | ✅ **closed** 2026-08-05 | [S-11-placeholders-design.md](screens/S-11-placeholders-design.md) |
 
 Also needing sign-off, though not screens:
 
@@ -1842,9 +1842,20 @@ Also needing sign-off, though not screens:
 - **The radius-rename choice** in §8.6 — ✅ **taken at Wave 0**: `tokens.css`
   performed the rename in one commit, so `--radius-lg` is 14 px and
   `--radius-xl` is 24 px throughout.
+- **The product-wide destructive-action vocabulary** (the two danger tiers, the
+  shared confirm dialog, its dismissal rule and its four states) — ✅ **settled
+  2026-08-05** at the W-2 gate. **S-24 and S-30 inherit it and may not define
+  their own**: [S-06-design.md §3](screens/S-06-design.md#3-the-destructive-action-vocabulary--product-wide).
+- **The product-wide `[D-10]` placeholder pattern** (`NotConnectedRegion`:
+  structural separation, total inertness, one factual notice per region,
+  silhouette as the carrier) — ✅ **settled 2026-08-05** at the W-15 gate.
+  **Every surface rendering `[D-10]` hardware inherits it and may not define its
+  own**: [S-11-placeholders-design.md §3](screens/S-11-placeholders-design.md#3-the-d-10-pattern-stated-for-reuse).
 
-> **Wave 2 carries four wireframe rows (W-2, W-3, W-14, W-15)** — more design
-> work than Wave 1 had. Budget a Route B run before its plan run.
+> **Wave 2's four wireframe rows are all closed (2026-08-05): W-2, W-3, W-14 and
+> W-15.** No wireframe now blocks Wave 2's plan run — what remains is applying
+> CG-14…CG-17 to `contracts/` ([§10.1](#101-when-the-contract-actually-changes)).
+> W-14 and W-15 required **no** contract change of their own.
 
 ---
 
@@ -1868,9 +1879,15 @@ an endpoint to fit a screen that does not exist — the one thing this document
 has not done. So gaps close **wave by wave**, at each Route B gate, not in one
 sitting. See [§11](#11-build-order) for which wave owns which row.
 
-Rows **CG-10…CG-13** were not visible at prompt-07 time: they were discovered
-*during* the S-01/S-02 design runs, because a screen only reveals what data it
-needs once it is drawn. Expect every future Route B run to add rows here.
+Rows **CG-10…CG-18** were not visible at prompt-07 time: they were discovered
+*during* the S-01/S-02 (CG-10…CG-13), S-06/S-12 (CG-14…CG-17) and S-05/S-11
+(CG-18) design runs, because a screen only reveals what data it needs once it is
+drawn. Expect every future Route B run to add rows here.
+
+> **A Route B run can also add nothing.** The **W-14 / W-15** gate (2026-08-05)
+> is the first to require **no contract change at all** — both screens surface
+> projections that already exist, or (for the five `[D-10]` rows) deliberately
+> ask for nothing. CG-18 below is a *recorded omission*, not a gap.
 
 | # | Gap | Blocked screens | Severity | Smallest fix | Status | Resolved by |
 |---|---|---|---|---|---|---|
@@ -1879,7 +1896,7 @@ needs once it is drawn. Expect every future Route B run to add rows here.
 | **CG-3** | **No way for a client to declare a scoped subscription.** events.md §1 scopes `log.entry` to "connections that subscribed to the live log view" and `usb.volumes` to "sessions with the export flow open" — but the same section states clients send **no** WS messages. There is no defined mechanism | S-34 (live tail), S-23 (hotplug) | Medium — screens work by polling, which §5 forbids | State that `GET /logs` and `GET /exports/targets` mark the calling `AuthSession` as subscribed for a TTL, or add a subscribe REST call | open — answer at the W-7 / W-9 gates (Wave 5/6) | — |
 | **CG-4** | **Roster sync (PF-8) has no admin-visible status.** `User.source` distinguishes institute accounts, but nothing exposes last-run time, counts, or failures. Parity §5.1 item 11 flags exactly this ("its admin visibility/config has no design") | S-32, S-36 | Low — Auth/System `LogEntry`s are a workable stopgap via S-34 | `GET /settings/roster-sync` returning last run + outcome, or accept logs-only and say so | open — Wave 6; **not answerable in-house**, coupled to `[D-02b]` (institute owns it) | — |
 | **CG-5** | **`GET /recordings` cannot be filtered by owner, date or title.** Params are `cursor`, `limit`, `state`, `includeDeleted`. An admin looking at every lecturer's 14 days of recordings has scroll as the only tool | S-21 | Low | Add `?q=`, `?ownerUserId=`, `?from=`/`?to=` to `listRecordings` | open — answer at the W-5 gate (Wave 5) | — |
-| **CG-6** | **No device restart command.** Only `POST /device/power-off` exists. Parity §5.1 item 6 words the gap as "power off / **restart** control", and a kiosk that can only be power-cycled by walking to the rack is an operational cost | S-12 | Low — PRD LP-13 says power-off only, so this may be correct as-is | Either add `POST /device/restart` (same R-22 refusal) or confirm power-off-only in the wireframe | open — answer at the W-3 gate (Wave 2); likely a *confirm*, since PRD LP-13 says power-off only | — |
+| **CG-6** | **No device restart command.** Only `POST /device/power-off` exists. Parity §5.1 item 6 words the gap as "power off / **restart** control", and a kiosk that can only be power-cycled by walking to the rack is an operational cost | S-12 | Low — PRD LP-13 says power-off only, so this may be correct as-is | Either add `POST /device/restart` (same R-22 refusal) or confirm power-off-only in the wireframe | ✅ **answered** — a **confirm**: power-off only, no restart command in v0.x. Additive later if operations shows a need | [S-12-design.md](screens/S-12-design.md) §9.1 |
 | **CG-7** | **No merge-retry endpoint.** State-machines RA-07 defines `cmd.recording.retry-merge` (admin) for a `failed` artifact, and S-22 renders that state — but no REST operation binds it. `POST /recordings/{id}/retry-merge` is missing from openapi.yaml | S-22, S-21 (badge action) | Medium — the state is reachable and has no exit | Bind RA-07 to a path in v0.2 | open — answer at the W-6 gate (Wave 5) | — |
 | **CG-8** | **Deleting the last admin / oneself is unguarded in the contract.** `DELETE /users/{userId}` documents `403` for non-admins but no rule against removing the only admin account, which would brick administration | S-32 | Low | Document a `409 users.last-admin` refusal | open — Wave 6. The invariant is decidable now; **how S-32 presents the refusal is not** | — |
 | **CG-9** | **The AI studio cannot show what a question was generated from.** `QuestionSet` records `inputWindow`, `slideCaptureIds`, `modelId`, `promptVersion` (domain model §8.3), but no screen surfaces provenance and no endpoint returns the transcript window | — (none blocked) | None — listed only so it is a deliberate omission, not an oversight | No action in v0 | ✅ **closed** — no action in v0, by this row's own ruling | this document |
@@ -1887,12 +1904,23 @@ needs once it is drawn. Expect every future Route B run to add rows here.
 | **CG-11** | **A revoked session cannot say why.** `auth.session-revoked` cannot distinguish an idle expiry from a logout elsewhere from **R-21**'s `AuthSession.revokedReason = takeover`, but S-01's `session expired` state is specified to show the reason | S-01, S-06 (W-2) | Medium — the state renders, but always with the vaguest wording | Add `meta.reason` to the `auth.session-revoked` Problem | ✅ **applied v0.2.0** | [S-01-design.md](screens/S-01-design.md) §9 #2 |
 | **CG-12** | **The password policy is weaker than the system it replaces.** `ChangePasswordRequest.newPassword` carries `minLength: 8` and nothing else; legacy B-42 enforced ≥8 **+ digit + upper + lower**. S-02's live checklist must mirror the server rule exactly or it promises acceptance it cannot deliver | S-02, S-33 (import) | **Blocking** for Wave 1 — a checklist with no server rule behind it is a lie | Enforce the legacy composition rules server-side | ✅ **applied v0.2.0** | [S-02-design.md](screens/S-02-design.md) §9 #3 |
 | **CG-13** | **You cannot log out of a forced password reset.** §Auth exempts only `/auth/change-password` and `/auth/me` from `403 auth.password-reset-required`, so `/auth/logout` is refused. A lecturer who abandons a reset on a shared kiosk leaves a live `AuthSession` until expiry | S-02 | **Blocking** for Wave 1 — S-02's Sign out control cannot work | Add `/auth/logout` to the `mustResetPassword` exemption list | ✅ **applied v0.2.0** | [S-02-design.md](screens/S-02-design.md) §9 #4 |
+| **CG-14** | **A takeover cannot say who took over, or when.** `RecordingStateSnapshot` and `RecordingStatePayload` carry `takeoverBy` — a bare ULID — but neither `takeoverAt` nor a display name, and `listUsers` is `x-required-role: admin`. The displaced *lecturer*, the person with the most need to know, is the one viewer who cannot resolve it | S-06 | Medium — the states render, always with the vaguest wording | Add `takeoverAt` + `takeoverByDisplayName`; R-21 already computes both | ✅ **answered** — **additive**; lands in v0.3 before Wave 2's plan run | [S-06-design.md](screens/S-06-design.md) §9 #1 |
+| **CG-15** | **`updateAudioControl` has no owner guard.** `PUT /audio/controls/{roleId}` declares only `202`/`422`, so a non-owner standing at the panel can mute the lecturer's microphone mid-lecture through S-09 or S-11's master mute. Disabling it in the client alone reproduces **B-15** exactly | S-06, S-09, S-11 | Medium | Guard with `G-AUTH-OWNER` while a session is non-terminal; declare `403 not-authorized` | ✅ **answered** — **additive** (a newly declared refusal on an existing operation; schemas unchanged). If rejected, S-06 shows the controls live rather than fake-disabling them | [S-06-design.md](screens/S-06-design.md) §9 #2 |
+| **CG-16** | **`powerOffDevice` has no resolving event.** `CommandAccepted.resolveBySec` means "failure rendered after this many seconds without a resolving event", and events.md §10 — the closed catalog — holds none for power-off, because a successful halt's only observable outcome is the device ceasing to answer. Read literally, the panel declares failure 10 s after every **successful** shutdown | S-12 | Medium | State in the operation description that resolution is the transport closing, and that `resolveBySec` is the *not-halted* threshold | ✅ **answered** — **additive**, prose only | [S-12-design.md](screens/S-12-design.md) §9 #3 |
+| **CG-17** | **The `system.alert` emitter list omits R-22.** state-machines R-22 emits `system.alert{poweroff.refused}` and §2 S-03's banner host already has a row for it, but events.md §2.10 does not name R-22 — and §10 there is the closed catalog, so the emitter is unlicensed and SM-R-3 is violated on paper | S-03, S-12 | Low — S-12's own path works from the 409; what is blocked is the second panel and the alert-list record | Add R-22 to the §2.10 emitter list | ✅ **answered** — **additive** | [S-12-design.md](screens/S-12-design.md) §9 #4 |
+| **CG-18** | **No server-side estimate of remaining recording time.** S-05's `ai disabled` capture card shows disk headroom, and the obvious rendering is "≈ 4 h 20 m left". Nothing can produce that figure: `StorageOverview` carries `freeBytes` only, and no achieved-bitrate value is reachable by the panel (`getEncoderSettings` is an admin surface and states intent, not achieved rate) | — (none blocked) | None — listed only so it is a deliberate omission, not an oversight | Either a server-computed `estimatedRemainingMs` on `StorageOverview`, or accept bytes-only and say so | ✅ **closed** — **bytes only**, plus the sentence generated from `RetentionPolicy` (INV-RP-1). A fabricated estimate on the one card whose job is to be trustworthy is worse than an honest byte count. Additive later if operations shows a need | [S-05-ai-disabled-design.md](screens/S-05-ai-disabled-design.md) §9.1 |
 
 Gaps **CG-1** and **CG-2** are the only two that hard-block a build wave *by
 missing an entire surface*. **CG-10…CG-13 blocked Wave 1** and are now
 `applied v0.2.0` — contract, zod layer and mock adapter all carry them
 ([contract-amendments.md](contract-amendments.md), 2026-08-04), so Wave 1's
-plan run is unblocked. CG-3 and CG-7 should land before Wave 5/6.
+plan run is unblocked. **CG-14…CG-17 were answered at the W-2/W-3 gate
+(2026-08-05)** and block Wave 2's plan run until applied; all four are additive,
+and **CG-6 closed as a confirm** rather than a change. **The W-14/W-15 gate
+(2026-08-05) added no blocking row** — S-05's `ai disabled` layout and S-11's
+`[D-10]` pattern both required zero contract change, and **CG-18 closed on
+arrival** as a recorded omission in CG-9's style. CG-3 and CG-7 should land
+before Wave 5/6.
 
 ### 10.1 When the contract actually changes
 
@@ -1907,7 +1935,7 @@ contract makes the gate unpassable by construction.
 | Bump | Carries | Timing |
 |---|---|---|
 | `v0.2` | CG-10, CG-11, CG-12, CG-13 | **before Wave 1's plan run** |
-| `v0.3` | CG-6, if the W-3 wireframe asks for restart | before Wave 2's plan run |
+| `v0.3` | CG-14, CG-15, CG-16, CG-17 | **before Wave 2's plan run** |
 | `v0.4` | CG-3, CG-5, CG-7 | before Wave 5's plan run |
 | *(tbd)* | CG-4, CG-8 | before Wave 6's plan run |
 | *(tbd)* | CG-1 — a whole `contracts/quiz-app.yaml` | before Wave 7 |

@@ -260,3 +260,173 @@ as *"needing approval with the wireframes"* — `--danger`/`--danger-soft` and
 `backend unreachable`, S-02's `mismatch` and forced-reason block). They already
 sit in `apps/panel/src/styles/tokens.css:44-48` marked pending. **Approving these
 two designs closes that item.**
+
+---
+
+## 6. Decided during wireframe approval — S-06 / S-12 (2026-08-05)
+
+The successor of §5, for Wave 2's first two wireframe rows: **S-06 Recorder lock
+& takeover** (§9 **W-2**) and **S-12 Power-off confirm** (§9 **W-3**). Ten
+questions surfaced while designing them. **All ten were answered in session and
+none remains open, so none becomes a `D-xx` register entry** — §1 and §2 are
+unchanged by this run. This register is the single index of decisions taken; the
+full rationale, wireframes and consequences live in
+[S-06-design.md](../design/screens/S-06-design.md) and
+[S-12-design.md](../design/screens/S-12-design.md).
+
+Four of the ten imply a **contract change**, listed again in §6.2 because they
+block Wave 2's plan run and are not yet in `contracts/`.
+
+**One outcome carries a recorded fallback rather than an assumption.** §6.1
+`S06-D-5` proposes a server guard the contract owner may reject; if it is
+rejected, S-06 shows the mic controls **live** and says so. It does not
+fake-disable them, and it does not proceed as though the guard existed.
+
+### 6.1 Outcomes
+
+| Id | Question | Outcome | Contract change? |
+|----|----------|---------|------------------|
+| **S12-D-1** | **CG-6** — add `POST /device/restart`, or confirm power-off-only? The row argues that a kiosk power-cycled only by walking to the rack is an operational cost | **Confirmed: power-off only, no restart in v0.x.** PRD LP-13 and B-50 are both power-off only, so restart is scope, not parity. The operational argument does not survive the wireframe: the person tapping the control is standing at the panel, *in the room, next to the device*, so restart saves no walk they were not already taking. A restart route is also served by the very process a restart exists to fix, making it unavailable in its own motivating fault — the same principle G-5 applies to placebo controls. Deferring is free: it would be additive and would reuse R-22's refusal and this dialog verbatim | **no** — CG-6 closes as a *confirm* |
+| **S06-D-2** | screen-inventory's `locked (admin)` offers **Take over and Stop** side by side, which is why its touch note has to patch "8 px is not enough here" — keep both? | **Take over only; Stop is removed.** *Deviates from the approved inventory row.* It leaves the screen with the one dangerous button that touch note already assumes, dissolving the adjacency problem rather than patching it. R-21 writes an `AuditLogEntry(action=takeover)` where R-11 writes only a `log.entry`, so routing every third-party stop through takeover means **nobody ends another person's lecture without their name on it**. Stop afterwards is then the ordinary owner-equivalent one-tap transport, leaving **S-07's "do not add a confirm dialog to Stop" intact**. Cost: one extra tap, which the confirm was going to be anyway | no |
+| **DGR-D-1/2** | S-06's Take over and S-12's Power off are the first two destructive confirms, and S-24 / S-30 will inherit whatever they establish — one vocabulary, or per-screen treatments? | **One, settled once.** Two tiers: `danger-quiet` (`--danger-soft` fill, `--danger` label, 1 px `--danger` border) for the **entry** control on any surface, and `danger-solid` (`--danger` fill, `#fff`) for the **confirming** button inside the shared dialog and nowhere else. The rule is *destructive intent is quiet on a surface and solid only in a confirm* — no filled red button in this product acts on first tap, and the shape a lecturer learns on one screen transfers to screens they have never seen. Footer separation is `--sp-10`, which the token sheet already names "danger separation" | no |
+| **DGR-D-3** | How is a destructive confirm dismissed on a kiosk that has **no Escape key**, given `OverlayHost` offers a `dismissible` flag? | **`dismissible: false`; the only exits are Cancel, the destructive action, or the outcome.** Nothing is lost on the kiosk — Cancel is already the touch exit — and it stops a stray palm on the scrim or a bench keyboard's Escape from dismissing a dialog whose command is in flight. Focus is trapped and **opens on Cancel, never on the destructive button**. `OverlayHost` is used as it stands; no second overlay mechanism was proposed | no |
+| **S06-D-5** | `PUT /audio/controls/{roleId}` has no owner guard, so a non-owner at the panel can mute the lecturer's microphone mid-lecture via S-09 or S-11's master mute. Disable it client-side? | **No — guard it server-side first.** Client-only enforcement is precisely **B-15**, the defect S-06 exists to correct ("the legacy UI enforced it, which is to say it didn't"). Filed as a contract change: `G-AUTH-OWNER` while a session is non-terminal, `403 not-authorized`. **Fallback if rejected: S-06 shows the controls live**, not fake-disabled | **yes — §6.2 #2** |
+| **S06-D-6a** | Does taking over transfer **ownership** of the lecture? | **No — authority only.** R-21's *To* column is `unchanged`: it sets `takeoverBy`/`takeoverAt` and audits, and does **not** rewrite `ownerUserId`, so the recording stays the prior owner's for the rest of its life. The whole copy deck is written against the one likely misreading — that a button called *Take over* claims the lecture, or interrupts it. The mock is bound by the same rule: a mock that rewrote the owner would teach the UI a lie the server will not tell | no |
+| **S06-D-6b** | R-21 ends the prior owner's authority *"`revokedReason=takeover` **if** their kiosk session is replaced"* — which branch does the UI design for? | **Both, and the condition itself is left to the server.** Whether an `AuthSession` is replaced is a server rule and a UI wireframe is the wrong place to settle it; designing one branch would leave the other unhandled whichever way it lands. The in-panel branch is S-06's displaced-owner notice, the sign-in branch is S-01's `session expired` with `reason: takeover` — **one R-21 event, one vocabulary**, with the shared first sentence held in a single constant so it cannot drift | no |
+| **S12-D-2** | `powerOffDevice` returns `202 + resolveBySec`, but events.md §10 is a closed catalog with **no event that resolves a power-off** — how does the panel know it worked? | **The transport closing *is* the resolution, and the contract must say so.** Read literally today, U-4 renders a failure ten seconds after every *successful* shutdown. `resolveBySec` is redefined for this one operation as the **not-halted** threshold: if the socket is still alive when it elapses, the panel says so and offers **one** explicit *Try again* — never an automatic retry, and never a closable dialog, because a shutdown cannot be un-sent. This is the direct inversion of B-50, which answered "Successfull" on both branches | **yes — §6.2 #3** |
+| **S12-D-3** | R-22 emits `system.alert{poweroff.refused}` *and* the caller gets a `409` — does the requester see both? | **The requester reads the 409 only; the shell banner is suppressed while the overlay is open.** U-5 puts a refusal next to the control that was pressed, and two carriers for one fact on one screen is how a user learns to ignore banners. The banner row stays for the second panel and the alert list — which is also why the emitter has to be licensed in the catalog | **yes — §6.2 #4** |
+| **S12-D-4** | Is power-off blocked client-side while recording, or only refused server-side? | **Both, and neither substitutes for the other.** The entry control is disabled with its reason **inline above it** (never a tooltip — §0.4) so a lecturer does not open a shutdown dialog over a live lecture; the dialog still implements `refused (recording)` because the server is the authority and the client's belief can be one event stale. One string serves both, so the race does not read as a second, unrelated problem | no |
+
+### 6.2 Contract changes these decisions imply (v0.3)
+
+All four are **additive** and all four **block Wave 2's plan run**. They also
+belong in [screen-inventory §10](../design/screen-inventory.md#10-contract-gaps)
+as rows CG-14…CG-17; the design docs name them but deliberately do not edit §10.
+
+| # | File | Change | From |
+|---|------|--------|------|
+| 1 | `contracts/openapi.yaml` — `RecordingStateSnapshot` + `RecordingStatePayload` | Add `takeoverAt: Instant \| null` and `takeoverByDisplayName: string \| null`, populated by R-21. `takeoverBy` is a bare ULID and `listUsers` is admin-only, so the displaced lecturer cannot resolve it | S06-D-6a/b |
+| 2 | `contracts/openapi.yaml` — `updateAudioControl` | Guard with `G-AUTH-OWNER` while a session is non-terminal; declare `403 not-authorized`. The operation declares only `202`/`422` today | S06-D-5 |
+| 3 | `contracts/openapi.yaml` — `powerOffDevice` description | State that the command has **no resolving event** and that resolution is the transport closing; `resolveBySec` becomes the *not-halted* threshold | S12-D-2 |
+| 4 | `contracts/events.md` — §2.10 `system.alert` emitter list | Add **R-22**, which state-machines already has emitting `poweroff.refused` and which §2 S-03's banner host already renders. §10 there is the closed catalog, so today the emitter is unlicensed | S12-D-3 |
+
+### 6.3 Also settled by these wireframes
+
+- **CG-6 closes as a *confirm*, not a change** (S12-D-1), so
+  [screen-inventory §10.1](../design/screen-inventory.md#101-when-the-contract-actually-changes)'s
+  `v0.3` bump now carries CG-14…CG-17 instead.
+- **The product-wide destructive-action vocabulary** (DGR-D-1…DGR-D-4) is
+  settled for **S-24 and S-30 as well**, which may not define their own. It
+  introduces **no new token**: `--danger`/`--danger-soft` were approved with W-1
+  and W-13 (§5.3) and already ship, and the dialog scrim is a `color-mix` over
+  `--ink` rather than a new colour.
+
+---
+
+## 7. Decided during wireframe approval — S-05 / S-11 (2026-08-05)
+
+The successor of §6, for Wave 2's remaining two wireframe rows: **S-05
+Dashboard — the `ai disabled` layout** (§9 **W-14**) and **S-11 Room Controls —
+the `[D-10]` placeholder pattern** (§9 **W-15**). Twenty decisions were taken
+across the two runs. **All twenty were settled in session and none remains open,
+so none becomes a `D-xx` register entry** — §1 and §2 are unchanged by this run.
+
+The **fifteen that shape the wireframes** are tabled in §7.1. The remaining five
+(`S11-D-6`…`S11-D-10`) are consequences of `S11-D-1`…`S11-D-5` rather than
+independent questions and live in
+[S-11-placeholders-design.md §11](../design/screens/S-11-placeholders-design.md#11-decisions-taken-here);
+the two of them that reach beyond their own screen are called out under the
+table. This register is the single index of decisions taken; the full rationale,
+wireframes and consequences live in
+[S-05-ai-disabled-design.md](../design/screens/S-05-ai-disabled-design.md) and
+[S-11-placeholders-design.md](../design/screens/S-11-placeholders-design.md).
+
+**This gate is the first to imply no contract change at all** (§7.2). It also
+carries the first deliberate **deviation from a PRD requirement's wording**
+(§7.1 `S11-D-1` vs LP-14), recorded rather than smuggled.
+
+> **Why this is not an edge-case run.** INT-10 makes `aiQuizEnabled = false` the
+> **go-live default** for recording-first rooms. The `ai disabled` layout is not
+> a fallback — it is the layout most rooms will run for most of their first year,
+> and it is designed as a first-class layout on that basis.
+
+### 7.1 Outcomes
+
+| Id | Question | Outcome | Contract change? |
+|----|----------|---------|------------------|
+| **S05-D-1** | screen-inventory suggests a *"source/output confidence view"* for the empty main column, offered as a starting point to accept or reject. Accept it? | **Accepted and reframed.** The inventory named the ingredients; what it did not settle is the shape. A four-block telemetry panel handed to a non-technical lecturer (G-2) is noise. The card is a **verdict plus its evidence** — one sentence readable from the lectern, with sources, outputs and disk beneath it — *calm when healthy, loud and specific when not* | no |
+| **S05-D-2** | W-14's brief names only the main column, but S-16/S-17 can never fill with the flag off either. What is the scope? | **The whole layout.** With `aiQuizEnabled = false` machine 2a never leaves `unavailable`, so no `QuestionSet`, publication or quiz session ever exists — the insights card is not *empty*, it is **unfillable**. `.us-insightswrap` is **not rendered** (an empty state promising questions a room cannot send is one step from the placebo class G-5 forbids); S-08 absorbs the space and its accordion **defaults to open**. S-05's mutual-exclusion rule survives **verbatim** — it simply has no second participant | no |
+| **S05-D-3** | The card summarises four machines into one sentence. What stops that sentence being a **B-12 silent success**? | **The verdict is never greener than its worst input, and `unknown` outranks `online`.** A strict worst-case fold with `checking` ranked *above* `assured`, so a stale projection can never keep the last good sentence. This is INV-DH-2 applied to prose rather than to tiles, and it is implemented as one pure, table-tested function so it cannot be locally overridden | no |
+| **S05-D-4** | The tiles could be live WebRTC previews like S-09's | **Status surfaces, not video; full motion stays in S-10.** Three decodes here *plus* S-09's expanded bar is six concurrent previews on a board simultaneously recording, streaming and driving HDMI-out #2 (A-06 / PF-5/6). Tap-to-preview is also the interaction S-09 already teaches | no |
+| **S05-D-5** | The card occupies the AI studio's slot. Does it inherit the `.us-assistant` ink scope? | **No — the card is light.** The dark scope *means* "the AI/insights family" (§8.3); spending the product's one piece of visual vocabulary on an unrelated card would dilute it. A room without the AI stack showing **no ink surface below the header** is the honest visual consequence of the flag, not a hole to patch | no |
+| **S05-D-6** | Disk headroom rendered as "≈ 4 h 20 m left"? | **Bytes only, plus a sentence generated from `RetentionPolicy`.** No achieved-bitrate figure is reachable by the panel, and INV-RP-1 exists because B-53 shipped a hardcoded threshold contradicting the real policy. A fabricated estimate on the one card whose job is to be trustworthy is that defect at a higher stake. Recorded as **CG-18**, closed on arrival in CG-9's style | **no** — CG-18 closes as an *omission* |
+| **S05-D-7** | Does the live panel say anywhere that AI questions are off in this room? | **No — silence on `/`; the fact lives in S-36.** S-13 already rules the card is hidden rather than greyed, and a sentence explaining the absence re-introduces the surface by other means. In a never-enabled room it advertises a feature the room cannot have. **S-36** already renders `DeviceProvisioning.featureFlags` read-only — the fact belongs where someone asking *why* would look, beside the people who can change it | no |
+| **S05-D-8** | `sourcesOpen` and `controlsOpen` are **independent** in the prototype and `.us-main` merely clips. Introduce a mutual-exclusion rule for the two bottom bars? | **No — design the card at the floor instead.** Both bars open leaves **388 px**; the card is specified there and grows to 602. Inventing a rule would change two approved screens (S-09, S-11) to save one card that can simply fit, and it would make `.us-main`'s `overflow: hidden` load-bearing rather than a backstop | no |
+| **S05-D-9** | How does the card shrink from 602 px to 388 px? | **Condensation, never omission.** Fixed collapse order — disk detail, then tiles to S-09's proven 152 × 86 floor, then the verdict to one line. **`SAVING TO` never condenses.** Every fact present at 602 px is present at 388 px; only typography and chrome change. Otherwise opening a bottom bar becomes a way to *lose information*, and a lecturer would have to remember which bar hides which fact | no |
+| **S05-D-10** | Two layouts of S-05 — one screen or two? | **One screen that chooses.** A single `useAiEnabled()` picks the main-column child and whether `.us-insightswrap` mounts; chrome, transport, meeting card and both bottom bars are shared. Two screens would drift, and INT-10 means **both** layouts are long-lived — the flag-off one more so | no |
+| **S11-D-1** | The five `[D-10]` rows must read as not-connected from across a room, while the master mic in the same bar is real. Mark the rows, or restructure? | **Restructure: real controls and `[D-10]` rows never share a region.** Groups become `MICROPHONE` / `POWER` / `NOT CONNECTED`. At three metres only **silhouette** resolves — 14 px captions, 12 px labels, 1 px dashed borders and colour all fail that test — so the distinction must be structural. The prototype's `Audio` group mixes a live mic with a dead speaker control, the arrangement that most reliably teaches that a row's neighbours prove nothing. **Deviates from PRD LP-14's "Projector / Audio / Environment groups"** while preserving its actual content ("inert except master mic mute") exactly; precedent for a gate deviating from an approved row is `S06-D-2` | no |
+| **S11-D-2** | Is deleting the control enough? | **No — the state string goes too.** `RoomControlsPanel.tsx` renders "Projector · On", "Lights · On", "A/C · 22 °C" from five `useState` seeds: **claims about hardware nothing is talking to**. G-5 is usually read as being about controls, but a readout asserting a projector is On is the same lie with no button attached — and the one a lecturer would actually act on. A `[D-10]` row keeps an icon and a name and nothing else | no |
+| **S11-D-3** | What does *"unmistakable from across a room, without hover and without a tooltip"* actually require? | **Silhouette is the carrier; text and colour are secondary.** Stated explicitly because the alternative is a pattern that *claims* to work at distance while depending on 14 px captions. It is also what eliminated the "keep the controls, disable and label them" option before accessibility was even considered, and it is the criterion any future variant must pass. Corollary: **no new placeholder colour or tint** — that would make the pattern colour-dependent, defeated by greyscale and colour-blind reading alike | no |
+| **S11-D-4** | The brief says the answer is reused wherever `[D-10]` hardware appears. Where does it live? | **`NotConnectedRegion` is the product-wide `[D-10]` pattern**, four rules (RC-D-1…RC-D-4), inherited and not restated — the same arrangement by which S-24 and S-30 inherit DGR-D-1…DGR-D-4. The component takes **no data source and no client**, only a static `{icon,name}[]`: a component with no way to receive a value cannot be given one in a later run, which makes G-5's Phase-5 audit structural rather than a code review. When `[D-10]` lands, a row *moves out* of the region and nothing is redesigned | no |
+| **S11-D-5** | The notice wording — "not connected **yet**"? | **State a fact, not a roadmap: "These are not wired to this device."** `[D-10]` is genuinely open, owned by **PM with a hardware engineer**, deferred post-launch, with "UI stays placeholder" as the *default if unresolved* — which is not a commitment to build it. A panel promising hardware nobody has committed to is the same defect class as a panel claiming a projector is On. **One notice per region, never per row**: five identical sentences train a lecturer to stop reading them | no |
+
+**Two consequences worth their own line:**
+
+- **`S11-D-9` — the redesigned bar is 168 px expanded, down from the prototype's
+  226 px.** Five rows that are honestly inert need no `--tap-min` floor, because
+  nothing on them is a target. The 58 px returned is exactly what makes S-05's
+  vertical floor **388 px rather than 330 px**. *Honesty is the cheaper layout* —
+  the pattern pays for itself.
+- **`S11-D-8` — the mic switch renders the applied state in `pending` and
+  `apply failed`, never the requested one** (INV-AC-1, B-55). An optimistic flip
+  that reverts teaches that the switch is a suggestion; on a **mute** it means a
+  lecturer believing they are off-mic while the hall can hear them.
+
+### 7.2 Contract changes these decisions imply
+
+**None.** This gate is the first in the project to require no amendment, and the
+reason is recorded rather than left as luck: both screens **surface projections
+that already exist**, or deliberately ask for nothing.
+
+| Need | Already in `contracts/` v0.2.0 |
+|---|---|
+| `G-AI-ENABLED` client-side | `getProvisioning` → `featureFlags.aiQuizEnabled`, `llmEndpoint` — **no `x-required-role`**, so a lecturer can read it |
+| Source health, channel state, disk + policy | `getSourcesStatus`, `listChannels`, `listLayoutPresets`, `getStorageOverview` + `RetentionPolicy`, and their WS mirrors |
+| The master mute | `listAudioControls` / `updateAudioControl`; its missing owner guard is **already CG-15** from the W-2 gate, inherited and not re-raised |
+| The five `[D-10]` rows | **Nothing, and nothing is asked for.** No endpoint exists, none is invented, and no "capability" flag is added — it would have exactly one possible value for the whole of v0 |
+
+The only §10 row this gate adds is **CG-18**, which **closes on arrival** as a
+deliberate omission (S05-D-6) in CG-9's style. `v0.3` still carries
+CG-14…CG-17 and nothing more.
+
+### 7.3 `[D-10]` stays open — and the design absorbs its landing
+
+`D-10` in §1/§2 is **unchanged**: still open, still PM with a hardware engineer,
+still post-launch (Phase 5+), still defaulting to a UI placeholder. Nothing in
+this run rules on it, and `S11-D-5` exists precisely so the UI does not
+pre-announce an outcome the owner has not chosen.
+
+What this run adds is that `[D-10]`'s eventual landing is now **cheap in the
+frontend**: a row moves out of `NotConnectedRegion` into a real group and gains a
+control bound to a real operation. The pattern is built to be dismantled one row
+at a time, and a region that empties completely is simply not rendered. No
+redesign, no second gate.
+
+### 7.4 Also settled by these wireframes
+
+- **The `[D-10]` placeholder pattern is product-wide** (`S11-D-4`). Any future
+  surface rendering this hardware inherits `NotConnectedRegion` and may not
+  define its own treatment — recorded in
+  [screen-inventory §9](../design/screen-inventory.md#9-screens-needing-wireframe-approval)
+  alongside the destructive-action vocabulary.
+- **No new design token** is introduced by either screen. Both are built entirely
+  from [§8](../design/screen-inventory.md#8-design-token-sheet); `--danger` /
+  `--danger-soft` were already approved at the W-1/W-13 gate (§5.3).
+- **[S-12 §2.1](../design/screens/S-12-design.md#21-the-entry-row-s-11-expanded)'s
+  illustrative sketch is superseded but deliberately not edited.** It renders
+  per-row *"not connected yet"* text and annotates it *"(W-15 owns this mark)"* —
+  non-binding by its own words. An approved design is a record of what was
+  decided at its gate; S-12's own decisions are untouched.
+- **Wave 2's four wireframe rows are now all closed** (W-2, W-3, W-14, W-15). No
+  wireframe blocks Wave 2's plan run; what remains is applying CG-14…CG-17 to
+  `contracts/`.
