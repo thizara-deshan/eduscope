@@ -98,6 +98,7 @@ export class MockWorld {
     }
 
     if (t.to !== null) this.states.set(t.machine, t.to);
+    TRANSITION_DATA_REDUCERS[id]?.(this, t);
     for (const effect of t.effects) this.runEffect(effect, t);
   }
 
@@ -159,6 +160,15 @@ function latestKey(envelope: EventEnvelope): string {
 /** Per-event payload builders; each machine module registers its own on import. */
 export const PAYLOAD_BUILDERS: Partial<
   Record<PanelEventName, (w: MockWorld, t: Transition) => Record<string, unknown>>
+> = {};
+
+/**
+ * Transition-local persisted-data updates that cannot be represented by a
+ * static `set` effect (timestamps, counters and accumulated durations).
+ * Registered beside the owning machine, before any world applies it.
+ */
+export const TRANSITION_DATA_REDUCERS: Partial<
+  Record<TransitionId, (w: MockWorld, t: Transition) => void>
 > = {};
 
 export function buildAlert(

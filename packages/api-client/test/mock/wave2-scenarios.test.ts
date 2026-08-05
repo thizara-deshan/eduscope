@@ -40,6 +40,58 @@ describe('per-switch world seeds (W2-D-1)', () => {
 });
 
 describe('script timelines (W2-D-2)', () => {
+  it('maintains persisted duration across pause and resume without counting the pause gap', async () => {
+    const clock = createVirtualClock('2026-08-05T09:00:00.000+00:00');
+    const client = createMockClient('happy', { clock });
+
+    await client.startRecording();
+    clock.advance(1_200);
+    const started = await client.getRecordingState();
+    expect(started).toMatchObject({
+      state: 'recording',
+      recordedDurationMs: 0,
+      segmentIndex: 1,
+      segmentCount: 1,
+      pauseCount: 0,
+    });
+    expect(started.startedAt).toBe('2026-08-05T09:00:01.200Z');
+
+    clock.advance(3_000);
+    await client.pauseRecording();
+    clock.advance(250);
+    const paused = await client.getRecordingState();
+    expect(paused).toMatchObject({ state: 'paused', recordedDurationMs: 3_250, pauseCount: 1 });
+
+    clock.advance(3_000);
+    await client.resumeRecording();
+    clock.advance(250);
+    expect(await client.getRecordingState()).toMatchObject({
+      state: 'starting',
+      startReason: 'resume',
+      startedAt: null,
+      recordedDurationMs: 3_250,
+    });
+
+    clock.advance(800);
+    const resumed = await client.getRecordingState();
+    expect(resumed).toMatchObject({
+      state: 'recording',
+      recordedDurationMs: 3_250,
+      segmentIndex: 2,
+      segmentCount: 2,
+      pauseCount: 1,
+    });
+    expect(resumed.startedAt).toBe('2026-08-05T09:00:08.500Z');
+
+    clock.advance(2_000);
+    const afterTwoSeconds = await client.getRecordingState();
+    const displayedMs = afterTwoSeconds.recordedDurationMs!
+      + clock.now() - Date.parse(afterTwoSeconds.startedAt!);
+    expect(displayedMs).toBe(5_250);
+    expect(displayedMs).toBeLessThan(clock.now() - Date.parse(started.startedAt!));
+    client.dispose();
+  });
+
   it('crashes the pipeline at 40 seconds and recovers into a new capturing segment', async () => {
     const clock = createVirtualClock('2026-08-05T09:00:00.000+00:00');
     const client = createMockClient('pipeline-crash-midway', { clock });
@@ -60,12 +112,24 @@ describe('script timelines (W2-D-2)', () => {
       expect.objectContaining({ state: 'truncated', endReason: 'crash' }),
     );
     expect(states.at(-1)).toBe('starting');
+    expect(await client.getRecordingState()).toMatchObject({
+      startedAt: null,
+      recordedDurationMs: 38_800,
+      segmentIndex: 1,
+      segmentCount: 1,
+    });
 
     clock.advance(1_000);
     expect(states.at(-1)).toBe('recording');
     expect(segments.at(-1)).toEqual(
       expect.objectContaining({ state: 'capturing', endReason: null }),
     );
+    expect(await client.getRecordingState()).toMatchObject({
+      startedAt: '2026-08-05T09:00:41.000Z',
+      recordedDurationMs: 38_800,
+      segmentIndex: 2,
+      segmentCount: 2,
+    });
     client.dispose();
   });
 

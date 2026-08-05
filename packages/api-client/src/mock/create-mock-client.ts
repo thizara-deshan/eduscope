@@ -267,8 +267,9 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
     world.data['session.ownerUserId'] = owner.id;
     world.data['session.ownerDisplayName'] = owner.displayName;
     world.data['session.startedAt'] = new Date(world.clock.now() - recordedDurationMs).toISOString();
-    world.data['session.recordedDurationMs'] = recordedDurationMs;
-    world.data['session.segmentIndex'] = 0;
+    world.data['session.recordedDurationMs'] = 0;
+    world.data['session.currentSegmentStartedAtMs'] = world.clock.now() - recordedDurationMs;
+    world.data['session.segmentIndex'] = 1;
     world.data['session.segmentCount'] = 1;
     world.data['session.pauseCount'] = 0;
     world.seedState('recording', 'recording');
