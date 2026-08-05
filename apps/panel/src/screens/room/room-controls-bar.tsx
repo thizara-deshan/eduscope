@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { MicMasterRow } from './mic-master-row.js';
 import { NotConnectedRegion, ROOM_HARDWARE } from './not-connected-region.js';
+import { PowerOffRow } from './power-off-row.js';
 import './room.css';
 
 export function RoomControlsBar(): JSX.Element {
@@ -33,6 +34,7 @@ export function RoomControlsBar(): JSX.Element {
           </section>
           <section className="us-roomregion us-roomregion--power" aria-labelledby="us-room-power-title">
             <h3 className="us-roomregion__title" id="us-room-power-title">POWER</h3>
+            <PowerOffRow />
           </section>
           <NotConnectedRegion title="NOT CONNECTED" items={ROOM_HARDWARE} />
         </div>
