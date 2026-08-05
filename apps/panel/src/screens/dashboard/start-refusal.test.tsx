@@ -12,6 +12,7 @@ describe('StartRefusal', () => {
   it.each([
     ['provisioning.incomplete', '/advanced/device'],
     ['volume.unavailable', '/advanced/storage'],
+    ['storage.critical', '/advanced/storage'],
     ['config.invalid', '/advanced/local-capture'],
   ] as const)('%s renders its named copy and admin remedy', (code, target) => {
     renderRefusal({ status: 409, code, title: `Named ${code}`, detail: `Detail ${code}` });

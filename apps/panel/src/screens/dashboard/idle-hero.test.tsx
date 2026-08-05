@@ -31,6 +31,27 @@ describe('IdleHero', () => {
     expect(button).not.toHaveAttribute('title');
   });
 
+  it('renders the storage-critical policy figure inline', () => {
+    renderHero({
+      kind: 'refused',
+      problem: {
+        status: 409,
+        code: 'storage.critical',
+        title: 'Not enough free space to start a recording',
+        detail: "Storage has reached the policy's 90% critical threshold.",
+      },
+    });
+    expect(screen.getByRole('button', { name: 'Start Recording' })).toBeDisabled();
+    expect(screen.getByText(/90% critical threshold/)).toBeInTheDocument();
+  });
+
+  it('renders a start failure as a red-card alert with its plain-language cause', () => {
+    renderHero({ kind: 'failed', message: 'The recording device did not respond.' });
+    expect(screen.getByRole('alert')).toHaveTextContent('Recording did not start');
+    expect(screen.getByRole('alert')).toHaveTextContent('The recording device did not respond.');
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeEnabled();
+  });
+
   it('holds cold load with rendered text', () => {
     renderHero({ kind: 'holding', reason: 'cold' });
     expect(screen.getByText('Checking recording status')).toBeInTheDocument();
