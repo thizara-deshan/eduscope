@@ -39,6 +39,13 @@ function build() {
     world,
     engine,
     seed,
+    worldSeed: {
+      storagePressure: 'ok',
+      aiEnabled: true,
+      quizAvailable: true,
+      recordingOwnedByOtherUser: false,
+      audioApplyFails: false,
+    },
     credentials: createCredentialStore(),
   }) as unknown as EduscopeClient;
   return { world, ops, seed };

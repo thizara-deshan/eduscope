@@ -1,4 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
+import type { SourceRoleId } from '@eduscope/shared';
 import { useWsStore, type WsState } from './ws-store.js';
 
 /**
@@ -23,6 +24,10 @@ export const useNeedsResync = () => useWsStore((s) => s.needsResync);
 export const useConnectionPhase = () => useWsStore((s) => s.connection?.phase ?? 'connecting');
 export const useStoragePressure = () => useWsStore((s) => s.storage?.pressure ?? 'ok');
 export const useAiCountdown = () => useWsStore((s) => s.aiCountdown);
+export const useLastSegment = () => useWsStore((s) => s.lastSegment);
+export const useExpectedShutdown = () => useWsStore((s) => s.expectedShutdown);
+export const useAudioControlRow = (roleId: SourceRoleId) =>
+  useWsStore((s) => s.audioControls[roleId]);
 
 /**
  * Keyed reads take the key so the selector returns a stable primitive-or-row

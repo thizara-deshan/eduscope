@@ -1,8 +1,11 @@
-import { render } from '@testing-library/react';
+import { render, renderHook } from '@testing-library/react';
 import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
-import { useRecordingState, useWsShallow } from './selectors.js';
+import {
+  useAudioControlRow, useExpectedShutdown, useLastSegment, useRecordingState,
+  useWsShallow,
+} from './selectors.js';
 
 const envelope = (event: string, payload: unknown, seq: number) =>
   ({ event, at: '2026-07-30T09:00:00+00:00', seq, payload }) as never;
@@ -55,5 +58,36 @@ describe('selector discipline (zustand v5 has no automatic shallow equality)', (
       }
     });
     expect(renders, 'meters must never enter React state').toBe(baseline);
+  });
+});
+
+describe('wave 2 store slices', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('selects an audio.control row by role id', () => {
+    const payload = {
+      roleId: 'mic-lecturer', gain: 0.75, muted: false,
+      appliedState: 'applied', lastError: null,
+    };
+    act(() => useWsStore.getState().ingest(envelope('audio.control', payload, 0)));
+    const { result } = renderHook(() => useAudioControlRow('mic-lecturer'));
+    expect(result.current).toEqual(payload);
+  });
+
+  it('retains and selects the latest recording.segment', () => {
+    const payload = { sessionId: '01J00000000000000000000000', index: 2 };
+    act(() => useWsStore.getState().ingest(envelope('recording.segment', payload, 0)));
+    const { result } = renderHook(() => useLastSegment());
+    expect(result.current).toEqual(payload);
+  });
+
+  it('sets, selects, and resets expected shutdown', () => {
+    act(() => useWsStore.getState().setExpectedShutdown(true));
+    const { result } = renderHook(() => useExpectedShutdown());
+    expect(result.current).toBe(true);
+    act(() => useWsStore.getState().reset());
+    expect(result.current).toBe(false);
   });
 });

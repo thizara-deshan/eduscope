@@ -112,12 +112,26 @@ export function createSourcesOperations(ctx: RestContext) {
       // No machine 5-adjacent module models AudioControl transitions; the
       // ALSA path is applied directly rather than through a scheduled
       // transition, same "no machine" category as firmware.ts / settings.ts.
-      Object.assign(row, {
-        ...(body.gain !== undefined ? { gain: body.gain } : {}),
-        ...(body.muted !== undefined ? { muted: body.muted } : {}),
-        appliedState: 'applied',
-        lastAppliedAt: nowIsoZ(world.clock),
-        lastError: null,
+      if (!ctx.worldSeed.audioApplyFails) {
+        Object.assign(row, {
+          ...(body.gain !== undefined ? { gain: body.gain } : {}),
+          ...(body.muted !== undefined ? { muted: body.muted } : {}),
+          appliedState: 'applied',
+          lastAppliedAt: nowIsoZ(world.clock),
+          lastError: null,
+        });
+      } else {
+        Object.assign(row, {
+          appliedState: 'failed',
+          lastError: 'The mixer did not accept the change.',
+        });
+      }
+      world.emit('audio.control', {
+        roleId: row.roleId,
+        gain: row.gain,
+        muted: row.muted,
+        appliedState: row.appliedState,
+        lastError: row.lastError,
       });
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),

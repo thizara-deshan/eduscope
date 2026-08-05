@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
 import type {
-  AiCountdownPayload, AiSetPayload, ChannelStatePayload, DeviceHealthPayload,
-  EventEnvelope, QuizPublicationPayload, QuizSessionPayload, RecordingStatePayload,
-  SourcesStatusPayload, StorageStatusPayload, SystemAlert,
+  AiCountdownPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
+  DeviceHealthPayload, EventEnvelope, QuizPublicationPayload, QuizSessionPayload,
+  RecordingSegmentPayload, RecordingStatePayload, SourceRoleId, SourcesStatusPayload,
+  StorageStatusPayload, SystemAlert,
 } from '@eduscope/shared';
 import { hasSeqGap, isStale } from './connection.js';
 import { useTelemetryStore } from './telemetry-store.js';
@@ -17,6 +18,9 @@ export { useTelemetryStore };
  */
 export interface WsState {
   recording: RecordingStatePayload | null;
+  audioControls: Partial<Record<SourceRoleId, AudioControlPayload>>;
+  lastSegment: RecordingSegmentPayload | null;
+  expectedShutdown: boolean;
   sources: Partial<Record<SourcesStatusPayload['roleId'], SourcesStatusPayload>>;
   channels: Partial<Record<ChannelStatePayload['channelId'], ChannelStatePayload>>;
   storage: StorageStatusPayload | null;
@@ -35,15 +39,20 @@ export interface WsState {
 
   ingest(envelope: EventEnvelope): void;
   setConnection(status: ConnectionStatus): void;
+  setExpectedShutdown(value: boolean): void;
   clearResync(): void;
   reset(): void;
 }
 
 const EMPTY = {
-  recording: null, sources: {}, channels: {}, storage: null, deviceHealth: null,
+  recording: null, audioControls: {}, lastSegment: null, expectedShutdown: false,
+  sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, quizSession: null, publications: {}, alerts: {},
   connection: null, needsResync: false, stale: false,
-} satisfies Omit<WsState, 'ingest' | 'setConnection' | 'clearResync' | 'reset'>;
+} satisfies Omit<
+  WsState,
+  'ingest' | 'setConnection' | 'setExpectedShutdown' | 'clearResync' | 'reset'
+>;
 
 /**
  * WS-fed application state. Separate from TanStack Query: query owns
@@ -75,6 +84,14 @@ export const useWsStore = create<WsState>((set, get) => ({
     const patch = ((): Partial<WsState> => {
       switch (envelope.event) {
         case 'recording.state': return { recording: envelope.payload };
+        case 'audio.control':
+          return {
+            audioControls: {
+              ...get().audioControls,
+              [envelope.payload.roleId]: envelope.payload,
+            },
+          };
+        case 'recording.segment': return { lastSegment: envelope.payload };
         case 'sources.status':
           return { sources: { ...get().sources, [envelope.payload.roleId]: envelope.payload } };
         case 'channel.state':
@@ -114,6 +131,10 @@ export const useWsStore = create<WsState>((set, get) => ({
   setConnection(status) {
     // U-2: dim live regions, KEEP the recording slice — see store/connection.ts.
     set({ connection: status, stale: isStale(status) });
+  },
+
+  setExpectedShutdown(value) {
+    set({ expectedShutdown: value, stale: value ? false : get().stale });
   },
 
   clearResync() {

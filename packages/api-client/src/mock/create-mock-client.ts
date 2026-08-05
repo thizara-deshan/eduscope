@@ -126,7 +126,7 @@ export function createMockClient(
     // lifetime: a `switchScenario` rebuilds the world, so it must also discard
     // any password a previous script's run changed.
     rest = createRestOperations({
-      world, engine, seed, connection, credentials: createCredentialStore(),
+      world, engine, seed, connection, worldSeed: merged, credentials: createCredentialStore(),
     });
     // `start()` returns void (post-Task-11-fix ConnectionController), unlike
     // the brief's imagined "returns a stop callback" shape — call it for its
@@ -300,6 +300,8 @@ function seedSnapshot(world: MockWorld, seed: Seed): void {
       PAYLOAD_BUILDERS['sources.status']!(world, snapshotTransition(`source:${role.id}`)),
     );
   }
+
+  for (const control of seed.audioControls) world.emit('audio.control', control);
 
   // system.alert genuinely is a static seed fixture with no machine behind
   // its *initial* rows, so it is emitted straight from the seed.
