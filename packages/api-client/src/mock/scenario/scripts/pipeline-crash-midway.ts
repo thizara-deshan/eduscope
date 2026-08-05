@@ -28,6 +28,7 @@ export const pipelineCrashMidway: ScenarioScript = {
     { transition: sourceTransitionId('lecturer-cam', 'HL-06'), afterMs: 12_000 },
     { transition: sourceTransitionId('mic-lecturer', 'HL-06'), afterMs: 20_000 },
     { transition: sourceTransitionId('lecturer-cam', 'HL-07'), afterMs: 34_000 },
+    { transition: 'R-16', afterMs: 40_000 },
     { transition: sourceTransitionId('mic-lecturer', 'HL-07'), afterMs: 40_000 },
   ],
 };
