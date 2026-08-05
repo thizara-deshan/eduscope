@@ -18,7 +18,7 @@ export function elapsedMs(
   return Number.isFinite(started) ? recorded + Math.max(0, now - started) : recorded;
 }
 
-function formatElapsed(milliseconds: number): string {
+export function formatElapsed(milliseconds: number): string {
   const seconds = Math.floor(Math.max(0, milliseconds) / 1_000);
   const hours = String(Math.floor(seconds / 3_600)).padStart(2, '0');
   const minutes = String(Math.floor((seconds % 3_600) / 60)).padStart(2, '0');
@@ -39,7 +39,10 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
   const starting = recordingState === 'starting' && session?.startedAt === null;
   const saving = recordingState === 'stopping' || recordingState === 'finalizing';
   const paused = recordingState === 'paused';
-  const isOwner = Boolean(session?.ownerUserId && auth.user?.id === session.ownerUserId);
+  const hasTransportAuthority = Boolean(
+    auth.user?.id
+      && (auth.user.id === session?.ownerUserId || auth.user.id === session?.takeoverBy),
+  );
   const commandableState = recordingState === 'recording' || recordingState === 'paused';
   const digits = starting
     ? 'Starting…'
@@ -75,7 +78,7 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
       {!collapsed && transport.failure ? (
         <span className="us-timercard__failure" role="alert">{transport.failure}</span>
       ) : null}
-      {!collapsed && isOwner ? (
+      {!collapsed && hasTransportAuthority ? (
         <div className="us-timercard__actions">
           <button
             type="button"

@@ -45,7 +45,9 @@ export function useTransport(): UseTransport {
   }, [clearCeiling, pending, session]);
 
   const canCommand = Boolean(
-    session?.ownerUserId && auth.user?.id === session.ownerUserId && !stale,
+    auth.user?.id
+      && (auth.user.id === session?.ownerUserId || auth.user.id === session?.takeoverBy)
+      && !stale,
   );
 
   const run = useCallback((command: TransportCommand) => {

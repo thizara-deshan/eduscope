@@ -86,6 +86,12 @@ describe('TimerCard', () => {
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
   });
 
+  it('shows transport buttons to the administrator named by takeoverBy', () => {
+    renderTimer({ ownerUserId: '01ARZ3NDEKTSV4RRFFQ69G5FAA', takeoverBy: me.id });
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
+  });
+
   it('collapses to small digits and hides actions behind a 44px chevron', () => {
     renderTimer({}, true);
     expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();

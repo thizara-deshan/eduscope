@@ -79,4 +79,15 @@ describe('useTransport', () => {
     act(() => stale.result.current.run('stop'));
     expect(stale.client.stopRecording).not.toHaveBeenCalled();
   });
+
+  it('grants command authority to the administrator named by takeoverBy', () => {
+    useWsStore.setState({ recording: session({
+      ownerUserId: '01ARZ3NDEKTSV4RRFFQ69G5FAA',
+      takeoverBy: me.id,
+    }) as never });
+    const { result, client } = renderTransport();
+    expect(result.current.canCommand).toBe(true);
+    act(() => result.current.run('stop'));
+    expect(client.stopRecording).toHaveBeenCalledTimes(1);
+  });
 });

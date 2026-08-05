@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router';
 import type { SessionRevokedReason } from '@eduscope/shared';
 import type { AuthMessageValue } from '../../auth/auth-message.js';
 import { PasswordField } from '../../auth/password-field.js';
-import type { LoginLocationState } from '../../auth/session.js';
+import { TAKEOVER_REVOKED_SENTENCE, type LoginLocationState } from '../../auth/session.js';
 import { useOskField } from '../../keyboard/use-keyboard.js';
 import { LoginCard } from './login-card.js';
 import { useLogin } from './use-login.js';
@@ -11,7 +11,7 @@ import { useLogin } from './use-login.js';
 /** S-01 §6. `logout` renders no message — the user meant to. */
 const REASON_COPY: Record<SessionRevokedReason, string | null> = {
   expired: 'Your session ended after a period of inactivity. Sign in again.',
-  takeover: 'An administrator took over this recording. Sign in again to continue.',
+  takeover: `${TAKEOVER_REVOKED_SENTENCE} Sign in again to continue.`,
   admin: 'An administrator ended your session. Sign in again.',
   logout: null,
 };

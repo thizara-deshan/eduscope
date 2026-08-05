@@ -56,27 +56,39 @@ describe('useStartRecording', () => {
   it('carries storage policy detail through a storage.critical refusal', async () => {
     const problem = { status: 409, code: 'storage.critical', title: 'Storage full', detail: 'Policy limit is 80%.' } as const;
     const { result } = renderStart(vi.fn(() => Promise.reject(new ProblemError(problem))));
-    act(() => result.current.start());
-    await vi.waitFor(() => expect(result.current.state.kind).toBe('refused'));
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    expect(result.current.state.kind).toBe('refused');
     expect(result.current.state).toMatchObject({ kind: 'refused', problem: { detail: 'Policy limit is 80%.' } });
   });
 
   it('maps config.invalid to a named refusal', async () => {
     const { result } = renderStart(vi.fn(() => Promise.reject(new ProblemError({ status: 409, code: 'config.invalid', title: 'Students Camera missing' }))));
-    act(() => result.current.start());
-    await vi.waitFor(() => expect(result.current.state).toMatchObject({ kind: 'refused', problem: { code: 'config.invalid' } }));
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    expect(result.current.state).toMatchObject({ kind: 'refused', problem: { code: 'config.invalid' } });
   });
 
-  it('maps recorder.busy to a named refusal until the locked view lands', async () => {
+  it('lets the rebroadcast snapshot drive the locked view after recorder.busy', async () => {
     const { result } = renderStart(vi.fn(() => Promise.reject(new ProblemError({ status: 409, code: 'recorder.busy', title: 'Already recording' }))));
-    act(() => result.current.start());
-    await vi.waitFor(() => expect(result.current.state).toMatchObject({ kind: 'refused', problem: { code: 'recorder.busy' } }));
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    expect(result.current.state).toMatchObject({ kind: 'ready' });
   });
 
   it('maps a transport failure to failed, not refused', async () => {
     const { result } = renderStart(vi.fn(() => Promise.reject(new TransportError('startRecording'))));
-    act(() => result.current.start());
-    await vi.waitFor(() => expect(result.current.state.kind).toBe('failed'));
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    expect(result.current.state.kind).toBe('failed');
   });
 
   it('does not issue or queue a command while stale', () => {

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError, TransportError } from '@eduscope/api-client';
 import { AuthProvider } from '../../auth/auth-context.js';
+import { TAKEOVER_REVOKED_SENTENCE } from '../../auth/session.js';
 import { ClientContext } from '../../client/client-provider.js';
 import { LoginScreen } from './login-screen.js';
 
@@ -138,7 +139,7 @@ describe('LoginScreen', () => {
 
   it.each([
     ['expired', 'Your session ended after a period of inactivity. Sign in again.'],
-    ['takeover', 'An administrator took over this recording. Sign in again to continue.'],
+    ['takeover', `${TAKEOVER_REVOKED_SENTENCE} Sign in again to continue.`],
     ['admin', 'An administrator ended your session. Sign in again.'],
   ])('session expired · %s renders the reason copy', (reason, text) => {
     renderScreen(vi.fn(), { pathname: '/login', state: { reason } });

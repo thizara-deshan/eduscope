@@ -100,7 +100,10 @@ export function useStartRecording(): UseStartRecording {
     void client.startRecording().catch((error: unknown) => {
       clearCeiling();
       if (error instanceof ProblemError) {
-        setLocal({ kind: 'refused', problem: checkedProblem(error.problem) });
+        const problem = checkedProblem(error.problem);
+        setLocal(problem.code === 'recorder.busy'
+          ? { kind: 'ready' }
+          : { kind: 'refused', problem });
       } else if (error instanceof TransportError) {
         setLocal({ kind: 'failed', message: error.message });
       } else {
