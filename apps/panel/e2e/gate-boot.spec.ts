@@ -33,7 +33,8 @@ test('GATE 1b — the overlay switches every catalog script live', async ({ page
 
   for (const name of [
     'happy', 'start-fails', 'pipeline-crash-midway', 'llm-timeout',
-    'disk-full', 'ws-flap', 'quiz-network-loss',
+    'disk-full', 'ws-flap', 'quiz-network-loss', 'auth-failures',
+    'poweroff-not-halted',
   ]) {
     await dialog.getByRole('radio', { name: new RegExp(name) }).check();
     await expect(page.getByTestId('active-scenario')).toHaveText(name);
