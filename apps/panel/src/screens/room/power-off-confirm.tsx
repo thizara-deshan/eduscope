@@ -30,7 +30,7 @@ export function PowerOffConfirm(): JSX.Element {
   };
   const goToLecture = () => {
     close();
-    focusRecordingTransport();
+    requestAnimationFrame(focusRecordingTransport);
   };
   const hall = provisioning.hallDisplayName ?? 'This room';
 

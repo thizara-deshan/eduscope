@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -78,12 +78,12 @@ describe('PowerOffConfirm', () => {
     expect(screen.getByRole('button', { name: 'Powering off…' })).toBeDisabled();
   });
 
-  it('uses the one blocked constant and replaces destruction with the S-07 jump', () => {
+  it('uses the one blocked constant and replaces destruction with the S-07 jump', async () => {
     renderConfirm({ kind: 'refused-recording' });
     expect(screen.getByTestId('danger-message')).toHaveTextContent(POWEROFF_BLOCKED_REASON);
     expect(screen.queryByRole('button', { name: 'Power off' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Go to the lecture' }));
-    expect(document.getElementById('recording-transport')).toHaveFocus();
+    await waitFor(() => expect(document.getElementById('recording-transport')).toHaveFocus());
   });
 
   it('renders another Problem title and replaces destruction with Close', () => {
