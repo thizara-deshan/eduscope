@@ -49,6 +49,13 @@ describe('TimerCard', () => {
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
   });
 
+  it('provides the stable programmatic focus target used by power-off remedies', () => {
+    renderTimer();
+    const card = screen.getByTestId('timer-card');
+    expect(card).toHaveAttribute('id', 'recording-transport');
+    expect(card).toHaveAttribute('tabindex', '-1');
+  });
+
   it('paused freezes the digits and swaps Pause for Resume', () => {
     renderTimer({ state: 'paused', recordedDurationMs: 12_000 });
     expect(screen.getByLabelText('Recording duration')).toHaveTextContent('00:00:12');

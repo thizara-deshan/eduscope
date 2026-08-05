@@ -51,6 +51,8 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
   return (
     <section
       className={`us-timercard${collapsed ? ' us-timercard--collapsed' : ''}${stale ? ' us-timercard--stale' : ''}`}
+      id="recording-transport"
+      tabIndex={-1}
       data-testid="timer-card"
       data-stale={stale || undefined}
     >
