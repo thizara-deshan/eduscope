@@ -49,7 +49,7 @@
   padding: var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface-subtle);
+  background: var(--surface-2);
 }
 
 .us-devoverlay__world label {
