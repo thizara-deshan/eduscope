@@ -354,3 +354,54 @@ unless the row explicitly compares the AI-enabled layout.
    clipping.
 
 The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## S-09 — Sources & audio bar
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s09-sources` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/sources src/audio` | exit 0 — **48 passed** across 7 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | Three live tiles, moving mic meter, two −5 gain steps, and applied mute truth | ✅ pass |
+| 2 | Lecturer camera degrades then goes offline and disables; lecturer mic then reaches its offline critical state | ✅ pass |
+| 3 | Failed mute remains Live and names the apply failure | ✅ pass |
+| 4 | Three collapsed dots mirror the expanded tile states | ✅ pass |
+| 5 | Three seconds of audio telemetry change no React render count | ✅ pass |
+| 6 | Expanded bar remains within 154px | ✅ pass |
+
+### Testing Library state matrix
+
+The focused suite covers online, degraded, offline, unknown and unbound roles;
+collapsed dots; live, muted, pending, failed, offline and authority-locked audio;
+U-1, U-2, U-4 and U-5; preview states are also covered by the shared sources
+slice. No enumerated S-09 row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `online` | `happy`; expand sources | Live green, tappable tiles |
+| 2 | `degraded` | `pipeline-crash-midway`; ~5s | Lecturer camera reconnecting with degraded state |
+| 3 | `offline` | Same; ~12s | No signal and disabled tile |
+| 4 | `unknown` | `ws-flap`; ~5s | Unit-covered checking state rather than stale healthy truth |
+| 5 | `unbound` | Inspect expanded bar | Exactly three video tiles; room mic absent |
+| 6 | collapsed dots | Collapse bar | Three dots matching tile state order |
+| 7 | audio `live` | `happy` | Meter's `--level` changes from telemetry |
+| 8 | audio `muted` | Tap switch | Muted applied truth |
+| 9 | `gain pending` | Tap ± | Unit-covered pending lock until applied event |
+| 10 | `apply failed` | World → Mic changes fail to apply; tap mute | Switch remains Live and failure line appears |
+| 11 | `mic offline` | Pipeline scenario; ~20s | Offline mic state and explicit no-signal reason |
+| 12 | `locked` | Recorder owned by another user; non-owner lecturer | Unit-covered disabled controls with inline authority reason |
+| 13 | U-2 | `ws-flap`; 10s | Unit-covered dimmed tiles and disabled controls |
+
+The remaining-task visual review was omitted by explicit user direction.
