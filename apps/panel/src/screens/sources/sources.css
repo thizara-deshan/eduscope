@@ -58,6 +58,7 @@
 .us-sources {
   display: flex;
   align-items: center;
+  gap: var(--sp-8);
   padding: 0 var(--sp-8) var(--sp-6);
 }
 
@@ -123,3 +124,109 @@
 
 .us-srctile--online .us-srctile__live { background: var(--success); }
 .us-srctile--degraded .us-srctile__live { background: var(--warning); }
+
+.us-sources__divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--border);
+}
+
+.us-srcmic {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.us-srcmic__identity {
+  display: flex;
+  width: 150px;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.us-srcmic__name {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.us-srcmic__state {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.us-srcmic__error {
+  overflow: hidden;
+  color: var(--danger);
+  font-size: var(--fs-3xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.us-srcmic__meter {
+  --level: 0;
+  display: grid;
+  width: 160px;
+  height: var(--sp-7);
+  grid-template-columns: repeat(20, 1fr);
+  gap: var(--sp-1);
+}
+
+.us-srcmic__seg {
+  border-radius: var(--radius-pill);
+  background: var(--success);
+  opacity: clamp(0.2, calc((var(--level) - var(--threshold)) * 100), 1);
+}
+
+.us-srcmic__gain {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.us-stepper {
+  display: inline-grid;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--surface-2);
+  font-size: var(--fs-xl);
+}
+
+.us-srcmic__pct {
+  min-width: var(--tap-min);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.us-micswitch {
+  position: relative;
+  width: var(--panelbar-head-h);
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text-faint);
+}
+
+.us-micswitch[aria-checked='true'] { background: var(--success); }
+
+.us-micswitch__knob {
+  position: absolute;
+  top: var(--sp-1);
+  left: var(--sp-1);
+  width: var(--sp-10);
+  height: var(--sp-10);
+  border-radius: var(--radius-circle);
+  background: var(--surface);
+}
+
+.us-micswitch[aria-checked='true'] .us-micswitch__knob {
+  left: calc(100% - var(--sp-10) - var(--sp-1));
+}

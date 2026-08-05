@@ -4,6 +4,7 @@ import type { SourceRoleId, SourcesStatusPayload } from '@eduscope/shared';
 import { useClient } from '../../client/client-provider.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { useWsShallow } from '../../store/selectors.js';
+import { MicRow } from './mic-row.js';
 import { SourceTile } from './source-tile.js';
 import './sources.css';
 
@@ -81,6 +82,8 @@ export function SourcesBar(): JSX.Element {
               />
             ))}
           </div>
+          <div className="us-sources__divider" aria-hidden="true" />
+          <MicRow />
         </div>
       ) : null}
     </section>
