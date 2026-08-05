@@ -12,11 +12,21 @@ import type { EventEnvelope } from '@eduscope/shared';
 /**
  * U-2 — disconnected longer than `T-WS-STALE`: dim the live regions.
  *
- * Note what this deliberately does NOT do: clear the recording slice. The device
- * is still recording whether or not the panel can see it, and blanking the frame
- * would be the more dangerous lie of the two.
+ * Except when the panel ASKED for the socket to go away. A successful
+ * `powerOffDevice` has no resolving event (CG-16); the transport closing IS the
+ * resolution (S12-D-2), so rendering "reconnecting" over a correctly halting
+ * device would be a false alarm at the exact moment the user did the right
+ * thing (S12-D-6).
+ *
+ * `closed` joins `stale` here: an unexpected close is the strongest possible
+ * U-2 condition and previously rendered as connected.
+ *
+ * Note what this deliberately does NOT do: clear the recording slice. The
+ * device is still recording whether or not the panel can see it, and blanking
+ * the frame would be the more dangerous lie of the two.
  */
-export const isStale = (status: ConnectionStatus): boolean => status.phase === 'stale';
+export const isStale = (status: ConnectionStatus, expectedShutdown = false): boolean =>
+  !expectedShutdown && (status.phase === 'stale' || status.phase === 'closed');
 
 /**
  * U-3 — a gap in `seq` means events were missed.

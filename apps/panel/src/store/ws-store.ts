@@ -130,7 +130,7 @@ export const useWsStore = create<WsState>((set, get) => ({
 
   setConnection(status) {
     // U-2: dim live regions, KEEP the recording slice — see store/connection.ts.
-    set({ connection: status, stale: isStale(status) });
+    set({ connection: status, stale: isStale(status, get().expectedShutdown) });
   },
 
   setExpectedShutdown(value) {

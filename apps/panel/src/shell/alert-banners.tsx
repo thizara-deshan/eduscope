@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { SystemAlert } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
 import { useWsShallow } from '../store/selectors.js';
+import { useAlertSuppression } from './alert-suppression.js';
 import './shell.css';
 
 const SEVERITY_ORDER: readonly SystemAlert['severity'][] = ['critical', 'error', 'warning', 'info'];
@@ -29,6 +30,7 @@ export function AlertBanners(): JSX.Element {
   const client = useClient();
   const query = useQuery({ queryKey: ['alerts'], queryFn: () => client.listAlerts() });
   const storeAlerts = useWsShallow((s) => s.alerts);
+  const suppressed = useAlertSuppression((s) => s.codes);
 
   // Acknowledge is "hide for now", not "fix" (INV-SA-1): the mock's
   // `acknowledgeAlert` only stamps `acknowledgedBy`, never `clearedAt` — a
@@ -43,7 +45,7 @@ export function AlertBanners(): JSX.Element {
   for (const alert of Object.values(storeAlerts)) merged.set(alert.id, alert);
 
   const active = Array.from(merged.values())
-    .filter((a) => !a.clearedAt && !dismissed.has(a.id))
+    .filter((a) => !a.clearedAt && !dismissed.has(a.id) && !suppressed.includes(a.code))
     .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
 
   if (active.length === 0) return <div className="us-alertlane" data-testid="alert-lane" />;
