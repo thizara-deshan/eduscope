@@ -405,3 +405,53 @@ slice. No enumerated S-09 row is missing.
 | 13 | U-2 | `ws-flap`; 10s | Unit-covered dimmed tiles and disabled controls |
 
 The remaining-task visual review was omitted by explicit user direction.
+
+---
+
+## S-10 — Source preview lightbox
+
+### Automated gate
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @eduscope/panel e2e s10-preview` | exit 0 — **6 passed** |
+| `pnpm --filter @eduscope/panel test src/screens/sources` | exit 0 — **41 passed** across 6 files |
+| `pnpm lint` | exit 0 |
+| `pnpm test tools/eslint-rules/gate-boundary.test.ts` | exit 0 — **3 passed** |
+
+### Playwright journeys
+
+| # | Journey | Result |
+|---|---|---|
+| 1 | Shape-holding skeleton, LIVE state, changing frames, explicit close, recording untouched | ✅ pass |
+| 2 | Degraded lecturer-camera preview streams until offline, then replaces the frame with its reason | ✅ pass |
+| 3 | Offline source tile is disabled and cannot negotiate | ✅ pass |
+| 4 | First painted frame arrives in under one second | ✅ pass |
+| 5 | Scrim closes and the explicit close target is at least 44px | ✅ pass |
+| 6 | Lightbox bounds remain inside the panel-local overlay | ✅ pass |
+
+### Testing Library state matrix
+
+The focused sources suite covers negotiating, live, all four negotiation error
+codes, mid-preview source loss, closed, U-2, U-5, and the regression that closing
+a preview issues no recording command. No enumerated S-10 row is missing.
+
+### Scenario demo checklist
+
+| # | State | How reached | Observed |
+|---|---|---|---|
+| 1 | `negotiating` | `happy`; tap a live tile | Skeleton holds the 16:9 frame shape |
+| 2 | `live` | Same tap | LIVE chip and changing mock frames within one second |
+| 3 | `source-offline` negotiation failure | Pipeline scenario after camera is offline | Tile is disabled; dedicated failure copy is unit-tested |
+| 4 | `source-unbound` / `busy` / `internal` | No live producers | Unit-tested |
+| 5 | source offline mid-preview | Open degraded lecturer camera before ~12s | Last frame is removed and the unavailable reason appears |
+| 6 | `closed` | Close button or scrim | Lightbox closes; recording state is unchanged |
+| 7 | U-2 | `ws-flap` while open | Unit-tested disconnected close reason |
+
+### Approved gate adaptation
+
+- Source health `degraded` remains preview-capable, matching S-09's contract
+  that preview may stutter. The mock now ends a preview only when the source
+  becomes unavailable, with a focused virtual-clock regression.
+
+The remaining-task visual review was omitted by explicit user direction.
