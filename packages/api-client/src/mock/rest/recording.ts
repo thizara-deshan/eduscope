@@ -1,6 +1,7 @@
 import { TIMERS, zCommandAccepted, zRecordingStateSnapshot } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
 import { COMMAND_PLANS, RESOLVE_BY_SEC } from '../commands.js';
+import { isRecordingNonTerminal } from '../machines/index.js';
 import { validated, nowIsoZ } from '../seed/index.js';
 import { PAYLOAD_BUILDERS, nextUlid } from '../world.js';
 import { currentUser, requireAdmin } from './auth.js';
@@ -43,6 +44,27 @@ export function createRecordingOperations(ctx: RestContext) {
     // effect, which can only carry a value fixed at machine-definition time,
     // never "whoever is calling right now" (same reasoning as takeoverBy below).
     startRecording: async () => {
+      // R-03: mutual exclusion is SERVER-enforced (LP-6, B-15). Without this
+      // the request resolved 202 and R-01 then threw `illegal transition` from
+      // inside a setTimeout — an unhandled rejection, not a refusal — and
+      // S-04's `refused: recorder busy` had no producer at all.
+      if (isRecordingNonTerminal(world)) {
+        world.emit(
+          'recording.state',
+          PAYLOAD_BUILDERS['recording.state']!(world, {
+            id: 'snapshot', machine: 'recording', from: [], to: null, effects: [], cite: 'R-03',
+          }),
+        );
+        throw new ProblemError({
+          status: 409,
+          code: 'recorder.busy',
+          title: 'This device is already recording.',
+          meta: {
+            ownerDisplayName: (world.data['session.ownerDisplayName'] as string | null) ?? null,
+            title: (world.data['session.title'] as string | null) ?? null,
+          },
+        });
+      }
       const me = currentUser(ctx);
       world.data['session.title'] = 'CS2013 — Data Structures, Lecture 13';
       world.data['session.ownerUserId'] = me.id;
@@ -55,6 +77,16 @@ export function createRecordingOperations(ctx: RestContext) {
     // x-required-role: admin (R-21) — client.ts documents this inline.
     takeoverRecording: async () => {
       requireAdmin(ctx);
+      // R-21 is `from: ['*']` — ANY NON-TERMINAL state. Scheduling it against a
+      // finished session threw inside a timer; S-06 §5 state 5 words this exact
+      // case as "That lecture has already ended."
+      if (!isRecordingNonTerminal(world)) {
+        throw new ProblemError({
+          status: 409,
+          code: 'conflict',
+          title: 'That lecture has already ended.',
+        });
+      }
       const me = currentUser(ctx);
       // v0.3, CG-14 (S06-D-4): takeoverBy/At/ByDisplayName name the ACTING
       // admin, which no static transition effect can carry — set here, before

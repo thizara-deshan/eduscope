@@ -39,7 +39,7 @@ describe('per-switch world seeds (W2-D-1)', () => {
 });
 
 describe('script timelines (W2-D-2)', () => {
-  it.todo('schedules a timeline transition against the world', async () => {
+  it('schedules a timeline transition against the world', async () => {
     const client = createMockClient('pipeline-crash-midway');
     const seen: string[] = [];
     client.events$.subscribe((e) => {

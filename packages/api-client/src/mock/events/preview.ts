@@ -76,6 +76,26 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     current = null;
   }
 
+  /**
+   * S-10 `source went offline mid-preview`: "the server drops unilaterally; the
+   * lightbox shows why rather than freezing on the last frame." Nothing did
+   * that — the frame loop kept painting a source the world had already marked
+   * offline, which is the B-12 class in miniature.
+   */
+  const unsubscribe = world.subscribeEvents((envelope) => {
+    if (envelope.event !== 'sources.status' || !current) return;
+    const payload = envelope.payload as { roleId: string; state: string };
+    if (payload.roleId !== current.roleId || payload.state === 'online') return;
+    const dying = current;
+    endCurrent();
+    emitter.emit({
+      type: 'error',
+      negotiationId: dying.negotiationId,
+      code: payload.state === 'unbound' ? 'source-unbound' : 'source-offline',
+      message: `source ${dying.roleId} is no longer available`,
+    });
+  });
+
   function startFrames(negotiation: Negotiation): () => void {
     let seq = 0;
     let stopped = false;
@@ -173,6 +193,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     messages$: emitter,
     close() {
       closed = true;
+      unsubscribe();
       endCurrent();
     },
   };

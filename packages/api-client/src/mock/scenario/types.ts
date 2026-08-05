@@ -11,7 +11,9 @@ export type ScenarioName =
   | 'ws-flap'
   | 'quiz-network-loss'
   /** Added with contract v0.2 for Wave 1's auth screens (CG-11, CG-12). */
-  | 'auth-failures';
+  | 'auth-failures'
+  /** Added for Wave 2's S-12 (W2-D-3, CG-16). */
+  | 'poweroff-not-halted';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }

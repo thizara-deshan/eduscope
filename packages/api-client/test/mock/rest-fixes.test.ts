@@ -57,7 +57,7 @@ async function loginAsAdmin(ops: EduscopeClient) {
 
 describe('C1 — CommandAccepted.acceptedAt is a valid (Z-suffixed) instant', () => {
   it('every 202 command in recording.ts resolves without throwing', async () => {
-    const { ops } = build();
+    const { world, ops } = build();
     const accepted = await ops.startRecording();
     expect(accepted.commandId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(accepted.acceptedAt.endsWith('Z')).toBe(true);
@@ -65,6 +65,7 @@ describe('C1 — CommandAccepted.acceptedAt is a valid (Z-suffixed) instant', ()
     await ops.resumeRecording();
     await ops.stopRecording();
     await loginAsAdmin(ops);
+    world.seedState('recording', 'recording');
     await ops.takeoverRecording();
   });
 });
@@ -85,8 +86,9 @@ describe('I2 — takeoverRecording / deleteRecording are admin-gated', () => {
   });
 
   it('an admin session can do both', async () => {
-    const { ops, seed } = build();
+    const { world, ops, seed } = build();
     await loginAsAdmin(ops);
+    world.seedState('recording', 'recording');
     await ops.takeoverRecording();
     const deletable = seed.recordings.find((r) => r.state !== 'deleted')!;
     await ops.deleteRecording(deletable.id);

@@ -40,6 +40,7 @@ describe('scenario engine', () => {
       'ws-flap',
       'quiz-network-loss',
       'auth-failures',
+      'poweroff-not-halted',
     ]);
   });
 
