@@ -24,13 +24,13 @@ describe('per-switch world seeds (W2-D-1)', () => {
     client.dispose();
   });
 
-  it('keeps the signed-in lecturer identity stable across a dev scenario switch', async () => {
+  it('keeps the signed-in user identity stable across a dev scenario switch', async () => {
     const client = createMockClient('happy');
-    const before = await client.getMe();
+    const { user: before } = await client.login({ username: 'admin', password: 'battery-staple' });
 
     client.switchScenario('pipeline-crash-midway');
 
-    expect(await client.getMe()).toMatchObject({ id: before.id, username: before.username });
+    expect(await client.getMe()).toMatchObject({ id: before.id, username: 'admin', role: 'admin' });
     client.dispose();
   });
 

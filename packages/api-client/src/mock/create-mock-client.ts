@@ -77,6 +77,7 @@ export function createMockClient(
   let wrapped = new Map<string, (...args: never[]) => Promise<unknown>>();
 
   function build(name: ScenarioName, seedOverride: Partial<WorldSeed> = {}): void {
+    const authenticatedUserId = world?.data['auth.currentUserId'];
     for (const stop of teardown) stop();
     teardown = [];
 
@@ -108,6 +109,7 @@ export function createMockClient(
     // for the same world instead of the one shared mock world the design
     // requires.
     bootstrapFromSeed(world, seed, merged);
+    if (authenticatedUserId) world.data['auth.currentUserId'] = authenticatedUserId;
 
     // Built before `rest` (moved ahead of it for v0.3 / CG-16 — device.ts's
     // powerOffDevice needs a live `connection` reference to close the
