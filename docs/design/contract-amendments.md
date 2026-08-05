@@ -12,6 +12,306 @@ during a plan, and never speculatively.
 
 ---
 
+## 0.2.0 → 0.3.0 — 2026-08-05 · Wave 2 (Recording core) gate
+
+Carries **CG-14 … CG-17**, the four gaps the S-06 and S-12 wireframe gates
+answered. All four are `Medium`/`Low` and additive; Wave 2's plan run is
+unblocked by this amendment. **CG-6 is also resolved by this gate** (§10.1)
+but closes as a *confirm* — no `POST /device/restart` — so it carries no row
+here; there is nothing to diff.
+
+Sources: [S-06 §9](screens/S-06-design.md#9-contract-changes-this-design-requires-v03),
+[S-12 §9](screens/S-12-design.md#9-contract-changes-this-design-requires-v03),
+[open-decisions §6.2](../discovery/open-decisions.md#62-contract-changes-these-decisions-imply-v03).
+
+`info.version` `0.2.0` → `0.3.0`.
+
+**`contracts/events.md` WAS touched — two WS-visible changes.** §2.1's
+`RecordingStatePayload` field list gains the two CG-14 fields (it mirrors
+`RecordingStateSnapshot` field-for-field), and §2.10's `system.alert` emitter
+list gains R-22 (CG-17). Its own version header moves `0.1.0` → `0.3.0` (it
+was never bumped for 0.2.0, correctly — nothing in that amendment touched a
+WS event).
+
+### Amendment rows
+
+| # | CG | Decision | Severity | Change |
+|---|---|---|---|---|
+| **A-5** | [CG-14](screen-inventory.md#10-contract-gaps) | S06-D-4 (open-decisions: S06-D-6a/b) | **additive** | `RecordingStateSnapshot` + `RecordingStatePayload` gain `takeoverAt`, `takeoverByDisplayName` |
+| **A-6** | CG-15 | S06-D-5 | **additive** (newly declared refusal; schemas unchanged) | `updateAudioControl` guarded with G-AUTH-OWNER while non-terminal; declares `403 not-authorized` |
+| **A-7** | CG-16 | S12-D-2 | **behavioral** (prose only; no schema change) | `powerOffDevice` description states it has no resolving event — the transport closing is the resolution; `resolveBySec` becomes the *not-halted* threshold |
+| **A-8** | CG-17 | S12-D-3 | **additive** (one entry in an existing list) | `events.md` §2.10 `system.alert` emitter list gains R-22 |
+
+---
+
+#### A-5 · CG-14 · `RecordingStateSnapshot` / `RecordingStatePayload` — `takeoverAt` + `takeoverByDisplayName`
+
+*Additive.* Two nullable properties; no existing field changes meaning or
+becomes required-then-absent (both new fields are additions to the `required`
+array, but only because this contract requires every declared property to be
+explicit-nullable rather than optional — the wire shape for an existing
+producer that omits them would already fail validation *before* this
+amendment too, so nothing that validated before now fails).
+
+```diff
+   RecordingStateSnapshot:
+-    required: [state, …, pauseCount, takeoverBy, errorCode, errorMessage]
++    required: [state, …, pauseCount, takeoverBy, takeoverAt, takeoverByDisplayName, errorCode, errorMessage]
+     properties:
+       …
+       takeoverBy:
+         oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
++      takeoverAt:
++        oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
++      takeoverByDisplayName:
++        type: [string, 'null']
+```
+
+Plus `events.md` §2.1's `RecordingStatePayload` field list (prose only — the
+payload itself is the hand-authored zod mirror in `packages/shared`, not a
+generated schema).
+
+**Frontend obligations (Wave 2)**
+- S-06's `use-recorder-lock.ts` reads these on the snapshot to name *who* took
+  over and *when* — states 6, 7 and 9 ([S-06 §5](screens/S-06-design.md#5-states)).
+  A displaced lecturer cannot call `listUsers` (admin-only) to resolve the bare
+  `takeoverBy` ULID any other way (S06-D-4).
+- The displaced-owner notice and the new-owner strip both consume
+  `takeoverByDisplayName`/`takeoverAt` directly — no client-side lookup.
+
+**Zod obligation — done in this run**
+- `packages/shared/src/schemas/generated/` regenerated from the amended
+  contract (`pnpm --filter @eduscope/shared codegen`) — `zRecordingStateSnapshot`
+  carries both fields.
+- `packages/shared/src/schemas/events.ts`'s hand-authored `zRecordingStatePayload`
+  (events.md is not codegen'd) gains `takeoverAt: zEventInstant.nullable()` and
+  `takeoverByDisplayName: z.string().nullable()`, matching the REST shape
+  field-for-field as the contract's Conventions block requires.
+- `packages/shared/test/rest-coverage.test.ts`'s `idle` snapshot fixture
+  updated with both new fields (a `required`-array addition makes an
+  incomplete fixture a test failure, which is the point).
+
+**Mock obligations — done in this run**
+- `mock/machines/recording.ts`'s `recording.state` payload builder reads
+  `session.takeoverAt` / `session.takeoverByDisplayName` off `world.data`,
+  mirroring the existing `takeoverBy` read.
+- `mock/rest/recording.ts`'s `takeoverRecording` sets all three
+  (`takeoverBy`/`takeoverAt`/`takeoverByDisplayName`) from the **acting**
+  admin (`currentUser(ctx)`) *before* scheduling R-21 — R-21 itself carries no
+  per-call data, the same reasoning `acknowledgeAlert` already uses for
+  `acknowledgedBy`. `ownerUserId` is untouched (C-1).
+- **Pre-existing gap closed as a prerequisite, not a new decision:**
+  `startRecording` never set `session.ownerUserId`/`ownerDisplayName` at all —
+  every session was ownerless in the mock, so LP-6 mutual exclusion (which
+  CG-14/CG-15 both assume) had nothing to compare against. `mock/rest/recording.ts`'s
+  `startRecording` now records the caller as owner before accepting, from
+  `currentUser(ctx)`. This is mechanical (the schema already declared the
+  fields; nothing previously wrote them) and required for CG-15's guard to be
+  meaningful rather than vacuous — see the note under A-6.
+- **S-06 §10's "no seeded second user is an owner" gap** (states 1, 2, 9
+  unreachable): `MockWorld` gains a seed-only `seedState(machine, state)`
+  escape hatch (bypasses `apply()`'s legality check, runs no effects — a live
+  command must still always go through `apply()`), and `create-mock-client.ts`'s
+  `bootstrapFromSeed` now consumes the previously-inert `WorldSeed.recordingOwnedByOtherUser`
+  flag: when set, it seeds a session already `recording`, owned by `a.perera`
+  (the seed's canonical lecturer — every past `Recording` fixture is already
+  theirs), reachable by logging in as anyone else. **No script sets this flag
+  yet** — see "Flagged, not decided here" below.
+
+---
+
+#### A-6 · CG-15 · `updateAudioControl` — G-AUTH-OWNER guard
+
+*Additive at the schema level* (a newly declared `403`; request/response
+bodies unchanged), but a genuine new server-side refusal — recorded as
+**additive** per S-06 §9 #2's own characterization, not reclassified here.
+
+```diff
+   /audio/controls/{roleId}:
+     put:
+       operationId: updateAudioControl
+-      summary: Set gain/mute; applied to real hardware, result pushed as audio.control
++      summary: Set gain/mute; applied to real hardware, result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
+       description: |
+         Room Controls master mute writes the same `muted` field — one control,
+         one truth (LP-14, [D-10]). 202 because application to the ALSA path is
+         asynchronous; the audio.control event carries appliedState
+         applied|failed (never assumed success — B-55/B-12 lessons).
++
++        v0.3, CG-15: while the recording session is non-terminal, only the
++        session owner or an admin may call this — `403 not-authorized`
++        otherwise. …
+       responses:
+         '202': { $ref: '#/components/responses/CommandAccepted' }
++        '403': { $ref: '#/components/responses/Problem' }
+         '422': { $ref: '#/components/responses/Problem' }
+```
+
+`not-authorized` was already in `Problem.code`'s closed enum (used by
+`takeoverRecording` and others) — no enum growth.
+
+**Frontend obligations (Wave 2)**
+- S-06 disables S-09/S-11's audio controls, **with the reason inline**, when
+  `use-recorder-lock` reports `locked` — [S-06 §9 #2](screens/S-06-design.md#9-contract-changes-this-design-requires-v03),
+  [§12](screens/S-06-design.md#12-requirements-this-screen-places-on-other-screens).
+  Client-side disabling is convenience; this row is what makes it honest
+  (B-15 was exactly a client-only version of this same control).
+
+**Mock obligations — done in this run**
+- `mock/rest/sources.ts`'s `updateAudioControl` throws `403 not-authorized`
+  when the recording machine is non-terminal (`isRecordingNonTerminal`, a new
+  shared helper in `mock/machines/recording.ts` — non-terminal = not
+  `idle`/`completed`/`error`, read off the machine's own `terminal`/`initial`
+  rather than a second hardcoded list) **and** the caller is neither the
+  session owner nor an admin. No non-terminal session means no guard (S-06 §9
+  #2's own carve-out).
+- This is the guard's **first** functioning owner comparison in the mock —
+  see A-5's note that `startRecording` previously never set an owner at all,
+  which this guard would otherwise have made vacuously-always-true for anyone
+  but an admin.
+- Covered in `test/mock/v0-3-wave2-gate.test.ts` (new — this gap had zero
+  prior coverage): refused for a non-owner non-admin while recording, allowed
+  for the owner, allowed for an admin, not gated with no active session.
+
+---
+
+#### A-7 · CG-16 · `powerOffDevice` — no resolving event
+
+*Behavioral, prose only.* No path, schema or response changed — only the
+operation `description`, clarifying what `CommandAccepted.resolveBySec`
+means for this one operation.
+
+```diff
+   /device/power-off:
+     post:
+       operationId: powerOffDevice
+       summary: LP-13 confirmed power-off — REFUSED server-side while a session is non-terminal (R-22)
++      description: |
++        v0.3, CG-16: this command has NO resolving event. … The transport
++        closing IS the resolution.
+       responses:
+```
+
+**Frontend obligations (Wave 2)**
+- S-12's `accepted` terminal state suppresses U-2 (the WS-drop reconnect
+  banner) — the drop is the success signal, not a fault
+  ([S-12 §5](screens/S-12-design.md#5-states) states 7/8, S12-D-6). That flag
+  lives in `apps/panel/src/store/connection.ts`, owned by S-12's own build —
+  not touched by this amendment.
+- `accepted, not halted` (state 8) offers exactly one **Try again**, never an
+  automatic retry (S12-D-5).
+
+**Mock obligations — done in this run**
+- `mock/rest/device.ts`'s `powerOffDevice` rewritten: previously it **always
+  accepted**, regardless of recording state, with a comment noting the
+  browser mock couldn't simulate a real halt — a placeholder that predates
+  S-12's wireframe and no longer matches R-22's actual contract ("refused
+  server-side while non-terminal"). It now:
+  1. Refuses `409 poweroff.refused` while `isRecordingNonTerminal`, firing R-22
+     (see A-8) as the cross-panel alert carrier.
+  2. Otherwise accepts, and — unless a scenario forces `replace: 'stall'`
+     (new, see below) — schedules the mock's connection controller to close
+     the transport 1.5 s later (`ConnectionController.closeForShutdown`, new;
+     the `'closed'` phase already existed in `stream.ts`'s `ConnectionStatus`
+     type but was never emitted anywhere).
+- `commands.ts`'s `COMMAND_PLANS` no longer auto-fires R-22 on every
+  `powerOffDevice` call (it fired unconditionally before, including on
+  success — backwards from R-22's actual role as the *refusal's* alert).
+- **New scenario primitive**, additive to the existing `refuse`/`unreachable`
+  vocabulary: `ForcedTransition.replace: 'stall'` + `ScenarioEngine.onStall()`
+  — accepts the command normally but suppresses its resolving side effect.
+  Needed because CG-16's whole point is that `powerOffDevice` has no
+  resolving *event* to force via the existing `intercept`/`onCommand`
+  mechanisms; `'stall'` is the only way a scenario can reach S-12 §5 state 8
+  at all.
+- `RestContext` gains an optional `connection?: ConnectionController` (optional
+  so hand-built test contexts without a live connection keep typechecking;
+  only `powerOffDevice` reads it). `create-mock-client.ts` builds the
+  connection controller before `rest` now (previously after) so it can be
+  threaded through.
+- Covered in `test/mock/v0-3-wave2-gate.test.ts` (new): refuses + alerts while
+  recording, accepts + closes the transport while idle, `'stall'` suppresses
+  the close so `resolveBySec` elapsing reads as not-halted.
+
+---
+
+#### A-8 · CG-17 · `system.alert` emitter list — add R-22
+
+*Additive.* One entry in an existing, closed list.
+
+```diff
+-    | Emitter | Every raising/clearing transition: R-02/R-04/…/R-20, RA-04, … |
++    | Emitter | Every raising/clearing transition: R-02/R-04/…/R-20/R-22, RA-04, … |
+```
+
+**Frontend obligations (Wave 2)**
+- S-03's banner host already has a `poweroff.refused` row (screen-inventory
+  §2 S-03) — this row is what licenses it on paper. S-12 itself reads the
+  synchronous `409`, not the alert, and **suppresses** the banner while its
+  own overlay is open (S12-D-3) — the alert is for the *second* panel.
+
+**Mock obligations — done in this run**
+- Covered by A-7's fix: R-22 now fires (`alert('poweroff.refused', 'info')`,
+  unchanged) exactly when `powerOffDevice` refuses, which is also the only
+  time `system.alert{poweroff.refused}` should exist. Asserted directly in
+  `test/mock/v0-3-wave2-gate.test.ts`.
+
+---
+
+### Scenario catalog
+
+**No new script.** Both mock gaps this gate needed were reachable by
+extending existing infrastructure, per S-06 §10 and S-12 §10's own framing
+("a forced-transition hook rather than an eighth script"):
+
+| Mechanism | Reaches |
+|---|---|
+| `ForcedTransition.replace: 'stall'` (new primitive, extends the existing `refuse`/`unreachable` vocabulary) | S-12 §5 state 8, `accepted, not halted` |
+| `MockWorld.seedState` + `WorldSeed.recordingOwnedByOtherUser` (now wired; previously declared but inert) | S-06 §5 states 1, 2, 9 — the locked view |
+| `extendScenario('happy', { on: { command: 'takeoverRecording' }, … })` (existing hook, unchanged) | S-06 §5 states 3–8, once a screen needs to force the timing |
+
+### Flagged, not decided here
+
+**Which script(s) set `recordingOwnedByOtherUser: true`.** The flag is now
+fully functional (A-5), but no script in the catalog enables it, so the
+locked view is not yet reachable from the dev overlay by name — only via a
+test that builds a `MockWorld` directly. Setting it on `happy` was considered
+and rejected here: `happy`'s current job is the idle→recording→…→completed
+demo (Wave 2's own exit condition, "J-1 happy … demo end-to-end"), and
+seeding an already-owned-by-someone-else live session would start that
+journey mid-flight instead of at `idle`, for anyone who does not log in as
+`a.perera`. No existing script's *description* fits a locked view either —
+each already demonstrates a specific failure mode unrelated to ownership.
+This is a screen-authorship decision (S-06's own plan run), not a contract
+one, and is exactly what `frontend-conventions.md` §4 assigns to the screen
+that needs the state — flagging rather than choosing, per this run's own
+"present options, don't design" rule. Two options, in order of fit:
+
+1. **Recommended:** S-06's plan run adds a **ninth script** (e.g. `locked-view`)
+   whose only job is `seed: { recordingOwnedByOtherUser: true }` on top of
+   `happy`'s otherwise-default seed — new script, but for a state
+   (second-owner/admin/third-party viewpoints) no existing script's name or
+   description covers, which is the "add an eighth [here, ninth] script"
+   exception the catalog rule already allows for a genuinely new class of
+   state, not a variation of one.
+2. **A per-switch seed override** on `switchScenario`/`createMockClient`
+   (e.g. a second parameter merged over the chosen script's `seed`), so the
+   dev overlay can toggle it independent of scenario name. Larger API surface
+   change to `MockClient`/`createMockClient` for a single boolean; not done
+   here.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `packages/shared` codegen re-run from the amended contract | `types.gen.ts` + `zod.gen.ts` regenerated; `takeoverAt`, `takeoverByDisplayName`, and the `updateAudioControl` `403` all present |
+| `pnpm --filter @eduscope/shared typecheck` + `test` | pass (21 tests, incl. the updated `rest-coverage.test.ts` fixture) |
+| `pnpm --filter @eduscope/api-client typecheck` + `test` | pass (215 tests, incl. 10 new in `test/mock/v0-3-wave2-gate.test.ts` covering all four CG rows plus the `seedState` primitive) |
+| `pnpm --filter @eduscope/panel typecheck` + `test` | pass (193 tests) — confirms nothing downstream of `packages/shared`/`packages/api-client` regressed |
+| Contract-honesty gate | every new/changed mock response (`RecordingStateSnapshot`, the two new `Problem` shapes) still runs through `validated()` against the generated zod schemas |
+
+---
+
 ## 0.1.0 → 0.2.0 — 2026-08-04 · Wave 1 (Auth & shell) gate
 
 Carries **CG-10 … CG-13**, the four gaps the S-01 and S-02 wireframe gates

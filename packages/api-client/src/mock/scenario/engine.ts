@@ -13,6 +13,14 @@ export interface ScenarioEngine {
    * (see errors.ts TransportError). Returns how long to fail after, or null.
    */
   onTransport(operationId: string): { delayMs: number } | null;
+  /**
+   * `replace: 'stall'` — the command is accepted normally but its usual
+   * resolving side effect must be suppressed (v0.3, CG-16). Checked by the
+   * operation itself, not the generic `accept()` helper, since which side
+   * effect counts as "resolving" is operation-specific (powerOffDevice: the
+   * transport closing).
+   */
+  onStall(operationId: string): boolean;
   trace(): readonly TraceEntry[];
   reset(): void;
   readonly script: ScenarioScript;
@@ -74,6 +82,12 @@ export function createScenarioEngine(script: ScenarioScript): ScenarioEngine {
         (f) => 'command' in f.on && f.on.command === operationId && f.replace === 'unreachable',
       );
       return hit ? { delayMs: hit.rule.delayMs ?? 0 } : null;
+    },
+
+    onStall(operationId) {
+      return match(
+        (f) => 'command' in f.on && f.on.command === operationId && f.replace === 'stall',
+      ) !== null;
     },
 
     trace: () => log,

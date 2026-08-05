@@ -1,5 +1,5 @@
 /**
- * Hand-authored mirror of contracts/events.md v0.1.0 — §2 panel/admin events,
+ * Hand-authored mirror of contracts/events.md v0.3.0 — §2 panel/admin events,
  * §3 WebRTC preview signaling, §4 device<->quiz-server sync. Both the Phase-2
  * mock adapter and the Phase-4 backend validate against these.
  */
@@ -55,6 +55,9 @@ export const zRecordingStatePayload = z.object({
   segmentCount: z.number().int().nonnegative().nullable(),
   pauseCount: z.number().int().nonnegative().nullable(),
   takeoverBy: zUlid.nullable(),
+  /** v0.3, CG-14 — set by R-21 alongside takeoverBy (S06-D-4). */
+  takeoverAt: zEventInstant.nullable(),
+  takeoverByDisplayName: z.string().nullable(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
   adopted: z.boolean().optional(),

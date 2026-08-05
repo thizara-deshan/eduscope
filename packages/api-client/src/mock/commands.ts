@@ -37,7 +37,11 @@ export const COMMAND_PLANS: Partial<Record<PanelOperationId, CommandPlan>> = {
   setAiInterval: [{ transition: 'Q-10', afterMs: 100 }],
   sendToProjector: [{ transition: 'Q-30', afterMs: 150 }],
   closePublication: [{ transition: 'Q-35', afterMs: 150 }],
-  powerOffDevice: [{ transition: 'R-22', afterMs: 200 }],
+  // No entry for powerOffDevice: unlike every other command here, it has NO
+  // resolving transition (v0.3, CG-16 — the transport closing IS the
+  // resolution, C-1). R-22 is the REFUSAL side-effect only (the system.alert
+  // carrier for a panel that did not press the button, CG-17) and is applied
+  // directly by rest/device.ts when it refuses, not scheduled from here.
 
   // Added beyond the brief's 12 (see module comment above).
   createQuestion: [{ transition: 'Q-19', afterMs: 100 }],

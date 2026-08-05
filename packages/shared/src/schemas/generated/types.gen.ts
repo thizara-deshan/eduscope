@@ -218,6 +218,14 @@ export type RecordingStateSnapshot = {
     segmentCount: number | null;
     pauseCount: number | null;
     takeoverBy: Ulid | null;
+    /**
+     * v0.3, CG-14 — set by R-21 alongside takeoverBy. Travels on the snapshot rather than via listUsers because the displaced lecturer cannot call an admin-only route to resolve either value (S06-D-4).
+     */
+    takeoverAt: Instant | null;
+    /**
+     * v0.3, CG-14 — set by R-21 alongside takeoverBy. See takeoverAt.
+     */
+    takeoverByDisplayName: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     /**
@@ -1831,6 +1839,10 @@ export type UpdateAudioControlData = {
 };
 
 export type UpdateAudioControlErrors = {
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    403: Problem;
     /**
      * Named error (never a silent no-op — R-04, INV-SB-3).
      */

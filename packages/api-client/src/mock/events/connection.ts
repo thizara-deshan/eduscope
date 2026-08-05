@@ -7,6 +7,14 @@ export interface ConnectionController {
   readonly connection$: EventStream<ConnectionStatus>;
   start(): void;
   stop(): void;
+  /**
+   * v0.3, CG-16 — a successful `powerOffDevice` has no resolving event; the
+   * transport closing (and staying closed, unlike `wsFlap`'s drop/restore
+   * cycle) IS the resolution (S12-D-2). Generation-guarded like every other
+   * scheduled phase change here, so a `switchScenario` mid-shutdown does not
+   * leave a stray `closed` emission targeting the next scenario's world.
+   */
+  closeForShutdown(afterMs: number): void;
 }
 
 /**
@@ -129,6 +137,13 @@ export function createConnectionController(
     stop() {
       running = false;
       generation += 1; // invalidate every callback scheduled by this session
+    },
+
+    closeForShutdown(afterMs) {
+      const gen = generation;
+      world.clock.setTimeout(() => {
+        set(gen, 'closed', 0);
+      }, afterMs);
     },
   };
 }

@@ -15,7 +15,7 @@ import { createConnectionController } from './events/connection.js';
 import { createEnvelopeStream } from './events/emitter.js';
 import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
-import { MockWorld, PAYLOAD_BUILDERS } from './world.js';
+import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
@@ -92,17 +92,13 @@ export function createMockClient(
     // requires.
     bootstrapFromSeed(world, seed, script.seed ?? {});
 
-    // Minted here, beside `createSeed()`, so it has exactly the seed's
-    // lifetime: a `switchScenario` rebuilds the world, so it must also discard
-    // any password a previous script's run changed.
-    rest = createRestOperations({ world, engine, seed, credentials: createCredentialStore() });
-    // `start()` returns void (post-Task-11-fix ConnectionController), unlike
-    // the brief's imagined "returns a stop callback" shape — call it for its
-    // side effect and push the bound `stop` method itself onto teardown.
-    // Subscribe to the fresh controller's own stream BEFORE calling `start()`
-    // so its synchronous connecting -> open emissions on construction aren't
-    // lost, and forward them into the stable `outwardConnection` emitter
-    // declared above (review I5/I6).
+    // Built before `rest` (moved ahead of it for v0.3 / CG-16 — device.ts's
+    // powerOffDevice needs a live `connection` reference to close the
+    // transport on a successful shutdown). Subscribe to the fresh
+    // controller's own stream BEFORE calling `start()` so its synchronous
+    // connecting -> open emissions on construction aren't lost, and forward
+    // them into the stable `outwardConnection` emitter declared above
+    // (review I5/I6).
     connection = createConnectionController(world, script);
     teardown.push(
       connection.connection$.subscribe((status) => {
@@ -110,6 +106,16 @@ export function createMockClient(
         outwardConnection.emit(status);
       }),
     );
+
+    // Minted here, beside `createSeed()`, so it has exactly the seed's
+    // lifetime: a `switchScenario` rebuilds the world, so it must also discard
+    // any password a previous script's run changed.
+    rest = createRestOperations({
+      world, engine, seed, connection, credentials: createCredentialStore(),
+    });
+    // `start()` returns void (post-Task-11-fix ConnectionController), unlike
+    // the brief's imagined "returns a stop callback" shape — call it for its
+    // side effect and push the bound `stop` method itself onto teardown.
     connection.start();
     teardown.push(connection.stop);
     teardown.push(startAudioLevels(world, BOUND_SOURCE_ROLES));
@@ -214,13 +220,30 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
     world.apply(sourceTransitionId(roleId, 'HL-02'));
   }
 
-  // Recorded for a future session-bootstrap task to consume — no current
-  // scenario script sets this (only `disk-full` uses `WorldSeed` at all, and
-  // only for `storagePressure`), and fabricating a whole in-progress
-  // "owned by someone else" session is a bigger design decision than this
-  // fix is meant to make (seed/index.ts's own comment defers it the same way).
+  // v0.3 / S-06 §10 — "no seeded second user is an owner" gap: seeds a
+  // session already `recording`, owned by `a.perera` (the seed's canonical
+  // lecturer — every past Recording in seed/recordings.ts is already theirs),
+  // so LP-6's locked view (S-06 states 1/2/9) is reachable by logging in as
+  // anyone else. `seedState` bypasses `apply()` because no single legal
+  // transition reaches `recording` from `idle`, and going through
+  // startRecording's real R-01->R-05 chain would additionally schedule a
+  // second, later R-05 via R-01's own `fire` effect (issue flagged in
+  // task-10-report.md, not this fix's to solve) that would then apply
+  // against a state it no longer agrees with.
   if (worldSeed.recordingOwnedByOtherUser) {
-    world.data['session.recordingOwnedByOtherUser'] = true;
+    const owner = seed.users.find((u) => u.username === 'a.perera')!;
+    const recordedDurationMs = 67 * 60_000 + 12_000; // wireframe reference figure: 01:07:12
+    world.data['session.ulid'] = nextUlid(world);
+    world.data['session.startReason'] = 'initial';
+    world.data['session.title'] = 'CS2043 — Lecture 7';
+    world.data['session.ownerUserId'] = owner.id;
+    world.data['session.ownerDisplayName'] = owner.displayName;
+    world.data['session.startedAt'] = new Date(world.clock.now() - recordedDurationMs).toISOString();
+    world.data['session.recordedDurationMs'] = recordedDurationMs;
+    world.data['session.segmentIndex'] = 0;
+    world.data['session.segmentCount'] = 1;
+    world.data['session.pauseCount'] = 0;
+    world.seedState('recording', 'recording');
   }
 }
 

@@ -1,6 +1,6 @@
 # Eduscope WS Event Catalog — Contract v0
 
-> Contract **v0.1.0** — the realtime half of [openapi.yaml](openapi.yaml).
+> Contract **v0.3.0** — the realtime half of [openapi.yaml](openapi.yaml).
 > Successor of state-machines.md §10; that section now defers here (see its
 > catalog note). Payload schemas are the zod definitions in
 > [`packages/shared/src/schemas/events.ts`](../packages/shared/src/schemas/events.ts)
@@ -13,6 +13,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 0.3.0 | 2026-08-05 | §2.1 `RecordingStatePayload` gains `takeoverAt` + `takeoverByDisplayName` (CG-14). §2.10 `system.alert` emitter list gains R-22 (CG-17). Both Wave 2 (S-06/S-12) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.1.0 | 2026-07-30 | Initial contract. Adopts state-machines §10 verbatim, plus four additions that §10 lacked but screens require: `audio.control` (INV-AC-1), `export.job` + `usb.volumes` (LP-10/LP-11, B-38 session scoping), `firmware.state` (AD-5). `ai.batch_ready` from earlier sketches is **superseded** by `ai.set` (state `ready` *is* batch-ready) per state-machines §10. Defines the WebRTC preview-signaling envelope (A-17) and the device↔quiz-server sync contract (DM-P5). |
 
 ---
@@ -74,7 +75,7 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | | |
 |---|---|
 | Direction | core-api → panel, admin |
-| Payload | `RecordingStatePayload` — `state` (incl. `idle`), `startReason`, `sessionId`, `title`, `ownerUserId`, `ownerDisplayName`, `startedAt`, `recordedDurationMs`, `segmentIndex/Count`, `pauseCount`, `takeoverBy`, `errorCode/Message`, `adopted?` |
+| Payload | `RecordingStatePayload` — `state` (incl. `idle`), `startReason`, `sessionId`, `title`, `ownerUserId`, `ownerDisplayName`, `startedAt`, `recordedDurationMs`, `segmentIndex/Count`, `pauseCount`, `takeoverBy`, `takeoverAt`, `takeoverByDisplayName` (v0.3, CG-14 — set by R-21 alongside `takeoverBy`, S06-D-4), `errorCode/Message`, `adopted?` |
 | Emitter | Machine 1a: R-01, R-03 (re-broadcast for the locked view), R-05…R-22; boot recovery BR-1…BR-9 |
 | Frequency | On transition + on subscribe. The timer ticks **locally** from `startedAt`/`recordedDurationMs` — no per-second events (INV-G-7) |
 | Consumers | Panel frame/notch/TimerCard (LP-4), locked view (LP-6), admin header |
@@ -165,7 +166,7 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 |---|---|
 | Direction | core-api → panel, admin |
 | Payload | `SystemAlert` (full row incl. `clearedAt`/`clearedReason`) |
-| Emitter | Every raising/clearing transition: R-02/R-04/R-06/R-07/R-09/R-13/R-16/R-18/R-19/R-20, RA-04, CH-03/CH-06/CH-09, Q-05, Q-32, Z-03/Z-06, Z-32, U-07/U-08, HL-04…HL-23; re-evaluated per T-ALERT-REEVALUATE (30 s — INV-SA-1) |
+| Emitter | Every raising/clearing transition: R-02/R-04/R-06/R-07/R-09/R-13/R-16/R-18/R-19/R-20/R-22 (v0.3, CG-17 — licenses the `poweroff.refused` alert S-03's banner host and S-12 already render, S12-D-3), RA-04, CH-03/CH-06/CH-09, Q-05, Q-32, Z-03/Z-06, Z-32, U-07/U-08, HL-04…HL-23; re-evaluated per T-ALERT-REEVALUATE (30 s — INV-SA-1) |
 | Frequency | On raise/clear; alerts affecting recording reach the panel within 5 s (INV-SA-3, G-1) |
 | Consumers | Panel alert surfaces (LP-4/LP-12 banners, recovery banner J-4), admin alert list |
 
