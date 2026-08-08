@@ -152,3 +152,110 @@
   letter-spacing: 0.4px;
   color: var(--text-faint);
 }
+
+/* S-27 Streaming Configuration */
+.us-adm__grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-6);
+}
+.us-adm__inline {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.us-adm__platforms {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-5);
+}
+.us-adm__platform {
+  min-height: var(--tap-min);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-7) var(--sp-4);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+.us-adm__platform--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.us-adm__primary {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-7);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.us-adm__primary:disabled {
+  opacity: 0.6;
+}
+.us-adm__primary--right {
+  align-self: flex-end;
+}
+.us-adm__secondary {
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.us-adm__savedlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-adm__targetrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.us-adm__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.us-adm__chip--configured {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.us-adm__chip--not-configured {
+  background: var(--danger-soft);
+  color: var(--danger);
+}

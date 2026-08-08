@@ -7,6 +7,7 @@ import { DashboardScreen } from '../screens/dashboard/dashboard-screen.js';
 import { AdvancedShell } from '../screens/advanced/advanced-shell.js';
 import { AdvancedIndex } from '../screens/advanced/advanced-index.js';
 import { LocalCaptureScreen } from '../screens/advanced/local-capture-screen.js';
+import { StreamingScreen } from '../screens/advanced/streaming-screen.js';
 import { PanelShell } from './panel-shell.js';
 import { RouteError } from './route-error.js';
 import { ScreenPlaceholder } from './screens.js';
@@ -64,6 +65,7 @@ const ADVANCED_SHARED_CHILDREN: readonly AdvancedChildSpec[] = [
 /** Screens with a real implementation among the Advanced children. */
 const ADVANCED_SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-26': () => <LocalCaptureScreen />,
+  'S-27': () => <StreamingScreen />,
 };
 
 /** Admin-only Advanced children: a role mismatch lands back in the lecturer's own shell (U-6), not `/`. */
