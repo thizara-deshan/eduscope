@@ -29,6 +29,12 @@ function at(path: string, u: ReturnType<typeof user> | null) {
             // eslint-disable-next-line jsx-a11y/aria-role
             element={<RequireRole role="admin"><p>users</p></RequireRole>}
           />
+          <Route path="/advanced/local-capture" element={<p>local capture</p>} />
+          <Route
+            path="/advanced/network"
+            // eslint-disable-next-line jsx-a11y/aria-role
+            element={<RequireRole role="admin" redirectTo="/advanced/local-capture"><p>network</p></RequireRole>}
+          />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
@@ -55,5 +61,11 @@ describe('role gating', () => {
   it('redirects to the forced reset while mustResetPassword is true (U-7)', () => {
     at('/', user('lecturer', true));
     expect(screen.getByText('reset')).toBeTruthy();
+  });
+
+  it('honors an explicit redirectTo instead of the default "/" on a role mismatch', () => {
+    at('/advanced/network', user('lecturer'));
+    expect(screen.queryByText('network')).toBeNull();
+    expect(screen.getByText('local capture')).toBeTruthy();
   });
 });

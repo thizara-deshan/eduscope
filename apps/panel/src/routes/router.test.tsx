@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { AuthProvider } from '../auth/auth-context.js';
 import { ClientContext } from '../client/client-provider.js';
+import { ADVANCED_NAV_ITEMS } from '../screens/advanced/advanced-nav.js';
 import { ROUTES, routeObjects } from './router.js';
 
 // PanelHeader (S-03) reads useClient() on every route except the two auth
@@ -13,7 +14,10 @@ import { ROUTES, routeObjects } from './router.js';
 // eventually-resolved hall name.
 function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const stub = { getProvisioning: vi.fn(() => new Promise(() => {})) } as unknown as EduscopeClient;
+  const stub = {
+    getProvisioning: vi.fn(() => new Promise(() => {})),
+    getMe: vi.fn(() => new Promise(() => {})),
+  } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -39,13 +43,9 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
 }
 
 describe('panel router (screen-inventory §1.1)', () => {
-  it('declares exactly the 16 nav-map routes', () => {
+  it('declares the flat nav-map routes — Advanced (S-25..S-36) is its own nested route', () => {
     expect(ROUTES.map((r) => r.path)).toEqual([
       '/login', '/login/reset', '/', '/library', '/library/:recordingId',
-      '/advanced', '/advanced/local-capture', '/advanced/streaming',
-      '/advanced/network', '/advanced/encoder', '/advanced/storage',
-      '/advanced/firmware', '/advanced/users', '/advanced/logs',
-      '/advanced/uploads', '/advanced/device',
     ]);
   });
 
@@ -59,11 +59,15 @@ describe('panel router (screen-inventory §1.1)', () => {
   it.each([
     ['/', 'S-04'],
     ['/library', 'S-21'],
-    ['/advanced', 'S-25'],
-    ['/advanced/local-capture', 'S-26'],
   ])('renders %s as screen %s', (path, screenId) => {
     renderAt(path);
     expect(screen.getByTestId('screen').dataset.screen).toBe(screenId);
+  });
+
+  it('renders the real Advanced shell (S-25) at /advanced, not a placeholder', () => {
+    renderAt('/advanced/local-capture');
+    expect(screen.getByTestId('advanced-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('screen').dataset.screen).toBe('S-26');
   });
 
   it('renders an admin route for an admin', () => {
@@ -71,9 +75,34 @@ describe('panel router (screen-inventory §1.1)', () => {
     expect(screen.getByTestId('screen').dataset.screen).toBe('S-32');
   });
 
+  it('U-6: a lecturer hitting an admin-only Advanced route lands in their own shell, never a 403', () => {
+    renderAt('/advanced/network', 'lecturer');
+    expect(screen.getByTestId('advanced-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('screen').dataset.screen).toBe('S-26');
+    expect(screen.queryByText(/403/)).toBeNull();
+  });
+
+  it('/advanced redirects to the role default category', () => {
+    renderAt('/advanced', 'admin');
+    expect(screen.getByTestId('screen').dataset.screen).toBe('S-28');
+    cleanup();
+    renderAt('/advanced', 'lecturer');
+    expect(screen.getByTestId('screen').dataset.screen).toBe('S-26');
+  });
+
+  it('reaches all 16 nav-map screens across the flat and nested route trees', () => {
+    const reached = [...ROUTES.map((r) => r.screen), 'S-25', ...ADVANCED_NAV_ITEMS.map((i) => i.screen)];
+    expect(new Set(reached).size).toBe(16);
+    expect(reached).toEqual(expect.arrayContaining([
+      'S-01', 'S-02', 'S-04', 'S-21', 'S-22', 'S-25',
+      'S-26', 'S-27', 'S-28', 'S-29', 'S-30', 'S-31', 'S-32', 'S-34', 'S-35', 'S-36',
+    ]));
+  });
+
   it('mounts every route inside ONE layout route — S-03 is (panel, all routes)', () => {
     expect(routeObjects).toHaveLength(1);
-    expect(routeObjects[0]!.children).toHaveLength(ROUTES.length + 1); // + catch-all
+    // ROUTES (flat) + the /advanced parent + catch-all
+    expect(routeObjects[0]!.children).toHaveLength(ROUTES.length + 2);
   });
 
   it('gives the shell an overlay host on every route', () => {
@@ -83,7 +112,7 @@ describe('panel router (screen-inventory §1.1)', () => {
     // registration never fires — and cleanup only runs between tests anyway,
     // not between two render() calls in the same test. Explicit unmount here.
     cleanup();
-    renderAt('/advanced');
+    renderAt('/advanced/local-capture');
     expect(screen.getByTestId('overlay-host')).toBeTruthy();
   });
 

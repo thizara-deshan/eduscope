@@ -11,9 +11,12 @@ import { useAuth } from './auth-context.js';
  */
 export function RequireRole({
   role,
+  redirectTo = '/',
   children,
 }: {
   role?: UserRole;
+  /** U-6: an admin-only Advanced child sends a role mismatch back into the role-scoped shell, not `/`. */
+  redirectTo?: string;
   children: ReactNode;
 }) {
   const { user, mustResetPassword } = useAuth();
@@ -26,7 +29,7 @@ export function RequireRole({
     return <Navigate to="/login/reset" replace />;
   }
 
-  if (role && user.role !== role) return <Navigate to="/" replace />;
+  if (role && user.role !== role) return <Navigate to={redirectTo} replace />;
 
   return <>{children}</>;
 }
