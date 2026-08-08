@@ -1820,7 +1820,7 @@ before the wireframe is approved (revamp-guide prompt 07 "Done when").
 | W-1 | **S-02** Forced password reset | Parity §5.1 item 3; User Management only *adds* users today | Any user-management demo | ✅ **closed** 2026-08-04 | [S-02-design.md](screens/S-02-design.md) |
 | W-2 | **S-06** Recorder lock & takeover | Parity §5.1 item 5; legacy enforced it in the UI, which is why it needs redesigning as a server-enforced view | J-1 multi-user story | ✅ **closed** 2026-08-05 | [S-06-design.md](screens/S-06-design.md) |
 | W-3 | **S-12** Power-off confirm | Parity §5.1 item 6; lived on the retired Menu page | — | ✅ **closed** 2026-08-05 | [S-12-design.md](screens/S-12-design.md) |
-| W-4 | **S-20** Quiz join / QR card | New (A-22); **placement in a full 430 px column is the open question** | J-3 | open — Wave 4 | — |
+| W-4 | **S-20** Quiz join / QR card | New (A-22); **placement in a full 430 px column is the open question** | J-3 | ✅ **closed** 2026-08-08 | [S-20-design.md](screens/S-20-design.md) |
 | W-5 | **S-21** Recordings library | Parity §5.1 item 1 — the largest gap in the product | S-22, S-23, S-24 | open — Wave 5 | — |
 | W-6 | **S-22** Recording detail & player | Same row; authenticated playback is new (B-37) | — | open — Wave 5 | — |
 | W-7 | **S-23** USB export flow | Parity §5.1 items 1 + 10; drive picking and real progress are both new | — | open — Wave 5 | — |
@@ -1879,10 +1879,10 @@ an endpoint to fit a screen that does not exist — the one thing this document
 has not done. So gaps close **wave by wave**, at each Route B gate, not in one
 sitting. See [§11](#11-build-order) for which wave owns which row.
 
-Rows **CG-10…CG-18** were not visible at prompt-07 time: they were discovered
-*during* the S-01/S-02 (CG-10…CG-13), S-06/S-12 (CG-14…CG-17) and S-05/S-11
-(CG-18) design runs, because a screen only reveals what data it needs once it is
-drawn. Expect every future Route B run to add rows here.
+Rows **CG-10…CG-19** were not visible at prompt-07 time: they were discovered
+*during* the S-01/S-02 (CG-10…CG-13), S-06/S-12 (CG-14…CG-17), S-05/S-11
+(CG-18) and S-20 (CG-19) design runs, because a screen only reveals what data it
+needs once it is drawn. Expect every future Route B run to add rows here.
 
 > **A Route B run can also add nothing.** The **W-14 / W-15** gate (2026-08-05)
 > is the first to require **no contract change at all** — both screens surface
@@ -1909,6 +1909,7 @@ drawn. Expect every future Route B run to add rows here.
 | **CG-16** | **`powerOffDevice` has no resolving event.** `CommandAccepted.resolveBySec` means "failure rendered after this many seconds without a resolving event", and events.md §10 — the closed catalog — holds none for power-off, because a successful halt's only observable outcome is the device ceasing to answer. Read literally, the panel declares failure 10 s after every **successful** shutdown | S-12 | Medium | State in the operation description that resolution is the transport closing, and that `resolveBySec` is the *not-halted* threshold | ✅ **applied v0.3.0** | [S-12-design.md](screens/S-12-design.md) §9 #3 |
 | **CG-17** | **The `system.alert` emitter list omits R-22.** state-machines R-22 emits `system.alert{poweroff.refused}` and §2 S-03's banner host already has a row for it, but events.md §2.10 does not name R-22 — and §10 there is the closed catalog, so the emitter is unlicensed and SM-R-3 is violated on paper | S-03, S-12 | Low — S-12's own path works from the 409; what is blocked is the second panel and the alert-list record | Add R-22 to the §2.10 emitter list | ✅ **applied v0.3.0** | [S-12-design.md](screens/S-12-design.md) §9 #4 |
 | **CG-18** | **No server-side estimate of remaining recording time.** S-05's `ai disabled` capture card shows disk headroom, and the obvious rendering is "≈ 4 h 20 m left". Nothing can produce that figure: `StorageOverview` carries `freeBytes` only, and no achieved-bitrate value is reachable by the panel (`getEncoderSettings` is an admin surface and states intent, not achieved rate) | — (none blocked) | None — listed only so it is a deliberate omission, not an oversight | Either a server-computed `estimatedRemainingMs` on `StorageOverview`, or accept bytes-only and say so | ✅ **closed** — **bytes only**, plus the sentence generated from `RetentionPolicy` (INV-RP-1). A fabricated estimate on the one card whose job is to be trustworthy is worse than an honest byte count. Additive later if operations shows a need | [S-05-ai-disabled-design.md](screens/S-05-ai-disabled-design.md) §9.1 |
+| **CG-19** | **`quiz.session` cannot say the joined count is stale.** `QuizSessionProjection` (REST) carries `syncState` as a **required** field, but the WS `quiz.session` payload (events.md §2.15) omits it. Machine 4d staleness is emitted on `quiz.publication`/`quiz.responses` (the Insights panel's concern), not on the joined count — so a device whose `sync.participants` stream has gone quiet keeps broadcasting the last `joinedCount` **as current**, the exact "display stale as live" failure QZ-7 / INV-AP-2 forbid | S-20 | Medium — without it, S-20's `stale` state is unreachable over the live socket; the chip silently shows stale counts as current on a degraded sync link | Add `syncState` to `QuizSessionPayload`, mirroring the REST schema (additive; one field, already modelled and named; the emitter already holds the value) | ✅ **applied v0.4.0** | [S-20-design.md](screens/S-20-design.md) §9 |
 
 Gaps **CG-1** and **CG-2** are the only two that hard-block a build wave *by
 missing an entire surface*. **CG-10…CG-13 blocked Wave 1** and are now
@@ -1921,7 +1922,10 @@ adapter all carry them ([contract-amendments.md](contract-amendments.md),
 rather than a change. **The W-14/W-15 gate (2026-08-05) added no blocking
 row** — S-05's `ai disabled` layout and S-11's `[D-10]` pattern both required
 zero contract change, and **CG-18 closed on arrival** as a recorded omission
-in CG-9's style. CG-3 and CG-7 should land before Wave 5/6.
+in CG-9's style. **The W-4 gate (2026-08-08) added one row — CG-19**, answered
+and now `applied v0.4.0` (events.md §2.15 `QuizSessionPayload` gains `syncState`;
+[contract-amendments.md](contract-amendments.md), 2026-08-08), so Wave 4's plan
+run is unblocked. CG-3 and CG-7 should land before Wave 5/6.
 
 ### 10.1 When the contract actually changes
 
@@ -1937,7 +1941,8 @@ contract makes the gate unpassable by construction.
 |---|---|---|
 | `v0.2` | CG-10, CG-11, CG-12, CG-13 | **before Wave 1's plan run** |
 | `v0.3` | CG-14, CG-15, CG-16, CG-17 | **before Wave 2's plan run** |
-| `v0.4` | CG-3, CG-5, CG-7 | before Wave 5's plan run |
+| `v0.4` | CG-19 | **before Wave 4's plan run** |
+| `v0.5` | CG-3, CG-5, CG-7 | before Wave 5's plan run |
 | *(tbd)* | CG-4, CG-8 | before Wave 6's plan run |
 | *(tbd)* | CG-1 — a whole `contracts/quiz-app.yaml` | before Wave 7 |
 | **`v1.0`** | **Everything, reconciled** — prompt 12 drift review | Phase 3, once, both owners sign off |
@@ -2069,7 +2074,7 @@ absence is deliberate, not lost.
 | SI-D-1 | Router in the panel | **Taken:** the panel gets a router (17 surfaces vs the prototype's 3). Deep-linking is a non-goal | Low |
 | SI-D-2 | Overlays are not routes | **Taken:** modals/dialogs are UI-local, matching state-machines §8 (SM-R-2) | Low |
 | SI-D-3 | Library entry point | **Proposed:** a header entry visible to both roles, plus a link from the post-stop "Saved" toast. The prototype has no entry point because it has no library | Low — settle with W-5 |
-| SI-D-4 | Quiz QR placement | **Proposed:** a compact "Quiz · N joined" chip in the AI Studio header opening a QR modal, costing zero steady-state vertical pixels in a full 430 px column | Low — settle with W-4 |
+| SI-D-4 | Quiz QR placement | **Taken (W-4, 2026-08-08):** a state-carrying "Quiz · N joined" chip in the AI Studio header opening a 680 px QR modal (QR ≥ 240 px + join code + join URL + count), costing zero steady-state vertical pixels in a full 430 px column. See [S-20-design.md](screens/S-20-design.md) §11 S20-D-1 | Low |
 | SI-D-5 | S-36 merges three concerns | **Taken:** device identity (AD-10), health/watchdog and the admin alert list share one screen. Three near-empty read-only screens would be worse; `/alerts` otherwise has no admin home | Low |
 | SI-Q-1 | "Eduscope AI Studio" vs "Eduscope AI central" | The component renders **"Eduscope AI Studio"**; PRD LP-16 and prototype CLAUDE.md both say **"Eduscope AI central"**. One is drift. **Recommendation: "Eduscope AI Studio"** — it is what reviewers have seen — with the PRD amended | Trivial now, a retraining cost after pilot |
 | SI-Q-2 | Countdown default 15 → 20 | INT-11/A-14 say **20**; `QuestionContext.tsx` still says 15. The rewrite uses 20; the prototype fix is already an open action item in PRD §Stop | Trivial |

@@ -430,3 +430,61 @@ redesign, no second gate.
 - **Wave 2's four wireframe rows are now all closed** (W-2, W-3, W-14, W-15). No
   wireframe blocks Wave 2's plan run; what remains is applying CG-14…CG-17 to
   `contracts/`.
+
+---
+
+## 8. Decided at the S-20 wireframe gate (2026-08-08)
+
+The **W-4** gate (Quiz join / QR card; **SI-D-4** "Quiz QR placement") is settled
+in [S-20-design.md](../design/screens/S-20-design.md) (status: ✅ **approved
+2026-08-08**). This section records the outcome, the two sub-questions the design
+surfaced but does **not** own, and the one contract change it required. The
+follow-through is done: W-4 marked ✅ in
+[screen-inventory §9](../design/screen-inventory.md#9-screens-needing-wireframe-approval),
+CG-19 registered in [§10](../design/screen-inventory.md#10-contract-gaps) and
+`applied v0.4.0` to `contracts/events.md` §2.15.
+
+### 8.1 Outcome — SI-D-4 settled
+
+| Id | Question | Ruling | Reversal cost |
+|----|----------|-----------------|---------------|
+| **SI-D-4** | Where does the panel-side quiz join surface live in a full 430 px column? | **A state-carrying chip in the S-13 AI Studio header, opening a 680 px join modal** (QR ≥ 240 px + join code + join URL + joined count). The chip costs zero steady-state vertical pixels; the QR needs 240 px, which only a modal affords; and Z-01's `aiEnabledAtStart` guard means the host card is always present exactly when a quiz session exists — so the chip is never orphaned (S-20 §1 C-1) | Medium — it is the screen's shape |
+
+S-20-D-1…D-8 (S-20-design §11) are taken as part of this ruling — notably **no
+Retry button** (the panel owns no session-mint operation; recovery is Z-04's
+automatic probe), **client-side QR encoding** (no image endpoint), and
+**stale-marking the joined count** rather than showing it as live.
+
+### 8.2 Contract change this design requires — CG-19 (additive, `v0.4`)
+
+| Gap | Fix | Why it blocks S-20's live path |
+|-----|-----|--------------------------------|
+| **CG-19** — WS `quiz.session` payload ([events.md §2.15](../../contracts/events.md)) omits `syncState`, which `QuizSessionProjection` (REST) already carries and **requires** | Add `syncState` to `QuizSessionPayload`, mirroring the REST schema. Additive; one field; already modelled and named; the emitter already holds the value | Machine 4d staleness is emitted on `quiz.publication` / `quiz.responses` (the **Insights** panel's concern), not on the joined count. Without `syncState` on `quiz.session`, a device whose `sync.participants` stream has gone quiet keeps broadcasting the last `joinedCount` **as current** — the exact "display stale as live" failure QZ-7 / INV-AP-2 forbid. If rejected, S-20's stale state degrades to a `getQuizSession` poll on the `T-QUIZ-SYNC-STALE` cadence (strictly worse; recorded in S-20-design §9 CG-19) |
+
+Registered in [screen-inventory §10](../design/screen-inventory.md#10-contract-gaps)
+as CG-19 and **applied v0.4.0** to `contracts/events.md` §2.15 (2026-08-08),
+before Wave 4's plan run.
+
+### 8.3 Open sub-questions this gate surfaced — NOT decided here
+
+The design is coherent under a sensible default for each, stated so nothing is
+smuggled in as an assumption. Both belong to owners other than the W-4 gate.
+
+| ID | Question | Who decides | Default the S-20 design assumes | Why it is open |
+|----|----------|-------------|----------------------------------|----------------|
+| **QO-1** | **Pre-publication join affordance.** Before the first Send to Projector, the projector shows slides passthrough with **no QR** (PRD J-2; S-42 switches to the QR only when a question is published). In that window the panel modal (S-20) is the *only* join surface — a lecturer must actively open it and turn the panel to the room. Is that acceptable, or should S-42 render a persistent small join QR/code during slides passthrough so students can join *before* the first question? | PM + owner of **S-42 / W-12** | The panel modal is the pre-publication join path; S-42 adds the QR only at publication. S-20 records the dependency and does not assume S-42's behaviour | It changes S-20's role from "fallback" to "the primary early join surface", but the fix (if any) lives in S-42, not S-20. Settle at the **W-12** gate |
+| **QO-2** | **Alert prominence for `quiz.unavailable`.** On 4a `failed`, the S-20 chip turns to a warning and S-14's Send is disabled-with-reason, and `system.alert{quiz.unavailable}` also fires. Beyond the chip + S-14, does the shell (S-03) surface it as a transient toast, a persistent banner until recovery, or nothing? | PM + owner of **S-03** alert model | The chip + S-14's disabled Send are the primary carriers; the shell alert is a **non-blocking notice, not a persistent banner** (the chip already persists the state) | Couples to how S-03 renders `system.alert` generally, which is not fully settled. Confirm against the S-03 alert model before Wave 4 |
+
+Neither is design-blocking for S-20 itself: the chip/modal render correctly under
+the assumed defaults, and both questions concern *other* surfaces' behaviour.
+
+### 8.4 Also settled by this wireframe
+
+- **W-4 is closed**, leaving W-5…W-12 as the remaining open wireframe rows.
+- **No new design token** is introduced. The `failed` / `stale` treatments assume
+  the `--warn` / `--warn-soft` semantic pair already in
+  [§8.2](../design/screen-inventory.md); if that pair is not yet defined, S-20
+  falls back to `--info` rather than minting a colour (flagged in S-20-design §7).
+- **S-20 is read-only and net-new** — the behavioral inventory holds no `B-*`
+  quiz / QR / join item, so there is nothing legacy to preserve; the binding
+  constraints are the contract, Machine 4a, and the kiosk vertical budget.

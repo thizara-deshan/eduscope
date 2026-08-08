@@ -12,6 +12,53 @@ during a plan, and never speculatively.
 
 ---
 
+## 0.3.0 → 0.4.0 — 2026-08-08 · Wave 4 (AI & quiz) gate
+
+Carries **CG-19**, the one gap the S-20 (Quiz join / QR card) wireframe gate
+answered. It is `Medium` and additive; Wave 4's plan run is unblocked by this
+amendment. The W-4 gate required no other contract change — S-20 renders a
+projection that already exists and issues no command.
+
+Sources: [S-20 §9](screens/S-20-design.md#9-contract-changes-this-design-requires),
+[open-decisions §8.2](../discovery/open-decisions.md#82-contract-change-this-design-requires--cg-19-additive-v04).
+
+`info.version` `0.3.0` → `0.4.0`.
+
+**`contracts/events.md` WAS touched — one WS-visible change.** §2.15's
+`QuizSessionPayload` field list gains `syncState`, mirroring the field the REST
+`QuizSessionProjection` already declares and requires. Its own version header
+moves `0.3.0` → `0.4.0`. **`openapi.yaml`'s only change is the version string** —
+its REST schema already carried `syncState` (the `QuizSyncState` enum on
+`QuizSessionProjection`); the gap was solely that the WS payload did not mirror
+it, so there is no schema diff there, only the `info.version` bump that keeps the
+suite coherent.
+
+### Amendment rows
+
+| # | CG | Decision | Severity | Change |
+|---|---|---|---|---|
+| **A-9** | [CG-19](screen-inventory.md#10-contract-gaps) | S20-D-6 | **additive** (one field, mirrors an existing REST field) | `events.md` §2.15 `QuizSessionPayload` gains `syncState` (`synced`/`stale`/`failed`) |
+
+---
+
+#### A-9 · CG-19 · `QuizSessionPayload` — add `syncState`
+
+*Additive.* One property, mirroring `QuizSessionProjection.syncState`
+(`QuizSyncState` enum, already defined in `openapi.yaml`). The REST projection
+already carries and **requires** `syncState`; this amendment brings the WS
+`quiz.session` payload into line so the joined-count staleness (Machine 4d,
+Z-30) is knowable **live**, not only on a REST snapshot. Without it, a device
+whose `sync.participants` stream has gone quiet keeps broadcasting the last
+`joinedCount` as current — the "display stale as live" failure QZ-7 / INV-AP-2
+forbid, and the reason S-20's `stale` state (S-20 §2.4 / §5.1) is otherwise
+unreachable over the socket.
+
+No existing field changes meaning; no producer that validated before this
+amendment now fails (the field is an addition, and core-api's Machine 4a/4d
+already holds the value it emits).
+
+---
+
 ## 0.2.0 → 0.3.0 — 2026-08-05 · Wave 2 (Recording core) gate
 
 Carries **CG-14 … CG-17**, the four gaps the S-06 and S-12 wireframe gates

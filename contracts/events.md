@@ -13,6 +13,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 0.4.0 | 2026-08-08 | §2.15 `QuizSessionPayload` gains `syncState` (CG-19), mirroring `QuizSessionProjection.syncState` so the joined-count staleness is knowable live and not only on REST snapshot. Wave 4 (S-20) wireframe-gate answer; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.3.0 | 2026-08-05 | §2.1 `RecordingStatePayload` gains `takeoverAt` + `takeoverByDisplayName` (CG-14). §2.10 `system.alert` emitter list gains R-22 (CG-17). Both Wave 2 (S-06/S-12) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.1.0 | 2026-07-30 | Initial contract. Adopts state-machines §10 verbatim, plus four additions that §10 lacked but screens require: `audio.control` (INV-AC-1), `export.job` + `usb.volumes` (LP-10/LP-11, B-38 session scoping), `firmware.state` (AD-5). `ai.batch_ready` from earlier sketches is **superseded** by `ai.set` (state `ready` *is* batch-ready) per state-machines §10. Defines the WebRTC preview-signaling envelope (A-17) and the device↔quiz-server sync contract (DM-P5). |
 
@@ -215,10 +216,10 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | | |
 |---|---|
 | Direction | core-api → panel, projector consumer |
-| Payload | `QuizSessionPayload` — `state` (projection: absent/requesting/open/closed/failed), `quizSessionId`, `joinUrl`, `joinCode`, `joinedCount` |
-| Emitter | Machine 4a: Z-01…Z-06; joined-count updates from `sync.participants` (§4) |
-| Frequency | On transition + on joined-count change (coalesced to ≤ 1/s) |
-| Consumers | Join QR + joined count card (QZ-2), "quiz unavailable" notice (LP-18); the projector consumer renders the QR overlay (PF-11) |
+| Payload | `QuizSessionPayload` — `state` (projection: absent/requesting/open/closed/failed), `quizSessionId`, `joinUrl`, `joinCode`, `joinedCount`, `syncState` (v0.4, CG-19: `synced`/`stale`/`failed` — mirrors `QuizSessionProjection.syncState` so the joined-count staleness is knowable live, not only on REST snapshot; Machine 4d Z-30) |
+| Emitter | Machine 4a: Z-01…Z-06; joined-count updates from `sync.participants` (§4); `syncState` from Machine 4d (Z-30) |
+| Frequency | On transition + on joined-count change + on `syncState` change (coalesced to ≤ 1/s) |
+| Consumers | Join QR + joined count card (QZ-2, S-20), "quiz unavailable" notice (LP-18); S-20's stale-count marker reads `syncState` (CG-19); the projector consumer renders the QR overlay (PF-11) |
 
 ### 2.16 `quiz.publication`
 
