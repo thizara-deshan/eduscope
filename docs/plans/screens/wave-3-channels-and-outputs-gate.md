@@ -79,3 +79,45 @@ Recorded while executing `docs/plans/screens/wave-3-channels-and-outputs.md`.
 - `useStreamingChannel`'s (and, identically, `useMeetingChannel`'s) live toggle called `requestEnabled(status !== 'on')` — from a `failed` consumer this issues `enableChannel` again, but CH-01/CH-04 are only legal from `off` (state-machines §2.2), so the command silently hits an illegal-transition guard in the mock and the switch never leaves its failure reason. A lecturer/admin recovering from a failed streaming or meeting consumer would find the toggle permanently inert. Every unit test stubbed `enableChannel`/`disableChannel` directly, so none exercised the mock's real legality guard — caught only by the Playwright recovery journey. Fixed both hooks to call `requestEnabled(status === 'off')`: from `off` this enables; from `on` **or** `failed` it disables — `failed` must be acknowledged with CH-10 before a fresh enable can succeed, matching the demo map's "disable, then re-enable" recovery sequence.
 
 ---
+
+## GATE S-08 — Live Meeting card and Wave-3 exit condition
+
+**Automated evidence:**
+- Testing Library: `pnpm --filter @eduscope/panel test -- src/channels src/screens/session` — all passed (off, preflight/starting renderings, on open/closed, failed, restarting, stopping, accordion open, preset pending, invalid preset, still on while paused, U-1, U-2, U-4, U-5).
+- Playwright: `apps/panel/e2e/s08-meeting.spec.ts` — 6/6 passed (primary journey, channel-failures recovery + restart, invalid preset, ws-flap reconnecting, geometry, Wave-3 exit condition).
+- Boundary lint, full typecheck/test/gate: `pnpm lint`, `pnpm test tools/eslint-rules/gate-boundary.test.ts`, `pnpm typecheck`, `pnpm test` (961 tests across all workspaces), `pnpm gate` (Playwright boot gates for panel + quiz) — all green, no direct network import anywhere.
+
+**Scenario-overlay demo walk (S-08 rows):**
+
+| Row | Script/action | Observed |
+|---|---|---|
+| `off` | `happy` → Start; meeting untouched | Switch unchecked, accordion collapsed |
+| `preflight / starting` | `happy` → Meeting on | Switch shows a spinner immediately after the tap and stays unchecked until `channel.state{on}` arrives (S-27's own journey demonstrates the real `preflight` state per W3-D-7) |
+| `on` | `happy` → Meeting on, wait for CH-05 | Switch checked, accordion opens |
+| `failed` | `channel-failures` → Start → Meeting on | Named reason "The output consumer did not start.", switch stays unchecked |
+| `restarting` | `channel-failures`, recover meeting to on → Meeting consumer exited | "Restarting…" distinct from "Starting…", then returns to "On" |
+| `stopping` | `happy`, Meeting off | "Turning off…" then unchecked |
+| `accordion open` | `happy`, Meeting on or Layouts | Grid of exactly the three meeting presets |
+| `preset change pending` / U-4 | `channel-failures`, first valid preset tap | Tapped card alone shows "Saving…" |
+| `invalid preset` | `happy` + World: Students Camera unbound, open Layouts | Both cameras-requiring presets stay visible, disabled, named |
+| `still on while paused` | `happy` → Start → Meeting on → Pause | Local `meeting-still-on-paused` echo and S-03's `streaming-while-paused` indicator both render |
+| U-1 | cold session render before channel/layout queries resolve | `meeting-channel-skeleton` |
+| U-2 | `ws-flap`, wait past stale threshold | Switch and every preset card disabled; nothing queues for replay (commands are simply never issued while stale) |
+| U-5 | `channel-failures`, second valid preset tap | Named 422 renders in the picker's live region |
+
+**Implementation gap found during execution (recorded only — no contract edit made):**
+- `useMeetingChannel` did not gate `toggle()`/`selectPreset()` on `useIsStale()` at all — U-2 said the switch and preset commands must disable while stale, but the hook would still happily issue `enableChannel`/`updateChannelConfig` mid-reconnect. Fixed by mirroring S-26's stale-gating pattern: `useMeetingChannel` now exposes `stale`, refuses `toggle`/`selectPreset` while stale, and marks every preset option disabled with the same "Not connected — you can't change this right now." reason `use-local-capture-layout.ts` already uses.
+
+**Wave-3 exit condition — demonstrated from one mock session (`apps/panel/e2e/s08-meeting.spec.ts`, describe `Wave-3 exit condition`):**
+
+1. Before recording, local layout and the streaming default were set from Advanced (S-26/S-27), both using the exact LP-7 vocabulary.
+2. Recording started; local has no switch at all (S-26) and is on by construction.
+3. Live Meeting was enabled, changed among its three camera-only presets, and left on through Pause — the local echo and S-03's persistent indicator both rendered.
+4. Streaming was enabled through preflight to on while meeting stayed on and local kept recording — one channel's transition touched no other (INV-CC-2).
+5. A forced streaming preflight failure and a meeting consumer restart, both with the recording frame staying visible throughout, are demonstrated separately by the `channel-failures` "failure" tests in `s27-streaming.spec.ts` and `s08-meeting.spec.ts` — `channel-failures` intercepts the *first* occurrence of `updateChannelConfig` globally (any channel's save) and the dev restart buttons only render while it is the active script, so this step cannot share a script with steps 1–4's config writes without artificially burning those occurrences. Both are proven against a live recording in the cited specs.
+6. Meeting was stopped; streaming was confirmed untouched, then stopped itself; local kept recording throughout.
+7. Admin sees 10 categories (`s25-advanced.spec.ts`); the lecturer session used throughout this walk saw exactly the 2 output pages.
+
+All 21 Wave-3 Playwright tests (`s25-advanced`, `s26-local-capture`, `s27-streaming`, `s08-meeting`) pass together in one run.
+
+---

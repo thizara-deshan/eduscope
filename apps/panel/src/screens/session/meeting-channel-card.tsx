@@ -1,5 +1,5 @@
 import { LayoutPresetPicker } from '../../channels/layout-preset-picker.js';
-import { useIsStale, useRecordingState } from '../../store/selectors.js';
+import { useRecordingState } from '../../store/selectors.js';
 import { useMeetingChannel } from './use-meeting-channel.js';
 import './session.css';
 
@@ -29,7 +29,7 @@ function stateWord(state: string | undefined, reason: string | null | undefined)
  */
 export function MeetingChannelCard({ expanded, onExpandedChange }: MeetingChannelCardProps): JSX.Element {
   const meeting = useMeetingChannel();
-  const stale = useIsStale();
+  const stale = meeting.stale;
   const recordingState = useRecordingState();
 
   if (meeting.loading || !meeting.config) {
