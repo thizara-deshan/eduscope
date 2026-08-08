@@ -19,6 +19,10 @@
   min-height: 0;
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  overflow-y: auto;
 }
 
 /* S-05's explicit dense envelope: 738px below the header - 154px Sources
@@ -312,4 +316,168 @@
 
 .us-capturecard--dense .us-captureblock__label {
   margin-bottom: var(--sp-2);
+}
+
+/* S-08 Live Meeting card — ported hierarchy from prototype ChannelCard.tsx. */
+.us-chcard {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-5) var(--sp-6);
+  box-shadow: var(--shadow-sm);
+}
+.us-chcard--on {
+  border-color: var(--accent);
+}
+.us-chcard--failed {
+  border-color: var(--danger);
+}
+.us-chcard__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+.us-chcard__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+.us-chcard__icon--on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.us-chcard__meta {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+.us-chcard__name {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text);
+}
+.us-chcard__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.us-chcard--on .us-chcard__state {
+  color: var(--success);
+  font-weight: 700;
+}
+.us-chcard__state--failed {
+  color: var(--danger);
+  font-weight: 700;
+}
+.us-chcard__state--restarting {
+  color: var(--warning, var(--text-muted));
+  font-weight: 700;
+}
+.us-chcard__spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+}
+.us-chcard__layouts {
+  flex: 0 0 auto;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-6);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.us-chcard__pausednote {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* Shared toggle switch primitive */
+.us-toggle {
+  position: relative;
+  width: 54px;
+  height: 32px;
+  min-height: var(--tap-min);
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--border-strong);
+  flex: 0 0 auto;
+}
+.us-toggle--on {
+  background: var(--success);
+}
+.us-toggle--failed {
+  background: var(--danger);
+}
+.us-toggle:disabled {
+  opacity: 0.6;
+}
+.us-toggle__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s;
+}
+.us-toggle--on .us-toggle__knob {
+  transform: translateX(22px);
+}
+
+/* Inline collapsible meeting-view layout accordion */
+.us-mlayout {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.25s ease, margin-top 0.3s ease;
+}
+.us-mlayout--open {
+  max-height: 320px;
+  opacity: 1;
+  margin-top: var(--sp-5);
+  overflow-y: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .us-mlayout {
+    transition: none;
+    max-height: none;
+    overflow: visible;
+  }
+  .us-mlayout:not(.us-mlayout--open) {
+    display: none;
+  }
+}
+.us-mlayout__label {
+  display: block;
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: var(--sp-4);
 }

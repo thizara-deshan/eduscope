@@ -40,6 +40,8 @@ function renderSession(aiEnabled: boolean | undefined) {
     getProvisioning: vi.fn(() => new Promise<never>(() => undefined)),
     listChannels: vi.fn(() => new Promise<never>(() => undefined)),
     listLayoutPresets: vi.fn(() => new Promise<never>(() => undefined)),
+    listSourceRoles: vi.fn(() => new Promise<never>(() => undefined)),
+    listSourceBindings: vi.fn(() => new Promise<never>(() => undefined)),
     getStorageOverview: vi.fn(() => new Promise<never>(() => undefined)),
     pauseRecording: vi.fn(), resumeRecording: vi.fn(), stopRecording: vi.fn(),
   } as unknown as EduscopeClient;
