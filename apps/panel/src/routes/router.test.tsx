@@ -20,7 +20,7 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
     listChannels: vi.fn(() => new Promise(() => {})),
     listLayoutPresets: vi.fn(() => new Promise(() => {})),
     listSourceRoles: vi.fn(() => new Promise(() => {})),
-    listSourceBindings: vi.fn(() => new Promise(() => {})),
+    getSourcesStatus: vi.fn(() => new Promise(() => {})),
     listStreamTargets: vi.fn(() => new Promise(() => {})),
   } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });

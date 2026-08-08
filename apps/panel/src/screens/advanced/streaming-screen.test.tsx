@@ -30,9 +30,9 @@ const roles = [
   { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'Lecturer Camera', requiredForStart: true, provisionable: true },
 ];
-const bindings = [
-  { roleId: 'presentation', physicalInputId: 'IN1', enabled: true, updatedAt: '2026-01-01T00:00:00.000Z' },
-  { roleId: 'lecturer-cam', physicalInputId: 'IN2', enabled: true, updatedAt: '2026-01-01T00:00:00.000Z' },
+const sourceStatus = [
+  { roleId: 'presentation', state: 'online', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
+  { roleId: 'lecturer-cam', state: 'online', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
 ];
 const target = {
   id: 'T1', platform: 'youtube' as const, displayName: 'Main YouTube', ingestUrl: 'rtmp://a.rtmp.youtube.com/live2',
@@ -61,7 +61,7 @@ function renderScreen(
     listChannels: vi.fn(() => (cold ? pending : Promise.resolve(snapshots))),
     listLayoutPresets: vi.fn(() => (cold ? pending : Promise.resolve(presets))),
     listSourceRoles: vi.fn(() => (cold ? pending : Promise.resolve(roles))),
-    listSourceBindings: vi.fn(() => (cold ? pending : Promise.resolve(bindings))),
+    getSourcesStatus: vi.fn(() => (cold ? pending : Promise.resolve(sourceStatus))),
     listStreamTargets: vi.fn(() => (cold ? pending : Promise.resolve([target]))),
     ...overrides,
   } as unknown as EduscopeClient;

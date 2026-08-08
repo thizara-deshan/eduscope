@@ -1,19 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ChannelConfig, ChannelId, ChannelStatus, LayoutPreset } from '@eduscope/shared';
+import type { ChannelConfig, ChannelId, ChannelStatus, LayoutPreset, SourceRoleId } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
-import { useChannelStatus } from '../store/selectors.js';
+import { useChannelStatus, useWsShallow } from '../store/selectors.js';
 
 /** Reused everywhere a channel/preset REST row is read — S-05's rows already use these keys. */
 export const CHANNEL_QUERY_KEYS = {
   snapshots: ['channels'] as const,
   presets: ['layout-presets'] as const,
   sourceRoles: ['source-roles'] as const,
-  sourceBindings: ['source-bindings'] as const,
+  sourceStatus: ['source-status'] as const,
 };
 
 export interface ChannelPresetOption {
   readonly preset: LayoutPreset;
-  /** true when a `requiredRoles` entry has no enabled binding (G-CHANNEL-VALID, INV-LP-1). */
+  /** true when a `requiredRoles` entry reports `unbound` (G-CHANNEL-VALID, INV-LP-1). */
   readonly disabled: boolean;
   readonly reason: string | null;
 }
@@ -27,17 +27,19 @@ export interface UseChannelCatalog {
 }
 
 /**
- * Binding presence only (INV-SB-3) — an offline-but-bound role is not
- * "unbound"; live source health is a separate concern this reason ignores.
+ * `sources.status`'s `unbound` health state carries exactly INV-SB-3's
+ * binding-validity fact and, unlike `/sources/bindings` (x-required-role
+ * admin), is reachable by both roles — S-26/S-08 are lecturer screens too.
+ * An offline-but-bound role reports `offline`/`degraded`/`unknown`, never
+ * `unbound`, so this does not conflate live health with binding validity.
  */
 function unboundReason(
   preset: LayoutPreset,
   roles: readonly { readonly id: string; readonly displayLabel: string }[],
-  bindings: readonly { readonly roleId: string; readonly enabled: boolean; readonly physicalInputId: string | null }[],
+  statusByRole: ReadonlyMap<string, { readonly state: string }>,
 ): string | null {
   for (const roleId of preset.requiredRoles) {
-    const binding = bindings.find((b) => b.roleId === roleId);
-    if (!binding || !binding.enabled || !binding.physicalInputId) {
+    if (statusByRole.get(roleId)?.state === 'unbound') {
       const label = roles.find((r) => r.id === roleId)?.displayLabel ?? roleId;
       return `Needs ${label}, which is not connected.`;
     }
@@ -51,24 +53,31 @@ export function useChannelCatalog(channelId: ChannelId): UseChannelCatalog {
   const snapshotsQuery = useQuery({ queryKey: CHANNEL_QUERY_KEYS.snapshots, queryFn: () => client.listChannels() });
   const presetsQuery = useQuery({ queryKey: CHANNEL_QUERY_KEYS.presets, queryFn: () => client.listLayoutPresets() });
   const rolesQuery = useQuery({ queryKey: CHANNEL_QUERY_KEYS.sourceRoles, queryFn: () => client.listSourceRoles() });
-  const bindingsQuery = useQuery({
-    queryKey: CHANNEL_QUERY_KEYS.sourceBindings,
-    queryFn: () => client.listSourceBindings(),
+  const sourceStatusQuery = useQuery({
+    queryKey: CHANNEL_QUERY_KEYS.sourceStatus,
+    queryFn: () => client.getSourcesStatus(),
   });
   const liveStatus = useChannelStatus(channelId);
+  const liveSources = useWsShallow((s) => s.sources);
 
   const snapshot = snapshotsQuery.data?.find((row) => row.config.channelId === channelId);
   const config = snapshot?.config;
   const status = liveStatus ?? snapshot?.status;
 
+  const statusByRole = new Map<string, { readonly state: string }>();
+  for (const row of sourceStatusQuery.data ?? []) statusByRole.set(row.roleId, row);
+  for (const [roleId, row] of Object.entries(liveSources)) {
+    if (row) statusByRole.set(roleId as SourceRoleId, row);
+  }
+
   const options: ChannelPresetOption[] = (presetsQuery.data ?? [])
     .filter((preset) => preset.allowedChannels.includes(channelId))
     .map((preset) => {
-      const reason = unboundReason(preset, rolesQuery.data ?? [], bindingsQuery.data ?? []);
+      const reason = unboundReason(preset, rolesQuery.data ?? [], statusByRole);
       return { preset, disabled: reason !== null, reason };
     });
 
-  const loading = !snapshotsQuery.data || !presetsQuery.data || !rolesQuery.data || !bindingsQuery.data;
+  const loading = !snapshotsQuery.data || !presetsQuery.data || !rolesQuery.data || !sourceStatusQuery.data;
 
   return { config, status, options, loading };
 }

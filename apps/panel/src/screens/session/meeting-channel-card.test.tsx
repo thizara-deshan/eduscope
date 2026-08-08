@@ -42,9 +42,9 @@ const roles = [
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'Lecturer Camera', requiredForStart: true, provisionable: true },
   { id: 'students-cam', medium: 'video', displayLabel: 'Students Camera', requiredForStart: false, provisionable: true },
 ];
-const bindings = [
-  { roleId: 'lecturer-cam', physicalInputId: 'IN1', enabled: true, updatedAt: '2026-01-01T00:00:00.000Z' },
-  { roleId: 'students-cam', physicalInputId: null, enabled: false, updatedAt: '2026-01-01T00:00:00.000Z' },
+const sourceStatus = [
+  { roleId: 'lecturer-cam', state: 'online', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
+  { roleId: 'students-cam', state: 'unbound', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
 ];
 
 function channels(state: string, reason: string | null = null) {
@@ -63,7 +63,7 @@ function renderCard(overrides: Partial<EduscopeClient> = {}, cold = false) {
     listChannels: vi.fn(() => (cold ? pending : Promise.resolve(snapshots))),
     listLayoutPresets: vi.fn(() => (cold ? pending : Promise.resolve(presets))),
     listSourceRoles: vi.fn(() => (cold ? pending : Promise.resolve(roles))),
-    listSourceBindings: vi.fn(() => (cold ? pending : Promise.resolve(bindings))),
+    getSourcesStatus: vi.fn(() => (cold ? pending : Promise.resolve(sourceStatus))),
     ...overrides,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(

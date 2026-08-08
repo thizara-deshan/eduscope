@@ -30,9 +30,9 @@ const roles = [
   { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'Lecturer Camera', requiredForStart: true, provisionable: true },
 ];
-const bindings = [
-  { roleId: 'presentation', physicalInputId: 'IN1', enabled: true, updatedAt: '2026-01-01T00:00:00.000Z' },
-  { roleId: 'lecturer-cam', physicalInputId: 'IN2', enabled: true, updatedAt: '2026-01-01T00:00:00.000Z' },
+const sourceStatus = [
+  { roleId: 'presentation', state: 'online', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
+  { roleId: 'lecturer-cam', state: 'online', detail: null, since: '2026-01-01T00:00:00.000Z', inputId: null },
 ];
 
 function build(updateChannelConfig: (...args: never[]) => Promise<unknown>) {
@@ -42,7 +42,7 @@ function build(updateChannelConfig: (...args: never[]) => Promise<unknown>) {
     listChannels: vi.fn(() => Promise.resolve(snapshots)),
     listLayoutPresets: vi.fn(() => Promise.resolve(presets)),
     listSourceRoles: vi.fn(() => Promise.resolve(roles)),
-    listSourceBindings: vi.fn(() => Promise.resolve(bindings)),
+    getSourcesStatus: vi.fn(() => Promise.resolve(sourceStatus)),
     updateChannelConfig,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
