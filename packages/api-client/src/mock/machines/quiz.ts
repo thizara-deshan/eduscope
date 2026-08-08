@@ -12,6 +12,9 @@ import type { MachineDef } from './types.js';
 // ── 4a — QuizSession (device-side projection) ───────────────────────────────
 
 const M_SESSION = 'quiz.session' as const;
+// Declared here (not only beside the 4d block below) because the 4a
+// `quiz.session` payload builder reads the 4d sync state for CG-19's `syncState`.
+const M_SYNC = 'quiz.sync' as const;
 const citeA = (n: string) => `state-machines §5.1 ${n}`;
 
 export const quizSessionMachine: MachineDef = {
@@ -51,11 +54,16 @@ PAYLOAD_BUILDERS['quiz.session'] = (w: MockWorld) => ({
   joinUrl: (w.data['quiz.session.joinUrl'] as string | undefined) ?? null,
   joinCode: (w.data['quiz.session.joinCode'] as string | undefined) ?? null,
   joinedCount: (w.data['quiz.session.joinedCount'] as number | undefined) ?? 0,
+  // CG-19 (v0.4): the WS payload now mirrors QuizSessionProjection.syncState, so
+  // the joined-count staleness is knowable live and not only on a REST snapshot.
+  // Sourced from the 4d sync machine — the same value rest/quiz.ts's
+  // getQuizSession already reads — so REST and WS agree by construction.
+  syncState: w.state(M_SYNC),
 });
 
 // ── 4d — device ↔ quiz-service sync link (QZ-7) ─────────────────────────────
+// `M_SYNC` is declared up beside `M_SESSION` — the 4a payload builder needs it.
 
-const M_SYNC = 'quiz.sync' as const;
 const citeD = (n: string) => `state-machines §5.4 ${n}`;
 
 export const quizSyncMachine: MachineDef = {
@@ -64,10 +72,15 @@ export const quizSyncMachine: MachineDef = {
   terminal: [],
   transitions: [
     t(M_SYNC, 'Z-30', ['synced'], 'stale', citeD('Z-30'),
+      // CG-19: also surface the staleness on `quiz.session` so S-20's joined-count
+      // goes stale LIVE, not only on the next REST snapshot. The builder reads the
+      // now-`stale` 4d state (effects run after the state is set — world.apply).
+      emit('quiz.session'),
       emit('quiz.publication', { syncState: 'stale' }),
       emit('quiz.responses', { stale: true })),
 
     t(M_SYNC, 'Z-31', ['stale'], 'synced', citeD('Z-31'),
+      emit('quiz.session'),
       emit('quiz.responses', { stale: false }),
       emit('quiz.publication', { syncState: 'synced' })),
 

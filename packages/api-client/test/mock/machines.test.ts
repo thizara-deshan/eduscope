@@ -131,7 +131,9 @@ describe('machine execution (real MockWorld, not just static analysis)', () => {
   });
 
   it('a full recording lifecycle reaches completed and emits a schema-valid recording.artifact (machine-1b stub)', () => {
-    const w = freshWorld(recordingMachine, aiCountdownMachine, quizSessionMachine);
+    // R-05/R-11 re-broadcast quiz.session, whose builder reads the 4d quiz.sync
+    // machine for `syncState` (CG-19, v0.4) — so quizSyncMachine must be registered.
+    const w = freshWorld(recordingMachine, aiCountdownMachine, quizSessionMachine, quizSyncMachine);
     const seen: EventEnvelope[] = [];
     w.subscribeEvents((e) => seen.push(e));
     w.apply('R-01');

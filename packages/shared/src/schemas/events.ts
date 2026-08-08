@@ -165,13 +165,18 @@ export const zAiQuestionPayload = z.object({
   edited: z.boolean(),
 });
 
-/** §2.15 */
+/** §2.15 — `syncState` added by CG-19 (v0.4), mirroring `QuizSessionProjection.syncState`
+ * so the joined-count staleness (Machine 4d, Z-30) is knowable live, not only on a
+ * REST snapshot (INV-AP-2 / QZ-7). Non-nullable here: the events.md §2.15 field list
+ * enumerates exactly `synced`/`stale`/`failed` and the emitter (4d) always holds a
+ * concrete state — same as the sibling `zQuizPublicationPayload.syncState`. */
 export const zQuizSessionPayload = z.object({
   state: zQuizSessionProjectionState,
   quizSessionId: zUlid.nullable(),
   joinUrl: z.string().nullable(),
   joinCode: z.string().nullable(),
   joinedCount: z.number().int().nonnegative(),
+  syncState: zQuizSyncState,
 });
 
 /** §2.16 — exactly one publication may carry isShowing (INV-QPUB-1). */

@@ -7,9 +7,11 @@ import { recordingMachine } from '../../src/mock/machines/recording.js';
 // builders that recording.ts's R-05 re-broadcasts. world.ts's missing-builder
 // case throws (by design — a silent skip previously hid a real bug, see
 // task-7-report.md I1), so any world that applies R-05 needs these machines
-// registered too, not just recordingMachine.
+// registered too, not just recordingMachine. Since CG-19 (v0.4) the
+// quiz.session builder also reads the 4d `quiz.sync` machine for `syncState`,
+// so `quizSyncMachine` must be registered alongside `quizSessionMachine`.
 import { aiCountdownMachine } from '../../src/mock/machines/ai.js';
-import { quizSessionMachine } from '../../src/mock/machines/quiz.js';
+import { quizSessionMachine, quizSyncMachine } from '../../src/mock/machines/quiz.js';
 import { sourceMachine } from '../../src/mock/machines/health.js';
 
 function world() {
@@ -18,6 +20,7 @@ function world() {
   w.registerMachine(recordingMachine);
   w.registerMachine(aiCountdownMachine);
   w.registerMachine(quizSessionMachine);
+  w.registerMachine(quizSyncMachine);
   return { w, clock };
 }
 

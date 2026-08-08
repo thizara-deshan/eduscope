@@ -1,6 +1,6 @@
 # Eduscope WS Event Catalog — Contract v0
 
-> Contract **v0.3.0** — the realtime half of [openapi.yaml](openapi.yaml).
+> Contract **v0.4.0** — the realtime half of [openapi.yaml](openapi.yaml).
 > Successor of state-machines.md §10; that section now defers here (see its
 > catalog note). Payload schemas are the zod definitions in
 > [`packages/shared/src/schemas/events.ts`](../packages/shared/src/schemas/events.ts)

@@ -12,14 +12,13 @@ export function createQuizOperations({ world, seed }: RestContext) {
   return {
     getQuizSession: async (): Promise<QuizSessionProjection> => {
       const tr: Transition = { id: 'snapshot', machine: 'quiz.session', from: [], to: null, effects: [], cite: 'C-9' };
-      // quiz.ts's own payload builder (machine 4a) mirrors the WS event shape,
-      // which doesn't carry `lectureSessionId`/`syncState` (machine 4d's own
-      // state) — both are REST-projection-only fields, so this fills them in.
+      // quiz.ts's own payload builder (machine 4a) now mirrors the WS event shape
+      // field-for-field including `syncState` (CG-19, v0.4) — the one field this
+      // fills in is `lectureSessionId`, which is REST-projection-only.
       const payload = PAYLOAD_BUILDERS['quiz.session']!(world, tr);
       return validated(zQuizSessionProjection, {
         ...payload,
         lectureSessionId: (world.data['session.ulid'] as string | undefined) ?? null,
-        syncState: world.state('quiz.sync'),
       });
     },
 
