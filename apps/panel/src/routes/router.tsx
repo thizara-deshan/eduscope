@@ -6,6 +6,7 @@ import { ResetScreen } from '../screens/reset/reset-screen.js';
 import { DashboardScreen } from '../screens/dashboard/dashboard-screen.js';
 import { AdvancedShell } from '../screens/advanced/advanced-shell.js';
 import { AdvancedIndex } from '../screens/advanced/advanced-index.js';
+import { LocalCaptureScreen } from '../screens/advanced/local-capture-screen.js';
 import { PanelShell } from './panel-shell.js';
 import { RouteError } from './route-error.js';
 import { ScreenPlaceholder } from './screens.js';
@@ -60,6 +61,11 @@ const ADVANCED_SHARED_CHILDREN: readonly AdvancedChildSpec[] = [
   { path: 'streaming', screen: 'S-27', title: 'Streaming Configuration' },
 ];
 
+/** Screens with a real implementation among the Advanced children. */
+const ADVANCED_SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
+  'S-26': () => <LocalCaptureScreen />,
+};
+
 /** Admin-only Advanced children: a role mismatch lands back in the lecturer's own shell (U-6), not `/`. */
 const ADVANCED_ADMIN_CHILDREN: readonly AdvancedChildSpec[] = [
   { path: 'network', screen: 'S-28', title: 'Network' },
@@ -74,10 +80,10 @@ const ADVANCED_ADMIN_CHILDREN: readonly AdvancedChildSpec[] = [
 
 const advancedChildRoutes: RouteObject[] = [
   { index: true, element: <AdvancedIndex /> },
-  ...ADVANCED_SHARED_CHILDREN.map(({ path, screen, title }) => ({
-    path,
-    element: <ScreenPlaceholder id={screen} title={title} />,
-  })),
+  ...ADVANCED_SHARED_CHILDREN.map(({ path, screen, title }) => {
+    const Real = ADVANCED_SCREEN_ELEMENTS[screen];
+    return { path, element: Real ? <Real /> : <ScreenPlaceholder id={screen} title={title} /> };
+  }),
   ...ADVANCED_ADMIN_CHILDREN.map(({ path, screen, title }) => ({
     path,
     element: (
