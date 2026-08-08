@@ -44,18 +44,19 @@ export function CaptureOutputsRow({ dense }: { readonly dense: boolean }): JSX.E
         <div className="us-captureoutputs__skeleton" data-testid="capture-outputs-skeleton" />
       ) : (
         <div className="us-captureoutputs__rows" data-density={dense ? 'dense' : 'comfortable'}>
-          {channelsQuery.data.filter((configured) => (
-            CAPTURE_ASSURANCE_CHANNELS.has(configured.channelId)
-          )).map((configured) => {
-            const channel = liveChannels[configured.channelId] ?? configured;
+          {channelsQuery.data.filter((snapshot) => (
+            CAPTURE_ASSURANCE_CHANNELS.has(snapshot.config.channelId)
+          )).map((snapshot) => {
+            const channelId = snapshot.config.channelId;
+            const channel = liveChannels[channelId] ?? snapshot.status;
             const preset = presetsQuery.data.find((row) => row.id === channel.presetId);
             return (
-              <div className="us-captureoutput" key={channel.channelId}>
+              <div className="us-captureoutput" key={channelId}>
                 <span className="us-captureoutput__name">
-                  {CHANNEL_LABELS[channel.channelId]}{preset ? ` — ${preset.displayName}` : ''}
+                  {CHANNEL_LABELS[channelId]}{preset ? ` — ${preset.displayName}` : ''}
                 </span>
                 <span className={`us-captureoutput__state us-captureoutput__state--${channel.state}`}>
-                  {channelStateWord(channel.channelId, channel.state)}
+                  {channelStateWord(channelId, channel.state)}
                 </span>
               </div>
             );

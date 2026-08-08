@@ -19,10 +19,19 @@ const user: User = {
 const source = (roleId: string) => ({
   roleId, state: 'online', detail: null, inputId: null, since: '2026-08-05T10:00:00.000Z',
 });
+function snapshot(channelId: string, state: string, presetId: string, ratioA: number | null, ratioB: number | null) {
+  return {
+    config: {
+      channelId, alwaysOn: channelId === 'local', enabledByDefault: true, presetId,
+      ratioA, ratioB, streamTargetIds: null, updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    status: { channelId, state, presetId, ratioA, ratioB, reason: null },
+  };
+}
 const channels = [
-  { channelId: 'local', state: 'on', presetId: 'pc-only', ratioA: null, ratioB: null, reason: null },
-  { channelId: 'meeting', state: 'off', presetId: 'cams-fifty-fifty', ratioA: 50, ratioB: 50, reason: null },
-  { channelId: 'streaming', state: 'off', presetId: 'fifty-fifty', ratioA: 50, ratioB: 50, reason: null },
+  snapshot('local', 'on', 'pc-only', null, null),
+  snapshot('meeting', 'off', 'cams-fifty-fifty', 50, 50),
+  snapshot('streaming', 'off', 'fifty-fifty', 50, 50),
 ];
 const presets = [
   { id: 'pc-only', displayName: 'Presentation only' },
@@ -59,7 +68,7 @@ function renderCard({ cold = false }: { cold?: boolean } = {}) {
         'lecturer-cam': source('lecturer-cam'),
         'students-cam': source('students-cam'),
       } as never,
-      channels: { local: channels[0] } as never,
+      channels: { local: channels[0]!.status } as never,
       storage: storage as never,
       recording: { state: 'recording' } as never,
     });

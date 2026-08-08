@@ -92,7 +92,7 @@ describe('createMockClient — review fixes (C1, I2–I6)', () => {
     );
     expect(local).toMatchObject({
       event: 'channel.state',
-      payload: { channelId: 'local', state: 'on', presetId: 'pc-only' },
+      payload: { channelId: 'local', state: 'on', presetId: 'fifty-fifty' },
     });
   });
 

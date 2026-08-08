@@ -1,21 +1,31 @@
+import { z } from 'zod';
 import {
   zChannelConfig, zChannelStatus, zCommandAccepted, zLayoutPreset,
   type ChannelConfig, type ChannelConfigUpdate, type ChannelStatus,
   type CommandAccepted, type LayoutPreset,
 } from '@eduscope/shared';
+import type { ChannelSnapshot } from '../../client.js';
 import { ProblemError } from '../../errors.js';
 import { channelTransitionId } from '../machines/index.js';
 import type { Transition } from '../machines/types.js';
 import { COMMAND_PLANS, RESOLVE_BY_SEC } from '../commands.js';
 import { validated, nowIsoZ } from '../seed/index.js';
 import { PAYLOAD_BUILDERS, nextUlid } from '../world.js';
+import { requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
+
+const zChannelSnapshot = z.object({
+  config: zChannelConfig,
+  status: zChannelStatus,
+});
 
 const fakeChannelTransition = (machine: 'channel:meeting' | 'channel:streaming'): Transition => ({
   id: 'snapshot', machine, from: [], to: null, effects: [], cite: 'C-9',
 });
 
-export function createChannelsOperations({ world, engine, seed }: RestContext) {
+export function createChannelsOperations(ctx: RestContext) {
+  const { world, engine, seed } = ctx;
+
   function findChannel(channelId: string): ChannelConfig {
     const row = seed.channels.find((c) => c.channelId === channelId);
     if (!row) {
@@ -24,27 +34,27 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
     return row;
   }
 
-  return {
-    listChannels: async (): Promise<ChannelStatus[]> => {
-      const rows = seed.channels.map((c) => {
-        if (c.channelId === 'local') {
-          return validated(zChannelStatus, {
-            channelId: 'local',
-            state: 'on',
-            presetId: c.presetId,
-            ratioA: c.ratioA,
-            ratioB: c.ratioB,
-            reason: null,
-          });
-        }
-        const machine = c.channelId === 'streaming' ? 'channel:streaming' : 'channel:meeting';
-        return validated(
-          zChannelStatus,
-          PAYLOAD_BUILDERS['channel.state']!(world, fakeChannelTransition(machine)),
-        );
+  function statusFor(config: ChannelConfig): ChannelStatus {
+    if (config.channelId === 'local') {
+      return validated(zChannelStatus, {
+        channelId: 'local',
+        state: 'on',
+        presetId: config.presetId,
+        ratioA: config.ratioA,
+        ratioB: config.ratioB,
+        reason: null,
       });
-      return rows;
-    },
+    }
+    const machine = config.channelId === 'streaming' ? 'channel:streaming' : 'channel:meeting';
+    return validated(zChannelStatus, PAYLOAD_BUILDERS['channel.state']!(world, fakeChannelTransition(machine)));
+  }
+
+  return {
+    listChannels: async (): Promise<ChannelSnapshot[]> =>
+      seed.channels.map((config) => validated(zChannelSnapshot, {
+        config: validated(zChannelConfig, config),
+        status: statusFor(config),
+      })),
 
     updateChannelConfig: async (channelId: string, body: ChannelConfigUpdate): Promise<ChannelConfig> => {
       const refusal = engine.onCommand('updateChannelConfig');
@@ -60,7 +70,19 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
             title: `Preset ${String(body.presetId)} is not allowed on channel ${channelId}`,
           });
         }
+        for (const roleId of preset.requiredRoles) {
+          const binding = seed.sourceBindings.find((b) => b.roleId === roleId);
+          if (!binding || !binding.enabled || !binding.physicalInputId) {
+            throw new ProblemError({
+              status: 422,
+              code: 'config.invalid',
+              title: `This layout could not be applied — ${roleId} is not connected.`,
+            });
+          }
+        }
       }
+
+      if (body.streamTargetIds !== undefined) requireAdmin(ctx);
 
       Object.assign(row, {
         ...(body.enabledByDefault !== undefined ? { enabledByDefault: body.enabledByDefault } : {}),
@@ -70,6 +92,11 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
         ...(body.streamTargetIds !== undefined ? { streamTargetIds: body.streamTargetIds } : {}),
         updatedAt: nowIsoZ(world.clock),
       });
+
+      if (body.presetId !== undefined) world.data[`channel.${channelId}.presetId`] = body.presetId;
+      if (body.ratioA !== undefined) world.data[`channel.${channelId}.ratioA`] = body.ratioA;
+      if (body.ratioB !== undefined) world.data[`channel.${channelId}.ratioB`] = body.ratioB;
+
       return validated(zChannelConfig, row);
     },
 
@@ -119,7 +146,11 @@ export function createChannelsOperations({ world, engine, seed }: RestContext) {
         });
       }
       findChannel(channelId);
-      const entry = channelTransitionId(channelId === 'streaming' ? 'streaming' : 'meeting', 'CH-07');
+      const machine = channelId === 'streaming' ? 'channel:streaming' : 'channel:meeting';
+      // CH-10 acknowledges a failed consumer straight to off; a live consumer
+      // still goes through the CH-07 stopping handshake (state-machines §2.2).
+      const bareId = world.state(machine) === 'failed' ? 'CH-10' : 'CH-07';
+      const entry = channelTransitionId(channelId === 'streaming' ? 'streaming' : 'meeting', bareId);
       const afterMs = COMMAND_PLANS.disableChannel?.[0]?.afterMs ?? 150;
       world.schedule(entry, afterMs);
       return validated(zCommandAccepted, {

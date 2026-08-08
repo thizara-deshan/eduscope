@@ -7,10 +7,19 @@ import { ClientContext } from '../../client/client-provider.js';
 import { useWsStore } from '../../store/ws-store.js';
 import { CaptureOutputsRow } from './capture-outputs-row.js';
 
+function snapshot(channelId: string, state: string, presetId: string, ratioA: number | null, ratioB: number | null) {
+  return {
+    config: {
+      channelId, alwaysOn: channelId === 'local', enabledByDefault: true, presetId,
+      ratioA, ratioB, streamTargetIds: null, updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    status: { channelId, state, presetId, ratioA, ratioB, reason: null },
+  };
+}
 const channels = [
-  { channelId: 'local', state: 'on', presetId: 'pc-only', ratioA: null, ratioB: null, reason: null },
-  { channelId: 'meeting', state: 'off', presetId: 'cams-fifty-fifty', ratioA: 50, ratioB: 50, reason: null },
-  { channelId: 'streaming', state: 'off', presetId: 'fifty-fifty', ratioA: 50, ratioB: 50, reason: null },
+  snapshot('local', 'on', 'pc-only', null, null),
+  snapshot('meeting', 'off', 'cams-fifty-fifty', 50, 50),
+  snapshot('streaming', 'off', 'fifty-fifty', 50, 50),
 ];
 const presets = [
   { id: 'pc-only', displayName: 'Presentation only' },

@@ -18,6 +18,12 @@ import type {
 } from '@eduscope/shared';
 import type { ConnectionStatus, EventStream } from './stream.js';
 
+/** `GET /channels` row shape (openapi.yaml: exactly three, one per ChannelId). */
+export interface ChannelSnapshot {
+  readonly config: ChannelConfig;
+  readonly status: ChannelStatus;
+}
+
 /** events.md §3 — its own socket, and the one place the client sends WS messages. */
 export interface PreviewChannel {
   send(message: PreviewClientMessage): void;
@@ -52,7 +58,7 @@ export interface EduscopeClient {
   takeoverRecording(): Promise<CommandAccepted>;
 
   // ── channels (machine 1c) ───────────────────────────────────────────────
-  listChannels(): Promise<ChannelStatus[]>;
+  listChannels(): Promise<ChannelSnapshot[]>;
   updateChannelConfig(channelId: string, body: ChannelConfigUpdate): Promise<ChannelConfig>;
   enableChannel(channelId: string): Promise<CommandAccepted>;
   disableChannel(channelId: string): Promise<CommandAccepted>;

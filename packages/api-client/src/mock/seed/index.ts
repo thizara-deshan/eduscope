@@ -67,10 +67,11 @@ export interface Seed extends DeviceSeed, SourcesSeed, RecordingsSeed, AiSeed {
  */
 export function createSeed(overrides: Partial<WorldSeed> = {}): Seed {
   const users = createUsersSeed();
+  const deviceSeed = createDeviceSeed(overrides);
   const seed: Seed = {
     users,
-    ...createDeviceSeed(overrides),
-    ...createSourcesSeed(overrides),
+    ...deviceSeed,
+    ...createSourcesSeed(overrides, deviceSeed.streamTargets),
     ...createRecordingsSeed(users),
     ...createAiSeed(),
   };
