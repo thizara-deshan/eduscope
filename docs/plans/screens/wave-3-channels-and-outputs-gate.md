@@ -52,3 +52,30 @@ Recorded while executing `docs/plans/screens/wave-3-channels-and-outputs.md`.
 - The Task 3 design originally computed "invalid preset" reasons from `GET /sources/bindings` (`listSourceBindings`), which carries `x-required-role: admin` in the contract. Since S-26/S-08 are lecturer-reachable screens, every lecturer catalog read silently 403'd and the screen never left its loading skeleton in the real (non-stubbed) app — invisible to the Testing Library suite because every unit test stubbed `listSourceBindings` directly, bypassing the role gate the mock enforces. Caught only by the Playwright run against the built app. Fixed by switching `useChannelCatalog`'s unbound-role check to `GET /sources/status` (`getSourcesStatus` + the live `sources.status` WS row), which is reachable by both roles and already carries the `unbound` health state INV-SB-3 needs — this also more directly matches "an offline-but-bound role is not unbound," since `unbound` and `offline` are different `SourceHealthState` values on the same read. `apps/panel/src/channels/channel-queries.ts` and every test fixture across S-08/S-26/S-27 were updated to match (`CHANNEL_QUERY_KEYS.sourceStatus` replaces the removed `sourceBindings` key).
 
 ---
+
+## GATE S-27 — Streaming Configuration
+
+**Automated evidence:**
+- Testing Library: `pnpm --filter @eduscope/panel test -- src/channels src/screens/advanced/use-streaming-channel src/screens/advanced/use-stream-targets src/screens/advanced/stream-target-form src/screens/advanced/stream-target-list src/screens/advanced/streaming-screen` — all passed (loading/U-1, no targets, populated, off/preflight/starting/on/failed/restarting/stopping, preflight failed, idle/live semantics, write-only key, saving/U-4, rejected/U-5, U-2).
+- Playwright: `apps/panel/e2e/s27-streaming.spec.ts` — 7/7 passed (admin primary journey, lecturer reachability + no target calls, channel-failures preflight failure + restart, save failure sequence, empty state, secret regression, geometry).
+- Boundary lint + contract honesty: `pnpm lint`, `pnpm test tools/eslint-rules/gate-boundary.test.ts`, `pnpm --filter @eduscope/api-client test -- contract-honesty wave3-channel-contract wave3-scenarios` — all green.
+
+**Scenario-overlay demo walk (S-27 rows):**
+
+| Row | Script/action | Observed |
+|---|---|---|
+| `loading` / U-1 | `happy`, cold first entry to `/advanced/streaming` | Skeleton renders before the catalog + target queries resolve |
+| `no targets configured` | `happy` + World: No streaming destinations configured | `stream-targets-empty` explanatory state renders for admin |
+| `populated` | `happy` as admin | Seeded "Main YouTube Channel" target shown with Configured chip, Edit/Delete |
+| channel `off`/`preflight`/`starting`/`on`/`failed`/`restarting`/`stopping` | `happy` and `channel-failures`, Start → toggle | State word text matches each transition; switch never reads checked for `failed`/transient states |
+| `preflight failed` | `channel-failures` → Start → toggle | Named reason "The streaming destination could not be reached. Your lecture is still recording." renders; recording frame stays visible |
+| `idle vs live toggle semantics` | `happy`, compare idle vs live | Idle: label "Stream on next recording", writes only `updateChannelConfig`. Live: label "Start streaming now"/"Stop streaming now", writes only enable/disableChannel |
+| `stream key write-only` | `happy` as admin, edit seeded target | Configured chip shown; key field always blank; DOM never contains the seeded or replacement key |
+| `saving` / U-4 | `channel-failures`, first Save | 1.2 s "Saving…" then a generic (unnamed) transport failure |
+| `save rejected` / U-5 | `channel-failures`, second Save | Named 422 "The streaming destination rejected these settings." |
+| U-2 | `ws-flap`, wait past stale threshold | Switch disabled |
+
+**Implementation gap found during execution (recorded only — no contract edit made):**
+- `useStreamingChannel`'s (and, identically, `useMeetingChannel`'s) live toggle called `requestEnabled(status !== 'on')` — from a `failed` consumer this issues `enableChannel` again, but CH-01/CH-04 are only legal from `off` (state-machines §2.2), so the command silently hits an illegal-transition guard in the mock and the switch never leaves its failure reason. A lecturer/admin recovering from a failed streaming or meeting consumer would find the toggle permanently inert. Every unit test stubbed `enableChannel`/`disableChannel` directly, so none exercised the mock's real legality guard — caught only by the Playwright recovery journey. Fixed both hooks to call `requestEnabled(status === 'off')`: from `off` this enables; from `on` **or** `failed` it disables — `failed` must be acknowledged with CH-10 before a fresh enable can succeed, matching the demo map's "disable, then re-enable" recovery sequence.
+
+---

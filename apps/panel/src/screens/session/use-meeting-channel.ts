@@ -30,11 +30,14 @@ export function useMeetingChannel(): UseMeetingChannel {
   const runtime = useChannelRuntimeCommand('meeting');
   const configMutation = useChannelConfig('meeting');
   const [pendingPresetId, setPendingPresetId] = useState<LayoutPresetId | null>(null);
-  const isOn = catalog.status?.state === 'on';
 
   const toggle = useCallback(() => {
-    runtime.requestEnabled(!isOn);
-  }, [isOn, runtime]);
+    // CH-04 is only legal from `off` — a `failed` consumer must be
+    // acknowledged with disable (CH-10), not re-enabled directly, or the
+    // command never reaches a legal transition and the switch sticks on
+    // its failure reason forever.
+    runtime.requestEnabled(catalog.status?.state === 'off');
+  }, [catalog.status?.state, runtime]);
 
   const selectPreset = useCallback((presetId: LayoutPresetId) => {
     setPendingPresetId(presetId);

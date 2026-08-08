@@ -50,7 +50,11 @@ export function useStreamingChannel(): UseStreamingChannel {
 
   const toggle = useCallback(() => {
     if (live) {
-      runtime.requestEnabled(catalog.status?.state !== 'on');
+      // CH-01/CH-04 are only legal from `off` — a `failed` consumer must be
+      // acknowledged with disable (CH-10), not re-enabled directly, or the
+      // command never reaches a legal transition and the switch sticks on
+      // its failure reason forever.
+      runtime.requestEnabled(catalog.status?.state === 'off');
     } else {
       idleToggleMutation.save({ enabledByDefault: !catalog.config?.enabledByDefault });
     }
