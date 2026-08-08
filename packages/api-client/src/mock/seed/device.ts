@@ -179,7 +179,7 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
     audioBitratesKbps: [96, 128, 192],
   } satisfies EncoderCapabilities);
 
-  const streamTargets = [
+  const streamTargets = (overrides.streamTargetsConfigured ?? true) ? [
     {
       id: seedId('stream-target'),
       platform: 'youtube' as const,
@@ -191,7 +191,7 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
       lastPreflightAt: SEED_EPOCH,
       lastPreflightResult: 'ok' as const,
     },
-  ].map((row) => validated(zStreamTarget, row));
+  ].map((row) => validated(zStreamTarget, row)) : [];
 
   const firmware = validated(zFirmwareUpdate, {
     id: seedId('firmware'),

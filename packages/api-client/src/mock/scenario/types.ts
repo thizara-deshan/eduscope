@@ -11,7 +11,11 @@ export type ScenarioName =
   | 'ws-flap'
   | 'quiz-network-loss'
   /** Added with contract v0.2 for Wave 1's auth screens (CG-11, CG-12). */
-  | 'auth-failures';
+  | 'auth-failures'
+  /** Added for Wave 2's S-12 (W2-D-3, CG-16). */
+  | 'poweroff-not-halted'
+  /** Added for Wave 3's S-08/S-26/S-27 (W3-D-3). */
+  | 'channel-failures';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }
@@ -38,12 +42,31 @@ export interface ForcedTransition {
   readonly delayMs?: number;
 }
 
-/** Overrides applied to the seed fixtures before the world starts. */
+/**
+ * World knobs applied before the world starts. Two of these are not fixture
+ * shapes but LIVE world concepts — `recordingOwnedByOtherUser` (whose session
+ * is currently open) and `audioApplyFails` (whether the mixer accepts a
+ * change) — and they live here because this is the one place a caller can set
+ * a world's starting conditions without inventing a script whose narrative is
+ * a boolean (W2-D-1, W2-D-4).
+ */
 export interface WorldSeed {
   readonly storagePressure: 'ok' | 'warning' | 'critical';
   readonly aiEnabled: boolean;
   readonly quizAvailable: boolean;
   readonly recordingOwnedByOtherUser: boolean;
+  /** S-11 §10's "scenario flag": updateAudioControl resolves `appliedState: failed` (INV-AC-1, B-55). */
+  readonly audioApplyFails: boolean;
+  /** W3-D-4 — starting-world fact: the Students Camera source role has no enabled binding. */
+  readonly studentsCameraBound: boolean;
+  /** W3-D-4 — starting-world fact: no stream targets are seeded/enabled for the streaming channel. */
+  readonly streamTargetsConfigured: boolean;
+}
+
+/** A transition the script drives on its own schedule, with no command behind it. */
+export interface TimelineEntry {
+  readonly transition: TransitionId;
+  readonly afterMs: number;
 }
 
 export interface ScenarioScript {
@@ -51,6 +74,14 @@ export interface ScenarioScript {
   readonly description: string;
   forced: ForcedTransition[];
   readonly seed?: Partial<WorldSeed>;
+  /**
+   * Transitions this script DRIVES rather than intercepts (W2-D-2). `forced`
+   * can only replace a transition something else already requested, so machine
+   * 5a/5b faults — which no command triggers — are otherwise unreachable.
+   * Scheduled through `world.schedule` at build time, so they inherit the
+   * world's clock and are discarded with it on a scenario switch.
+   */
+  readonly timeline?: readonly TimelineEntry[];
   /** ws-flap only: drop and restore the socket on a cycle (events.md §1). */
   readonly wsFlap?: { readonly afterMs: number; readonly downMs: number; readonly repeat: number };
 }

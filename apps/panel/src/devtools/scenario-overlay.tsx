@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { listScenarios, type ScenarioName } from '@eduscope/api-client';
+import { listScenarios, type ScenarioName, type WorldSeed } from '@eduscope/api-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMockClient } from '../client/client-provider.js';
-import { useRecordingState } from '../store/selectors.js';
+import { useChannelStatus, useRecordingState } from '../store/selectors.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useLongPress } from './use-long-press.js';
 import './scenario-overlay.css';
@@ -37,9 +38,13 @@ declare global {
  */
 export function ScenarioOverlay() {
   const client = useMockClient();
+  const queryClient = useQueryClient();
   const recordingState = useRecordingState();
+  const meetingChannel = useChannelStatus('meeting');
+  const streamingChannel = useChannelStatus('streaming');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ScenarioName>(client?.scenario ?? 'happy');
+  const [seed, setSeed] = useState<Partial<WorldSeed>>({});
   const longPress = useLongPress(LONG_PRESS_MS, () => setOpen(true));
 
   // Gate 1e counts COMMITS of this component to prove telemetry never
@@ -52,7 +57,7 @@ export function ScenarioOverlay() {
 
   if (!client) return null;
 
-  const choose = (name: ScenarioName) => {
+  const rebuild = (name: ScenarioName, nextSeed: Partial<WorldSeed>) => {
     // reset() BEFORE switchScenario(): the new world's bootstrap (seeded
     // storage pressure, etc.) emits its events SYNCHRONOUSLY inside
     // switchScenario() itself, and the panel's events$ subscription ingests
@@ -60,9 +65,16 @@ export function ScenarioOverlay() {
     // alerts the new scenario had just raised (found live — disk-full's
     // storage.critical alert never reached the banner host).
     useWsStore.getState().reset();
-    client.switchScenario(name);
+    client.switchScenario(name, nextSeed);
+    // REST-backed rows (provisioning, presets, roles, storage) belong to the
+    // disposable world too. Without invalidation a World-strip change updated
+    // WS truth but left screens rendering the previous world's query cache.
+    void queryClient.invalidateQueries();
     setActive(name);
+    setSeed(nextSeed);
   };
+
+  const choose = (name: ScenarioName) => rebuild(name, seed);
 
   // Dev tool only — refusals are caught and ignored; S-04 renders them for
   // real once the wave that owns it lands.
@@ -105,6 +117,93 @@ export function ScenarioOverlay() {
               </li>
             ))}
           </ul>
+          <fieldset className="us-devoverlay__world">
+            <legend>World</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.aiEnabled}
+                onChange={(event) => rebuild(active, { ...seed, aiEnabled: !event.target.checked })}
+                aria-label="AI disabled (INT-10 go-live default)"
+              />
+              AI disabled (INT-10 go-live default)
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={client.worldSeed.recordingOwnedByOtherUser}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  recordingOwnedByOtherUser: event.target.checked,
+                })}
+                aria-label="Recorder owned by another user"
+              />
+              Recorder owned by another user
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={client.worldSeed.audioApplyFails}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  audioApplyFails: event.target.checked,
+                })}
+                aria-label="Mic changes fail to apply"
+              />
+              Mic changes fail to apply
+            </label>
+            {(['ok', 'warning', 'critical'] as const).map((pressure) => {
+              const label = `Storage: ${pressure}`;
+              return (
+                <label key={pressure}>
+                  <input
+                    type="radio"
+                    name="world-storage-pressure"
+                    checked={client.worldSeed.storagePressure === pressure}
+                    onChange={() => rebuild(active, { ...seed, storagePressure: pressure })}
+                    aria-label={label}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.quizAvailable}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  quizAvailable: !event.target.checked,
+                })}
+                aria-label="Quiz server unavailable"
+              />
+              Quiz server unavailable
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.studentsCameraBound}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  studentsCameraBound: !event.target.checked,
+                })}
+                aria-label="Students Camera unbound"
+              />
+              Students Camera unbound
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.streamTargetsConfigured}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  streamTargetsConfigured: !event.target.checked,
+                })}
+                aria-label="No streaming destinations configured"
+              />
+              No streaming destinations configured
+            </label>
+          </fieldset>
           <div className="us-devoverlay__transport">
             <button
               type="button"
@@ -136,6 +235,26 @@ export function ScenarioOverlay() {
             >
               Meeting off
             </button>
+            {active === 'channel-failures' && (
+              <>
+                <button
+                  type="button"
+                  data-testid="dev-meeting-consumer-exited"
+                  disabled={meetingChannel?.state !== 'on'}
+                  onClick={() => client.world.apply('CH-09')}
+                >
+                  Meeting consumer exited
+                </button>
+                <button
+                  type="button"
+                  data-testid="dev-streaming-consumer-exited"
+                  disabled={streamingChannel?.state !== 'on'}
+                  onClick={() => client.world.apply('CH-09S')}
+                >
+                  Streaming consumer exited
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

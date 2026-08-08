@@ -1,5 +1,7 @@
 import type { Problem, SessionRevokedReason } from '@eduscope/shared';
 
+export const TAKEOVER_REVOKED_SENTENCE = 'An administrator took over this recording.';
+
 /**
  * What a navigation TO /login may carry. `from` is already produced by
  * `require-role.tsx:22`; `reason` is produced by a sign-out and by

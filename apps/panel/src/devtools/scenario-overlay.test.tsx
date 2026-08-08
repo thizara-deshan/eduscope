@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClientProvider } from '../client/client-provider.js';
 // scenario-overlay.css reads --tap-min from tokens.css, the app's root design-
@@ -15,15 +16,19 @@ import { ScenarioOverlay } from './scenario-overlay.js';
  * microtask turn — flush the pending module load before asserting. Fake timers
  * do not gate microtasks, so this settles without advancing the clock.
  */
-async function renderOverlay(): Promise<void> {
+async function renderOverlay(): Promise<QueryClient> {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <ClientProvider>
-      <ScenarioOverlay />
-    </ClientProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ClientProvider>
+        <ScenarioOverlay />
+      </ClientProvider>
+    </QueryClientProvider>,
   );
   await act(async () => {
     await vi.dynamicImportSettled();
   });
+  return queryClient;
 }
 
 // @testing-library/user-event's async pointer/click sequencing hangs
@@ -56,7 +61,7 @@ describe('scenario dev overlay', () => {
     expect(screen.getByRole('dialog', { name: /scenario/i })).toBeTruthy();
   });
 
-  it('lists all seven catalog scripts with their descriptions', async () => {
+  it('lists all ten catalog scripts with their descriptions', async () => {
     await renderOverlay();
     fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
     act(() => {
@@ -64,10 +69,27 @@ describe('scenario dev overlay', () => {
     });
     for (const name of [
       'happy', 'start-fails', 'pipeline-crash-midway', 'llm-timeout',
-      'disk-full', 'ws-flap', 'quiz-network-loss',
+      'disk-full', 'ws-flap', 'quiz-network-loss', 'auth-failures',
+      'poweroff-not-halted', 'channel-failures',
     ]) {
       expect(screen.getByRole('radio', { name: new RegExp(name) })).toBeTruthy();
     }
+  });
+
+  it('re-seeds the world without changing the script', async () => {
+    const queryClient = await renderOverlay();
+    queryClient.setQueryData(['provisioning'], { featureFlags: { aiQuizEnabled: true } });
+    fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
+    act(() => {
+      vi.advanceTimersByTime(2_100);
+    });
+
+    const control = screen.getByLabelText('AI disabled (INT-10 go-live default)');
+    fireEvent.click(control);
+
+    expect(control).toBeChecked();
+    expect(screen.getByTestId('active-scenario')).toHaveTextContent('happy');
+    expect(queryClient.getQueryState(['provisioning'])?.isInvalidated).toBe(true);
   });
 
   it('switches the live scenario when a script is chosen', async () => {
@@ -91,7 +113,7 @@ describe('scenario dev overlay', () => {
     act(() => {
       vi.advanceTimersByTime(2_100);
     });
-    for (const option of screen.getAllByRole('radio')) {
+    for (const option of document.querySelectorAll<HTMLInputElement>('input[name="scenario"]')) {
       expect(getComputedStyle(option.closest('label')!).minHeight).toBe('56px');
     }
   });

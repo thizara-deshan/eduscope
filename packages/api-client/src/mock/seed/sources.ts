@@ -2,8 +2,9 @@ import {
   zAudioControl, zChannelConfig, zLayoutPreset, zPhysicalInput, zSourceBinding,
   zSourceRole, zSourceStatus,
   type AudioControl, type ChannelConfig, type LayoutPreset, type PhysicalInput,
-  type SourceBinding, type SourceRole, type SourceStatus,
+  type SourceBinding, type SourceRole, type SourceStatus, type StreamTarget,
 } from '@eduscope/shared';
+import type { WorldSeed } from '../scenario/types.js';
 import { SEED_EPOCH, seedId, validated } from './index.js';
 
 export interface SourcesSeed {
@@ -16,7 +17,17 @@ export interface SourcesSeed {
   readonly layoutPresets: LayoutPreset[];
 }
 
-export function createSourcesSeed(): SourcesSeed {
+/**
+ * `streamTargets` is device.ts's fixture — threaded in rather than
+ * regenerated so streaming's `streamTargetIds` and `/settings/stream-targets`
+ * always agree on one id list (W3-D plan, "Fix seed truth once").
+ */
+export function createSourcesSeed(
+  overrides: Partial<WorldSeed> = {},
+  streamTargets: readonly StreamTarget[] = [],
+): SourcesSeed {
+  const applyFails = overrides.audioApplyFails ?? false;
+  const studentsCameraBound = overrides.studentsCameraBound ?? true;
   const sourceRoles = (
     [
       { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
@@ -35,7 +46,7 @@ export function createSourcesSeed(): SourcesSeed {
     [
       { roleId: 'presentation', state: 'online', detail: null, inputId: null },
       { roleId: 'lecturer-cam', state: 'online', detail: null, inputId: null },
-      { roleId: 'students-cam', state: 'online', detail: null, inputId: null },
+      { roleId: 'students-cam', state: studentsCameraBound ? 'online' : 'unbound', detail: null, inputId: null },
       { roleId: 'mic-lecturer', state: 'online', detail: null, inputId: null },
       { roleId: 'mic-room', state: 'unbound', detail: null, inputId: null },
     ] as const
@@ -62,14 +73,15 @@ export function createSourcesSeed(): SourcesSeed {
 
   const boundRoleIds = ['presentation', 'lecturer-cam', 'students-cam', 'mic-lecturer'] as const;
   const sourceBindings = [
-    ...boundRoleIds.map((roleId, i) =>
-      validated(zSourceBinding, {
+    ...boundRoleIds.map((roleId, i) => {
+      const unbound = roleId === 'students-cam' && !studentsCameraBound;
+      return validated(zSourceBinding, {
         roleId,
-        physicalInputId: physicalInputs[i]!.id,
-        enabled: true,
+        physicalInputId: unbound ? null : physicalInputs[i]!.id,
+        enabled: !unbound,
         updatedAt: SEED_EPOCH,
-      }),
-    ),
+      });
+    }),
     validated(zSourceBinding, {
       roleId: 'mic-room',
       physicalInputId: null,
@@ -79,26 +91,30 @@ export function createSourcesSeed(): SourcesSeed {
   ];
 
   // mic-lecturer only in V1 (LP-9) — appliedState is the truth the UI shows.
+  // `audioApplyFails` seeds the world already in the failed state so S-11 §5.1
+  // state 4 renders on FIRST paint, not only after a round trip (W2-D-4).
   const audioControls = [
     validated(zAudioControl, {
       roleId: 'mic-lecturer',
       gain: 72,
       muted: false,
-      appliedState: 'applied',
+      appliedState: applyFails ? 'failed' : 'applied',
       lastAppliedAt: SEED_EPOCH,
-      lastError: null,
+      lastError: applyFails ? 'The mixer did not accept the change.' : null,
     }),
   ];
 
-  // local (machine 1a's own consumer) is always on; meeting defaults to
-  // cams-fifty-fifty per the content rule; streaming starts off.
+  // local (machine 1a's own consumer) is always on and defaults to
+  // fifty-fifty (LP-7); meeting defaults to cams-fifty-fifty per the content
+  // rule; streaming starts off, pre-wired to every enabled seeded target.
+  const enabledStreamTargetIds = streamTargets.filter((t) => t.enabled).map((t) => t.id);
   const channels = (
     [
-      { channelId: 'local', alwaysOn: true, enabledByDefault: true, presetId: 'pc-only', ratioA: null, ratioB: null },
-      { channelId: 'meeting', alwaysOn: false, enabledByDefault: false, presetId: 'cams-fifty-fifty', ratioA: 50, ratioB: 50 },
-      { channelId: 'streaming', alwaysOn: false, enabledByDefault: false, presetId: 'fifty-fifty', ratioA: 50, ratioB: 50 },
+      { channelId: 'local', alwaysOn: true, enabledByDefault: true, presetId: 'fifty-fifty', ratioA: 50, ratioB: 50, streamTargetIds: null },
+      { channelId: 'meeting', alwaysOn: false, enabledByDefault: false, presetId: 'cams-fifty-fifty', ratioA: 50, ratioB: 50, streamTargetIds: null },
+      { channelId: 'streaming', alwaysOn: false, enabledByDefault: false, presetId: 'fifty-fifty', ratioA: 50, ratioB: 50, streamTargetIds: enabledStreamTargetIds },
     ] as const
-  ).map((row) => validated(zChannelConfig, { ...row, streamTargetIds: null, updatedAt: SEED_EPOCH }));
+  ).map((row) => validated(zChannelConfig, { ...row, updatedAt: SEED_EPOCH }));
 
   // Every preset's `allowedChannels` is a real subset, never the full
   // [local, meeting, streaming] list for every row (INV-LP-1).
@@ -107,7 +123,7 @@ export function createSourcesSeed(): SourcesSeed {
       id: 'pc-only',
       displayName: 'Presentation only',
       description: 'Full-frame presentation capture, no cameras.',
-      allowedChannels: ['local', 'meeting', 'streaming'],
+      allowedChannels: ['streaming'],
       kind: 'single',
       canvas: { width: 1920, height: 1080 },
       tiles: [{ roleId: 'presentation', x: 0, y: 0, w: 1920, h: 1080, z: 0 }],
@@ -133,7 +149,7 @@ export function createSourcesSeed(): SourcesSeed {
       id: 'cam-2',
       displayName: 'Students camera only',
       description: 'Full-frame students camera, no slides.',
-      allowedChannels: ['local', 'meeting'],
+      allowedChannels: ['local', 'meeting', 'streaming'],
       kind: 'single',
       canvas: { width: 1920, height: 1080 },
       tiles: [{ roleId: 'students-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 }],
@@ -146,7 +162,7 @@ export function createSourcesSeed(): SourcesSeed {
       id: 'fifty-fifty',
       displayName: 'Slides + lecturer, 50/50',
       description: 'Presentation and lecturer camera split evenly.',
-      allowedChannels: ['local', 'meeting', 'streaming'],
+      allowedChannels: ['local', 'streaming'],
       kind: 'composite',
       canvas: { width: 1920, height: 1080 },
       tiles: [
@@ -162,7 +178,7 @@ export function createSourcesSeed(): SourcesSeed {
       id: 'cams-fifty-fifty',
       displayName: 'Both cameras, 50/50',
       description: 'Lecturer and students cameras split evenly, no slides.',
-      allowedChannels: ['local', 'meeting'],
+      allowedChannels: ['meeting'],
       kind: 'composite',
       canvas: { width: 1920, height: 1080 },
       tiles: [
@@ -193,23 +209,21 @@ export function createSourcesSeed(): SourcesSeed {
     validated(zLayoutPreset, {
       id: 'separate-files',
       displayName: 'Separate files per source',
-      description: 'Records each bound source to its own file — local recording only.',
+      description: 'Records the presentation and lecturer camera to their own files — local recording only.',
       allowedChannels: ['local'],
       kind: 'multi-file',
       canvas: { width: 1920, height: 1080 },
       tiles: [
         { roleId: 'presentation', x: 0, y: 0, w: 1920, h: 1080, z: 0 },
         { roleId: 'lecturer-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 },
-        { roleId: 'students-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 },
       ],
       parametric: false,
       outputs: [
         { streamKey: 'presentation', roleIds: ['presentation'], includeAudio: false },
         { streamKey: 'lecturer-cam', roleIds: ['lecturer-cam'], includeAudio: true },
-        { streamKey: 'students-cam', roleIds: ['students-cam'], includeAudio: false },
       ],
       passthroughEligible: false,
-      requiredRoles: ['presentation', 'lecturer-cam', 'students-cam'],
+      requiredRoles: ['presentation', 'lecturer-cam'],
     } satisfies LayoutPreset),
   ];
 

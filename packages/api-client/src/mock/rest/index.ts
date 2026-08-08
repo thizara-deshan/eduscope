@@ -4,6 +4,7 @@ import type { MockWorld } from '../world.js';
 import type { Seed } from '../seed/index.js';
 import type { CredentialStore } from '../seed/users.js';
 import type { ConnectionController } from '../events/connection.js';
+import type { WorldSeed } from '../scenario/types.js';
 import { createAuthOperations } from './auth.js';
 import { createRecordingOperations } from './recording.js';
 import { createChannelsOperations } from './channels.js';
@@ -24,6 +25,7 @@ export interface RestContext {
   readonly world: MockWorld;
   readonly engine: ScenarioEngine;
   readonly seed: Seed;
+  readonly worldSeed: WorldSeed;
   /**
    * Deliberately a sibling of `seed`, not a member of it: `Seed` is the
    * contract-valid entity graph, and no entity in it may carry a password

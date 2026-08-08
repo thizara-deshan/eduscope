@@ -72,6 +72,24 @@ describe('createPreviewChannel', () => {
     expect(new Set(candidates).size).toBe(candidates.length);
   });
 
+  it('previews a degraded role until it becomes offline', () => {
+    const { w, clock } = world();
+    w.apply('HL-02@lecturer-cam');
+    w.apply('HL-04@lecturer-cam');
+    const channel = createPreviewChannel(w);
+    const seen: PreviewServerMessage[] = [];
+    channel.messages$.subscribe((message) => seen.push(message));
+
+    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
+    clock.advance(425);
+    expect(seen.some((message) => message.type === 'answer')).toBe(true);
+    expect(seen.some((message) => isMockPreviewFrame(message))).toBe(true);
+    expect(seen.some((message) => message.type === 'error')).toBe(false);
+
+    w.apply('HL-06@lecturer-cam');
+    expect(seen.at(-1)).toMatchObject({ type: 'error', code: 'source-offline' });
+  });
+
   it('a different negotiationId implicitly closes the previous one (events.md §3) rather than erroring', () => {
     const { w, clock } = world();
     w.apply('HL-02@lecturer-cam');

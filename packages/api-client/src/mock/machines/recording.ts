@@ -1,5 +1,7 @@
 import { TIMERS } from '@eduscope/shared';
-import { PAYLOAD_BUILDERS, nextUlid, type MockWorld } from '../world.js';
+import {
+  PAYLOAD_BUILDERS, TRANSITION_DATA_REDUCERS, nextUlid, type MockWorld,
+} from '../world.js';
 import { alert, emit, fire, set, t } from './helpers.js';
 import type { MachineDef, Transition } from './types.js';
 
@@ -132,6 +134,53 @@ export function isRecordingNonTerminal(w: MockWorld): boolean {
   return !recordingMachine.terminal.includes(w.state(M)) && w.state(M) !== recordingMachine.initial;
 }
 
+function numberData(w: MockWorld, path: string): number {
+  const value = w.data[path];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function openSegment(w: MockWorld): void {
+  const now = w.clock.now();
+  if (typeof w.data['session.startedAt'] !== 'string') {
+    w.data['session.startedAt'] = new Date(now).toISOString();
+  }
+  w.data['session.currentSegmentStartedAtMs'] = now;
+  w.data['session.segmentIndex'] = numberData(w, 'session.segmentIndex') + 1;
+  w.data['session.segmentCount'] = numberData(w, 'session.segmentCount') + 1;
+}
+
+function closeSegment(w: MockWorld): void {
+  const openedAt = w.data['session.currentSegmentStartedAtMs'];
+  if (typeof openedAt !== 'number') return;
+  const durationMs = Math.max(0, w.clock.now() - openedAt);
+  w.data['session.recordedDurationMs'] = numberData(w, 'session.recordedDurationMs') + durationMs;
+  w.data['session.lastSegmentDurationMs'] = durationMs;
+  delete w.data['session.currentSegmentStartedAtMs'];
+}
+
+TRANSITION_DATA_REDUCERS['R-01'] = (w) => {
+  w.data['session.ulid'] = nextUlid(w);
+  w.data['recording.ulid'] = nextUlid(w);
+  w.data['session.startedAt'] = null;
+  w.data['session.recordedDurationMs'] = 0;
+  w.data['session.segmentIndex'] = 0;
+  w.data['session.segmentCount'] = 0;
+  w.data['session.pauseCount'] = 0;
+  delete w.data['session.currentSegmentStartedAtMs'];
+  delete w.data['session.lastSegmentDurationMs'];
+};
+TRANSITION_DATA_REDUCERS['R-05'] = openSegment;
+TRANSITION_DATA_REDUCERS['R-17'] = openSegment;
+for (const transition of ['R-08', 'R-09'] as const) {
+  TRANSITION_DATA_REDUCERS[transition] = (w) => {
+    closeSegment(w);
+    w.data['session.pauseCount'] = numberData(w, 'session.pauseCount') + 1;
+  };
+}
+for (const transition of ['R-12', 'R-13', 'R-16'] as const) {
+  TRANSITION_DATA_REDUCERS[transition] = closeSegment;
+}
+
 PAYLOAD_BUILDERS['recording.state'] = (w: MockWorld) => ({
   state: w.state(M),
   startReason: (w.data['session.startReason'] as string | undefined) ?? null,
@@ -139,7 +188,15 @@ PAYLOAD_BUILDERS['recording.state'] = (w: MockWorld) => ({
   title: (w.data['session.title'] as string | undefined) ?? null,
   ownerUserId: (w.data['session.ownerUserId'] as string | undefined) ?? null,
   ownerDisplayName: (w.data['session.ownerDisplayName'] as string | undefined) ?? null,
-  startedAt: (w.data['session.startedAt'] as string | undefined) ?? null,
+  // The wire field is the active elapsed-time anchor while capturing. The
+  // canonical first-segment instant remains in session.startedAt for the
+  // persisted lecture row; a pending resume/recovery deliberately exposes no
+  // active anchor, so the panel renders Starting… rather than counting a gap.
+  startedAt: w.state(M) === 'starting'
+    ? null
+    : w.state(M) === 'recording' && typeof w.data['session.currentSegmentStartedAtMs'] === 'number'
+      ? new Date(w.data['session.currentSegmentStartedAtMs']).toISOString()
+      : (w.data['session.startedAt'] as string | undefined) ?? null,
   recordedDurationMs: (w.data['session.recordedDurationMs'] as number | undefined) ?? null,
   segmentIndex: (w.data['session.segmentIndex'] as number | undefined) ?? null,
   segmentCount: (w.data['session.segmentCount'] as number | undefined) ?? null,
@@ -161,7 +218,9 @@ PAYLOAD_BUILDERS['recording.segment'] = (w: MockWorld, tr: Transition) => ({
   index: (w.data['session.segmentIndex'] as number | undefined) ?? 0,
   state: 'capturing',
   endReason: null,
-  durationMs: null,
+  durationMs: ['R-08', 'R-09', 'R-12', 'R-13', 'R-16'].includes(tr.id)
+    ? numberData(w, 'session.lastSegmentDurationMs')
+    : null,
   __cite: tr.cite,
 });
 

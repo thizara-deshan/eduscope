@@ -23,12 +23,15 @@ describe('createMockClient', () => {
     expect((await client.getRecordingState()).state).toBe('recording');
   });
 
-  it('start-fails lands in error and never passes through recording', async () => {
+  it('start-fails refuses Class A first, then lands in Class B error without recording', async () => {
     const clock = at();
     const client = createMockClient('start-fails', { clock });
     const states: string[] = [];
     client.events$.subscribe((e) => {
       if (e.event === 'recording.state') states.push(e.payload.state);
+    });
+    await expect(client.startRecording()).rejects.toMatchObject({
+      problem: { code: 'config.invalid' },
     });
     await client.startRecording();
     clock.advance(3_000);
@@ -47,6 +50,9 @@ describe('createMockClient', () => {
     expect(client.scenario).toBe('start-fails');
     expect(client.world.state('recording')).toBe('idle');
 
+    await expect(client.startRecording()).rejects.toMatchObject({
+      problem: { code: 'config.invalid' },
+    });
     await client.startRecording();
     clock.advance(3_000);
     expect(client.world.state('recording')).toBe('error');
@@ -86,7 +92,7 @@ describe('createMockClient — review fixes (C1, I2–I6)', () => {
     );
     expect(local).toMatchObject({
       event: 'channel.state',
-      payload: { channelId: 'local', state: 'on', presetId: 'pc-only' },
+      payload: { channelId: 'local', state: 'on', presetId: 'fifty-fifty' },
     });
   });
 

@@ -8,6 +8,7 @@ import { ClientContext } from '../client/client-provider.js';
 import { useWsStore } from '../store/ws-store.js';
 import '../styles/tokens.css';
 import { AlertBanners } from './alert-banners.js';
+import { useAlertSuppression } from './alert-suppression.js';
 
 function makeAlert(overrides: Partial<SystemAlert> = {}): SystemAlert {
   return {
@@ -126,5 +127,19 @@ describe('AlertBanners', () => {
     await waitFor(() => expect(screen.getByTestId('alert-banner')).toBeInTheDocument());
     expect(screen.getAllByTestId('alert-banner')).toHaveLength(1);
     useWsStore.getState().reset();
+  });
+
+  it('hides a suppressed code and shows it again once released', async () => {
+    useAlertSuppression.getState().suppress('poweroff.refused');
+    renderBanners(
+      vi.fn(() => Promise.resolve({
+        items: [makeAlert({ code: 'poweroff.refused', title: 'Refused' })],
+      })),
+    );
+    await waitFor(() => expect(screen.getByTestId('alert-lane')).toBeInTheDocument());
+    expect(screen.queryByTestId('alert-banner')).toBeNull();
+
+    act(() => useAlertSuppression.getState().release('poweroff.refused'));
+    expect(await screen.findByTestId('alert-banner')).toHaveTextContent('Refused');
   });
 });

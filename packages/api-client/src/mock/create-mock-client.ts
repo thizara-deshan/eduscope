@@ -17,11 +17,15 @@ import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
 import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
+export { isMockPreviewFrame } from './events/preview.js';
+
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
+  /** The merged `WorldSeed` this world is actually running (W2-D-1). */
+  readonly worldSeed: WorldSeed;
   readonly world: MockWorld;
-  /** Dev-overlay only: rebuild the world under a different script, live. */
-  switchScenario(name: ScenarioName): void;
+  /** Dev-overlay only: rebuild the world under a different script and/or seed, live. */
+  switchScenario(name: ScenarioName, seed?: Partial<WorldSeed>): void;
 }
 
 /**
@@ -35,7 +39,7 @@ export interface MockClient extends EduscopeClient {
  */
 export function createMockClient(
   scenario: ScenarioName = 'happy',
-  options: { clock?: Clock } = {},
+  options: { clock?: Clock; seed?: Partial<WorldSeed> } = {},
 ): MockClient {
   const clock = options.clock ?? createWallClock();
   // Envelope forwarding, connection-lifetime `seq` stamping and snapshot replay
@@ -60,6 +64,9 @@ export function createMockClient(
   };
 
   let current: ScenarioName = scenario;
+  // Re-derived on every build so `worldSeed` always describes the world that
+  // is actually running, not the last override a caller happened to pass.
+  let effectiveSeed!: WorldSeed;
   let teardown: (() => void)[] = [];
   let world!: MockWorld;
   let rest!: ReturnType<typeof createRestOperations>;
@@ -69,7 +76,8 @@ export function createMockClient(
   // access would break every dependency array that captures one operation.
   let wrapped = new Map<string, (...args: never[]) => Promise<unknown>>();
 
-  function build(name: ScenarioName): void {
+  function build(name: ScenarioName, seedOverride: Partial<WorldSeed> = {}): void {
+    const authenticatedUserId = world?.data['auth.currentUserId'];
     for (const stop of teardown) stop();
     teardown = [];
 
@@ -78,7 +86,19 @@ export function createMockClient(
     wrapped = new Map();
     engine.reset();
 
-    const seed = createSeed(script.seed);
+    const merged: WorldSeed = {
+      storagePressure: 'ok',
+      aiEnabled: true,
+      quizAvailable: true,
+      recordingOwnedByOtherUser: false,
+      audioApplyFails: false,
+      studentsCameraBound: true,
+      streamTargetsConfigured: true,
+      ...script.seed,
+      ...seedOverride,
+    };
+    effectiveSeed = merged;
+    const seed = createSeed(merged);
     world = new MockWorld({ clock, intercept: engine.intercept });
     for (const machine of ALL_MACHINES) world.registerMachine(machine);
 
@@ -90,7 +110,8 @@ export function createMockClient(
     // `getSourcesStatus()` and command refusals each read a different "truth"
     // for the same world instead of the one shared mock world the design
     // requires.
-    bootstrapFromSeed(world, seed, script.seed ?? {});
+    bootstrapFromSeed(world, seed, merged);
+    if (authenticatedUserId) world.data['auth.currentUserId'] = authenticatedUserId;
 
     // Built before `rest` (moved ahead of it for v0.3 / CG-16 — device.ts's
     // powerOffDevice needs a live `connection` reference to close the
@@ -111,7 +132,7 @@ export function createMockClient(
     // lifetime: a `switchScenario` rebuilds the world, so it must also discard
     // any password a previous script's run changed.
     rest = createRestOperations({
-      world, engine, seed, connection, credentials: createCredentialStore(),
+      world, engine, seed, connection, worldSeed: merged, credentials: createCredentialStore(),
     });
     // `start()` returns void (post-Task-11-fix ConnectionController), unlike
     // the brief's imagined "returns a stop callback" shape — call it for its
@@ -120,22 +141,33 @@ export function createMockClient(
     teardown.push(connection.stop);
     teardown.push(startAudioLevels(world, BOUND_SOURCE_ROLES));
 
+    // W2-D-2: transitions this script DRIVES. Scheduled last so the world is
+    // fully bootstrapped (every bound role already `online`) before the first
+    // fault fires, and through `world.schedule` so a `switchScenario` discards
+    // them with the world they were scheduled against.
+    for (const entry of script.timeline ?? []) {
+      world.schedule(entry.transition, entry.afterMs);
+    }
+
     // events.md §1: the server emits the current snapshot on subscribe.
     seedSnapshot(world, seed);
     current = name;
   }
 
-  build(scenario);
+  build(scenario, options.seed ?? {});
 
   const client = {
     get scenario() {
       return current;
     },
+    get worldSeed(): WorldSeed {
+      return effectiveSeed;
+    },
     get world() {
       return world;
     },
-    switchScenario(name: ScenarioName) {
-      build(name);
+    switchScenario(name: ScenarioName, seed?: Partial<WorldSeed>) {
+      build(name, seed ?? {});
     },
 
     events$: envelopes.events$,
@@ -216,7 +248,14 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
   // contradict the seed's `sourceStatuses` fixture (which says `online`).
   // `mic-room` has no registered machine at all (INV-SR-2) and keeps
   // whatever `sourceStatuses` seeds it as (`unbound`).
+  // W3-D-4: `studentsCameraBound: false` keeps the students-cam role in its
+  // real `unbound` machine state (HL-01) rather than driving it `online` —
+  // every REST/WS surface that reads this role's live machine agrees.
   for (const roleId of BOUND_SOURCE_ROLES) {
+    if (roleId === 'students-cam' && worldSeed.studentsCameraBound === false) {
+      world.apply(sourceTransitionId(roleId, 'HL-01'));
+      continue;
+    }
     world.apply(sourceTransitionId(roleId, 'HL-02'));
   }
 
@@ -239,8 +278,9 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
     world.data['session.ownerUserId'] = owner.id;
     world.data['session.ownerDisplayName'] = owner.displayName;
     world.data['session.startedAt'] = new Date(world.clock.now() - recordedDurationMs).toISOString();
-    world.data['session.recordedDurationMs'] = recordedDurationMs;
-    world.data['session.segmentIndex'] = 0;
+    world.data['session.recordedDurationMs'] = 0;
+    world.data['session.currentSegmentStartedAtMs'] = world.clock.now() - recordedDurationMs;
+    world.data['session.segmentIndex'] = 1;
     world.data['session.segmentCount'] = 1;
     world.data['session.pauseCount'] = 0;
     world.seedState('recording', 'recording');
@@ -274,6 +314,8 @@ function seedSnapshot(world: MockWorld, seed: Seed): void {
       PAYLOAD_BUILDERS['sources.status']!(world, snapshotTransition(`source:${role.id}`)),
     );
   }
+
+  for (const control of seed.audioControls) world.emit('audio.control', control);
 
   // system.alert genuinely is a static seed fixture with no machine behind
   // its *initial* rows, so it is emitted straight from the seed.

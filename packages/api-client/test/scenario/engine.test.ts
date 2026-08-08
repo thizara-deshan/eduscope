@@ -10,15 +10,15 @@ import {
 } from '../../src/mock/scenario/registry.js';
 
 function worldFor(name: Parameters<typeof getScenario>[0]) {
-  const engine = createScenarioEngine(getScenario(name));
+  const script = getScenario(name);
+  const engine = createScenarioEngine(script);
   const clock = createVirtualClock('2026-07-30T09:00:00.000+00:00');
   const w = new MockWorld({ clock, intercept: engine.intercept });
   for (const machine of ALL_MACHINES) w.registerMachine(machine);
-  // TODO(Task 10): this simulates what startRecording's real CommandPlan must do
-  // when the active scenario is pipeline-crash-midway — schedule R-16 at 40s.
-  // This is a test-only stand-in; Task 10's COMMAND_PLANS wiring needs to
-  // reproduce this for real (scenario-conditional, not in the static table).
-  if (name === 'pipeline-crash-midway') w.schedule('R-16', 40_000);
+  // This unit world does not bootstrap source-role state, so schedule only the
+  // recording fault whose forced-transition cardinality this suite exercises.
+  const crash = script.timeline?.find((entry) => entry.transition === 'R-16');
+  if (crash) w.schedule(crash.transition, crash.afterMs);
   return { w, clock, engine };
 }
 
@@ -40,6 +40,8 @@ describe('scenario engine', () => {
       'ws-flap',
       'quiz-network-loss',
       'auth-failures',
+      'poweroff-not-halted',
+      'channel-failures',
     ]);
   });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PANEL_OPERATION_IDS,
-  zAiCountdownSnapshot, zAudioControl, zChannelStatus, zDeviceHealth,
+  zAiCountdownSnapshot, zAudioControl, zChannelConfig, zChannelStatus, zDeviceHealth,
   zDeviceProvisioning, zLoginResponse, zRecordingStateSnapshot, zSourceStatus,
   zStorageOverview, zUser,
 } from '@eduscope/shared';
@@ -35,13 +35,21 @@ describe('contract honesty — every mock response validates', () => {
   });
 
   it.each([
-    ['listChannels', () => client.listChannels(), zChannelStatus],
     ['getSourcesStatus', () => client.getSourcesStatus(), zSourceStatus],
     ['listAudioControls', () => client.listAudioControls(), zAudioControl],
   ] as const)('%s returns schema-valid items', async (_n, call, item) => {
     const rows = await call();
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(() => item.parse(row)).not.toThrow();
+  });
+
+  it('listChannels returns schema-valid { config, status } rows', async () => {
+    const rows = await client.listChannels();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(() => zChannelConfig.parse(row.config)).not.toThrow();
+      expect(() => zChannelStatus.parse(row.status)).not.toThrow();
+    }
   });
 
   it('cursor lists return the { items, nextCursor } envelope', async () => {

@@ -55,7 +55,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
    * registered machine 5a instance at all, so `world.state()` throws for it.
    * That "not registered" case, and an explicit `state === 'unbound'`, both
    * map to the contract's dedicated `source-unbound` code; a *registered*
-   * role that just isn't `online` yet (offline/unknown/degraded) maps to
+   * role that is unavailable (offline/unknown) maps to
    * `source-offline` instead — these are two different codes for a reason,
    * do not collapse them into one.
    */
@@ -67,7 +67,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
       return 'source-unbound';
     }
     if (state === 'unbound') return 'source-unbound';
-    if (state === 'online') return null;
+    if (state === 'online' || state === 'degraded') return null;
     return 'source-offline';
   }
 
@@ -75,6 +75,30 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     current?.stopFrames?.();
     current = null;
   }
+
+  /**
+   * S-10 `source went offline mid-preview`: "the server drops unilaterally; the
+   * lightbox shows why rather than freezing on the last frame." Nothing did
+   * that — the frame loop kept painting a source the world had already marked
+   * offline, which is the B-12 class in miniature.
+   */
+  const unsubscribe = world.subscribeEvents((envelope) => {
+    if (envelope.event !== 'sources.status' || !current) return;
+    const payload = envelope.payload as { roleId: string; state: string };
+    if (
+      payload.roleId !== current.roleId
+      || payload.state === 'online'
+      || payload.state === 'degraded'
+    ) return;
+    const dying = current;
+    endCurrent();
+    emitter.emit({
+      type: 'error',
+      negotiationId: dying.negotiationId,
+      code: payload.state === 'unbound' ? 'source-unbound' : 'source-offline',
+      message: `source ${dying.roleId} is no longer available`,
+    });
+  });
 
   function startFrames(negotiation: Negotiation): () => void {
     let seq = 0;
@@ -173,6 +197,7 @@ export function createPreviewChannel(world: MockWorld): PreviewChannel {
     messages$: emitter,
     close() {
       closed = true;
+      unsubscribe();
       endCurrent();
     },
   };
