@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { listScenarios, type ScenarioName, type WorldSeed } from '@eduscope/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMockClient } from '../client/client-provider.js';
-import { useRecordingState } from '../store/selectors.js';
+import { useChannelStatus, useRecordingState } from '../store/selectors.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useLongPress } from './use-long-press.js';
 import './scenario-overlay.css';
@@ -40,6 +40,8 @@ export function ScenarioOverlay() {
   const client = useMockClient();
   const queryClient = useQueryClient();
   const recordingState = useRecordingState();
+  const meetingChannel = useChannelStatus('meeting');
+  const streamingChannel = useChannelStatus('streaming');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<ScenarioName>(client?.scenario ?? 'happy');
   const [seed, setSeed] = useState<Partial<WorldSeed>>({});
@@ -177,6 +179,30 @@ export function ScenarioOverlay() {
               />
               Quiz server unavailable
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.studentsCameraBound}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  studentsCameraBound: !event.target.checked,
+                })}
+                aria-label="Students Camera unbound"
+              />
+              Students Camera unbound
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.streamTargetsConfigured}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  streamTargetsConfigured: !event.target.checked,
+                })}
+                aria-label="No streaming destinations configured"
+              />
+              No streaming destinations configured
+            </label>
           </fieldset>
           <div className="us-devoverlay__transport">
             <button
@@ -209,6 +235,26 @@ export function ScenarioOverlay() {
             >
               Meeting off
             </button>
+            {active === 'channel-failures' && (
+              <>
+                <button
+                  type="button"
+                  data-testid="dev-meeting-consumer-exited"
+                  disabled={meetingChannel?.state !== 'on'}
+                  onClick={() => client.world.apply('CH-09')}
+                >
+                  Meeting consumer exited
+                </button>
+                <button
+                  type="button"
+                  data-testid="dev-streaming-consumer-exited"
+                  disabled={streamingChannel?.state !== 'on'}
+                  onClick={() => client.world.apply('CH-09S')}
+                >
+                  Streaming consumer exited
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

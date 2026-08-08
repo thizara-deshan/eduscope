@@ -45,6 +45,8 @@ function build() {
       quizAvailable: true,
       recordingOwnedByOtherUser: false,
       audioApplyFails: false,
+      studentsCameraBound: true,
+      streamTargetsConfigured: true,
     },
     credentials: createCredentialStore(),
   }) as unknown as EduscopeClient;

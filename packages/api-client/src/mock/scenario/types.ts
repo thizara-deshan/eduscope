@@ -13,7 +13,9 @@ export type ScenarioName =
   /** Added with contract v0.2 for Wave 1's auth screens (CG-11, CG-12). */
   | 'auth-failures'
   /** Added for Wave 2's S-12 (W2-D-3, CG-16). */
-  | 'poweroff-not-halted';
+  | 'poweroff-not-halted'
+  /** Added for Wave 3's S-08/S-26/S-27 (W3-D-3). */
+  | 'channel-failures';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }
@@ -55,6 +57,10 @@ export interface WorldSeed {
   readonly recordingOwnedByOtherUser: boolean;
   /** S-11 §10's "scenario flag": updateAudioControl resolves `appliedState: failed` (INV-AC-1, B-55). */
   readonly audioApplyFails: boolean;
+  /** W3-D-4 — starting-world fact: the Students Camera source role has no enabled binding. */
+  readonly studentsCameraBound: boolean;
+  /** W3-D-4 — starting-world fact: no stream targets are seeded/enabled for the streaming channel. */
+  readonly streamTargetsConfigured: boolean;
 }
 
 /** A transition the script drives on its own schedule, with no command behind it. */

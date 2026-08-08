@@ -61,7 +61,7 @@ describe('scenario dev overlay', () => {
     expect(screen.getByRole('dialog', { name: /scenario/i })).toBeTruthy();
   });
 
-  it('lists all nine catalog scripts with their descriptions', async () => {
+  it('lists all ten catalog scripts with their descriptions', async () => {
     await renderOverlay();
     fireEvent.pointerDown(screen.getByTestId('scenario-hotspot'));
     act(() => {
@@ -70,7 +70,7 @@ describe('scenario dev overlay', () => {
     for (const name of [
       'happy', 'start-fails', 'pipeline-crash-midway', 'llm-timeout',
       'disk-full', 'ws-flap', 'quiz-network-loss', 'auth-failures',
-      'poweroff-not-halted',
+      'poweroff-not-halted', 'channel-failures',
     ]) {
       expect(screen.getByRole('radio', { name: new RegExp(name) })).toBeTruthy();
     }

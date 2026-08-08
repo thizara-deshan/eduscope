@@ -92,6 +92,8 @@ export function createMockClient(
       quizAvailable: true,
       recordingOwnedByOtherUser: false,
       audioApplyFails: false,
+      studentsCameraBound: true,
+      streamTargetsConfigured: true,
       ...script.seed,
       ...seedOverride,
     };
@@ -246,7 +248,14 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
   // contradict the seed's `sourceStatuses` fixture (which says `online`).
   // `mic-room` has no registered machine at all (INV-SR-2) and keeps
   // whatever `sourceStatuses` seeds it as (`unbound`).
+  // W3-D-4: `studentsCameraBound: false` keeps the students-cam role in its
+  // real `unbound` machine state (HL-01) rather than driving it `online` —
+  // every REST/WS surface that reads this role's live machine agrees.
   for (const roleId of BOUND_SOURCE_ROLES) {
+    if (roleId === 'students-cam' && worldSeed.studentsCameraBound === false) {
+      world.apply(sourceTransitionId(roleId, 'HL-01'));
+      continue;
+    }
     world.apply(sourceTransitionId(roleId, 'HL-02'));
   }
 

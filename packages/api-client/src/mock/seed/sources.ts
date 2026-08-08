@@ -27,6 +27,7 @@ export function createSourcesSeed(
   streamTargets: readonly StreamTarget[] = [],
 ): SourcesSeed {
   const applyFails = overrides.audioApplyFails ?? false;
+  const studentsCameraBound = overrides.studentsCameraBound ?? true;
   const sourceRoles = (
     [
       { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
@@ -45,7 +46,7 @@ export function createSourcesSeed(
     [
       { roleId: 'presentation', state: 'online', detail: null, inputId: null },
       { roleId: 'lecturer-cam', state: 'online', detail: null, inputId: null },
-      { roleId: 'students-cam', state: 'online', detail: null, inputId: null },
+      { roleId: 'students-cam', state: studentsCameraBound ? 'online' : 'unbound', detail: null, inputId: null },
       { roleId: 'mic-lecturer', state: 'online', detail: null, inputId: null },
       { roleId: 'mic-room', state: 'unbound', detail: null, inputId: null },
     ] as const
@@ -72,14 +73,15 @@ export function createSourcesSeed(
 
   const boundRoleIds = ['presentation', 'lecturer-cam', 'students-cam', 'mic-lecturer'] as const;
   const sourceBindings = [
-    ...boundRoleIds.map((roleId, i) =>
-      validated(zSourceBinding, {
+    ...boundRoleIds.map((roleId, i) => {
+      const unbound = roleId === 'students-cam' && !studentsCameraBound;
+      return validated(zSourceBinding, {
         roleId,
-        physicalInputId: physicalInputs[i]!.id,
-        enabled: true,
+        physicalInputId: unbound ? null : physicalInputs[i]!.id,
+        enabled: !unbound,
         updatedAt: SEED_EPOCH,
-      }),
-    ),
+      });
+    }),
     validated(zSourceBinding, {
       roleId: 'mic-room',
       physicalInputId: null,

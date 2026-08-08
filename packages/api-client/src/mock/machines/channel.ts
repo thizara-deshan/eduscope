@@ -1,5 +1,5 @@
 import { PAYLOAD_BUILDERS, type MockWorld } from '../world.js';
-import { alert, emit, fire, t } from './helpers.js';
+import { alert, emit, fire, set, t } from './helpers.js';
 import type { MachineDef, Transition, TransitionId } from './types.js';
 
 const cite = (n: string) => `state-machines §2.2 ${n}`;
@@ -20,13 +20,16 @@ export const meetingChannelMachine: MachineDef = {
   terminal: [],
   transitions: [
     t('channel:meeting', 'CH-04', ['off'], 'starting', cite('CH-04'),
+      set('channel.meeting.reason', null),
       emit('channel.state'),
       fire('CH-05', 700)),
 
     t('channel:meeting', 'CH-05', ['starting'], 'on', cite('CH-05'),
+      set('channel.meeting.reason', null),
       emit('channel.state')),
 
     t('channel:meeting', 'CH-06', ['starting'], 'failed', cite('CH-06'),
+      set('channel.meeting.reason', 'The output consumer did not start.'),
       emit('channel.state'),
       alert('channel.start-failed', 'error')),
 
@@ -35,14 +38,17 @@ export const meetingChannelMachine: MachineDef = {
       fire('CH-08', 500)),
 
     t('channel:meeting', 'CH-08', ['stopping'], 'off', cite('CH-08'),
+      set('channel.meeting.reason', null),
       emit('channel.state')),
 
     t('channel:meeting', 'CH-09', ['on'], 'starting', cite('CH-09'),
+      set('channel.meeting.reason', 'The output stopped unexpectedly and is restarting.'),
       emit('channel.state'),
       alert('channel.restarting', 'warning'),
       fire('CH-05', 700)),
 
     t('channel:meeting', 'CH-10', ['failed'], 'off', cite('CH-10'),
+      set('channel.meeting.reason', null),
       emit('channel.state')),
   ],
 };
@@ -53,6 +59,7 @@ export const streamingChannelMachine: MachineDef = {
   terminal: [],
   transitions: [
     t('channel:streaming', 'CH-01', ['off'], 'preflight', cite('CH-01'),
+      set('channel.streaming.reason', null),
       emit('channel.state'),
       fire('CH-02', 900)),
 
@@ -61,15 +68,18 @@ export const streamingChannelMachine: MachineDef = {
       fire('CH-05S', 700)),
 
     t('channel:streaming', 'CH-03', ['preflight'], 'failed', cite('CH-03'),
+      set('channel.streaming.reason', 'The streaming destination could not be reached. Your lecture is still recording.'),
       emit('channel.state'),
       alert('streaming.preflight-failed', 'warning')),
 
     // Mirrors of the shared CH-05..CH-10 tail (canonical ids live on
     // `channel:meeting` — see the module comment above).
     t('channel:streaming', 'CH-05S', ['starting'], 'on', cite('CH-05'),
+      set('channel.streaming.reason', null),
       emit('channel.state')),
 
     t('channel:streaming', 'CH-06S', ['starting'], 'failed', cite('CH-06'),
+      set('channel.streaming.reason', 'The output consumer did not start.'),
       emit('channel.state'),
       alert('channel.start-failed', 'error')),
 
@@ -78,14 +88,17 @@ export const streamingChannelMachine: MachineDef = {
       fire('CH-08S', 500)),
 
     t('channel:streaming', 'CH-08S', ['stopping'], 'off', cite('CH-08'),
+      set('channel.streaming.reason', null),
       emit('channel.state')),
 
     t('channel:streaming', 'CH-09S', ['on'], 'starting', cite('CH-09'),
+      set('channel.streaming.reason', 'The output stopped unexpectedly and is restarting.'),
       emit('channel.state'),
       alert('channel.restarting', 'warning'),
       fire('CH-05S', 700)),
 
     t('channel:streaming', 'CH-10S', ['failed'], 'off', cite('CH-10'),
+      set('channel.streaming.reason', null),
       emit('channel.state')),
   ],
 };

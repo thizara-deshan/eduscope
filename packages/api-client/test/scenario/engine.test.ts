@@ -41,6 +41,7 @@ describe('scenario engine', () => {
       'quiz-network-loss',
       'auth-failures',
       'poweroff-not-halted',
+      'channel-failures',
     ]);
   });
 
