@@ -5,10 +5,10 @@ import { useArtifactEvents, useUploadJobEvents } from '../../store/selectors.js'
 import { LIB_KEYS } from './query-keys.js';
 
 export interface LibraryFilters {
-  q?: string;
-  ownerUserId?: string;
-  state?: RecordingState;
-  includeDeleted?: boolean;
+  q?: string | undefined;
+  ownerUserId?: string | undefined;
+  state?: RecordingState | undefined;
+  includeDeleted?: boolean | undefined;
 }
 
 export interface RemovedRow {

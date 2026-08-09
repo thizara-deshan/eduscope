@@ -12,7 +12,7 @@ export function RecordingBadge({
   live,
 }: {
   readonly rec: Recording;
-  readonly live?: RecordingBadgeLive;
+  readonly live?: RecordingBadgeLive | undefined;
 }) {
   const badge = recordingBadge(rec, live);
   return (

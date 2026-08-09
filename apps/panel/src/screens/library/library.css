@@ -49,3 +49,134 @@
 .us-badge__secondary {
   font-size: var(--fs-3xs);
 }
+
+.us-reclist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.us-reclist__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tap-row-lg);
+  padding: var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.us-reclist__item--tombstone {
+  background: var(--surface-2);
+  color: var(--text-faint);
+}
+
+.us-reclist__checkbox {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+}
+
+.us-reclist__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.us-reclist__title {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.us-reclist__meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.us-reclist__tombstone-note {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.us-reclist__play,
+.us-reclist__menu {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.us-libfilters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.us-libfilters__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.us-libfilters__chip .us-input {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  min-width: 8ch;
+}
+
+.us-libfilters__chip .us-input:focus {
+  outline: none;
+}
+
+.us-selectionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap-row);
+  padding: 0 var(--sp-6);
+  background: var(--surface-2);
+}
+
+.us-selectionbar__summary {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.us-selectionbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.us-selectionbar__cancel,
+.us-selectionbar__export {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+}
+
+.us-selectionbar__export {
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-md);
+}
