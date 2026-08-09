@@ -488,3 +488,95 @@ the assumed defaults, and both questions concern *other* surfaces' behaviour.
 - **S-20 is read-only and net-new** — the behavioral inventory holds no `B-*`
   quiz / QR / join item, so there is nothing legacy to preserve; the binding
   constraints are the contract, Machine 4a, and the kiosk vertical budget.
+
+---
+
+## 9. Decided at the S-21…S-24 / S-35 wireframe gate (2026-08-09)
+
+The **W-5…W-9** gate — the recordings library (S-21), detail & player (S-22), USB
+export (S-23), delete confirm (S-24) and upload queue (S-35): the **File
+Management rebuild**, parity §5.1 items 1 + 2, the largest undesigned area in the
+product — is settled across five design docs
+([S-21](../design/screens/S-21-design.md), [S-22](../design/screens/S-22-design.md),
+[S-23](../design/screens/S-23-design.md), [S-24](../design/screens/S-24-design.md),
+[S-35](../design/screens/S-35-design.md); status: ✅ **approved 2026-08-09**). This
+section records the four "smallest-fix" contract rulings the gate took, the
+library-entry-point decision (SI-D-3), the sub-questions the designs surfaced but
+do **not** own, and the one screen that required no contract change. Follow-through
+is done: W-5…W-9 marked ✅ in
+[screen-inventory §9](../design/screen-inventory.md#9-screens-needing-wireframe-approval);
+CG-3/CG-5/CG-7 marked `answered` and CG-20/CG-21 registered in
+[§10](../design/screen-inventory.md#10-contract-gaps); all five ride the **v0.5**
+bump ([§10.1](../design/screen-inventory.md#101-when-the-contract-actually-changes))
+before Wave 5's plan run.
+
+### 9.1 Outcomes — the four contract-gap rulings
+
+Each was a real fork with a reversal cost, decided at the gate rather than assumed.
+
+| Id | Question | Ruling | Reversal cost |
+|----|----------|--------|---------------|
+| **CG-5** | How much filtering should `listRecordings` gain? | **A scoped subset: `?q=` (title) + `?ownerUserId=` (admin) only — *not* `?from=`/`?to=`.** Lecturers are already server-scoped to their own recordings (INV-RC-5); the pressure is an admin over every lecturer × 14 days, which title + owner clear. The 14-day window makes date filtering earn less than its mock/test cost. Chips, not a menu; server-side, never a client filter over a cursor-paged list. See [S-21-design.md §9](../design/screens/S-21-design.md#9-contract-changes-this-design-requires) | Low — additive; `from`/`to` remain a later additive if a need appears |
+| **CG-3** | How does a session declare it wants scoped `usb.volumes` / `export.job` events, when clients send no WS messages (events §1)? | **The implicit-TTL form: calling the flow's REST entry marks the session subscribed for a TTL** — `GET /exports/targets` → `usb.volumes`; `createExport`/`getExport` → `export.job`; `GET /logs` → `log.entry` (S-34 reuses it). No new endpoint, no client→server WS message. Preferred over an explicit `POST /subscriptions`, which would invent an operation and a lifecycle to manage. See [S-23-design.md §8](../design/screens/S-23-design.md#8-contract-changes-this-design-requires) | Low — a semantic; reversible to an explicit subscribe if the TTL proves awkward |
+| **CG-21** | How does S-23 handle a target that lacks space at copy time (a drive that filled between listing and the POST)? | **Add `export.insufficient-space` to the `Problem.code` closed enum.** The client still pre-checks `freeBytes` vs Σ selected bytes in the picker; the server code is the authoritative backstop for the listing→copy race, so U-5 can render a named, fixable reason instead of a generic `validation.invalid`. See [S-23-design.md §8](../design/screens/S-23-design.md#8-contract-changes-this-design-requires) | Low — additive enum value |
+| **CG-20** | What shape should the upload offline/failure signal take on `UploadJob`? | **Add `failureClass ∈ {connectivity, server, permanent} \| null`**, mirroring the §4.4 classification the emitter already computes (it decides whether `attempt` increments). This makes S-35's `offline` row-state (`"Waiting for the network · No attempts used"`) reachable and honest from minute one — instead of rendering "failed 8 times" for a device that is merely offline, the exact §4.4 lie the state exists to prevent. Parsing `lastError` text for the class is forbidden (INV-RF-1). Preferred over a bare `waitingForNetwork` boolean, which would collapse server vs permanent. See [S-35-design.md §9](../design/screens/S-35-design.md#9-contract-changes-this-design-requires) | Low — additive field |
+
+### 9.2 SI-D-3 settled — the library entry point
+
+| Id | Question | Ruling | Reversal cost |
+|----|----------|--------|---------------|
+| **SI-D-3** | Where does the recordings library open from, given the prototype has no library and thus no door? | **A header entry visible to both roles, plus a link from the post-stop "Saved" toast.** Both roles need the library; the moment a lecturer most wants it is right after stopping a lecture (J-1). See [S-21-design.md §11 LIB-D-6](../design/screens/S-21-design.md#11-decisions-taken-here). Settled in [screen-inventory §13](../design/screen-inventory.md#13-open-questions--decisions-taken-here) | Low |
+
+### 9.3 Contract changes these designs require — the v0.5 bump
+
+| CG | Change | Kind | Owner doc |
+|----|--------|------|-----------|
+| **CG-5** | `listRecordings` gains `?q=` + `?ownerUserId=` | additive | [S-21 §9](../design/screens/S-21-design.md#9-contract-changes-this-design-requires) |
+| **CG-7** | `POST /recordings/{recordingId}/retry-merge` binds RA-07 (admin, 202-async) | additive | [S-22 §9](../design/screens/S-22-design.md#9-contract-changes-this-design-requires) |
+| **CG-3** | Implicit-TTL scoped subscription semantic on `GET /exports/targets` / `createExport` / `getExport` / `GET /logs` | additive/semantic | [S-23 §8](../design/screens/S-23-design.md#8-contract-changes-this-design-requires) |
+| **CG-21** | `export.insufficient-space` added to `Problem.code` | additive | [S-23 §8](../design/screens/S-23-design.md#8-contract-changes-this-design-requires) |
+| **CG-20** | `failureClass` added to `UploadJob` + `UploadJobPayload` | additive | [S-35 §9](../design/screens/S-35-design.md#9-contract-changes-this-design-requires) |
+
+All five are **additive**; none is breaking. They land in `contracts/` (openapi +
+events + zod + mock adapter) as **v0.5** before Wave 5's plan run, per
+[screen-inventory §10.1](../design/screen-inventory.md#101-when-the-contract-actually-changes).
+
+### 9.4 Open sub-questions these designs surfaced — NOT decided here
+
+The designs are coherent under a sensible default for each, stated so nothing is
+smuggled in as an assumption. Each belongs to an owner other than the W-5…W-9 gate.
+
+| ID | Question | Who decides | Default the design assumes | Why it is open |
+|----|----------|-------------|----------------------------|----------------|
+| **LQO-1** | **Export ETA precision.** S-23 computes the copy ETA client-side from the byte-rate over recent `export.job` steps (a pure function of progress + time; no server field, [S-23 EXP-D-3](../design/screens/S-23-design.md#10-decisions-taken-here)). Is a client-smoothed "about {eta} left" acceptable, or should the device compute an `estimatedRemainingMs`? | PM + core-api owner | Client-computed "about {eta}", honest about its imprecision; no server field (parallels CG-18's bytes-only ruling) | Only matters if operations finds the client estimate too jittery over a variable USB rate; the fix (if any) is an additive server field, not an S-23 change |
+| **LQO-2** | **Export `error` granularity.** `ExportJob.error` is a free-text string (events §2.20, linear lifecycle); S-23 keys "drive removed" vs generic "failed" on `state=failed` + the failure shape, not a coded enum. Should `error` become a closed enum for deterministic per-cause copy? | PM + core-api owner | Free-text `error`, surfaced verbatim; state-driven copy for the known "drive removed" case | Matters only if deterministic per-cause export copy is wanted; an additive enum, flagged rather than minted (S-23 §8.1) |
+| **LQO-3** | **Merge-retry attempt ceiling.** S-22's admin Retry (CG-7 / RA-07) resets the attempt counter; is there a cap on how many times an admin may retry a failed merge before it is declared permanently unmergeable? | PM + core-api owner | Unbounded manual retry (the admin is in the loop each time); no automatic permanent-failure state beyond `merge failed` | Matters only if a pathological recording could be retried forever; RA-07 as specified resets the counter with no ceiling, which is acceptable for a human-driven action |
+
+None is design-blocking: the five screens render correctly under the assumed
+defaults, and each question concerns a *later* refinement or another surface's
+behaviour.
+
+### 9.5 Also settled by these wireframes
+
+- **W-5…W-9 are closed**, leaving W-10, W-11 and W-12 as the remaining open
+  wireframe rows.
+- **S-24 required zero contract change** — it is a `DangerConfirm` instance
+  inheriting the S-06 §3 destructive vocabulary and needs no new endpoint, event or
+  token. The wave's clean "a design run can add nothing" case, in the W-14/W-15
+  style. (It does record one thing: the destructive fill is `--danger`, following the
+  settled S-06 §3.1 vocabulary, not the inventory line's older `--record` — no token
+  added; [S-24 §8.1](../design/screens/S-24-design.md#8-contract-changes-this-design-requires).)
+- **No new design token** is introduced by any of the five. Badges reuse the existing
+  `--success`/`--warning`/`--danger`/`--accent`/`--text-muted` palette; the danger
+  vocabulary is inherited from S-06 §3.
+- **The upload/merge badge vocabulary is defined once** (S-21 §3) and **shared
+  verbatim** with S-35 through a single `use-recording-badge` derivation — a recording
+  reads the same in the library and the upload console, by construction. S-35 adds
+  only the offline/failed split (CG-20) its admin console needs.
+- **Legacy preserved, not ported:** these screens are the principled successors to
+  the File-Manager behaviours the inventory KEEP-but-CHANGEs — B-31 (library view +
+  badges, ownership moved server-side), B-32 (USB export, real progress not
+  free-space polling), B-33 (audited delete, real columns not a status string), B-34
+  (merge automatic, no user convert flow), B-35 (requeue, not a hardcoded manual
+  endpoint), B-37 (playback, authenticated), B-38 (hotplug, session-scoped not
+  broadcast, user picks the drive). None of the legacy bugs is reproduced.
