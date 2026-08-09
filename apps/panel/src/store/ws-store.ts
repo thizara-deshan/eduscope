@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
 import type {
   AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
-  DeviceHealthPayload, EventEnvelope, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload,
-  RecordingSegmentPayload, RecordingStatePayload, SourceRoleId, SourcesStatusPayload,
-  StorageStatusPayload, SystemAlert,
+  DeviceHealthPayload, EventEnvelope, ExportJobPayload, QuizPublicationPayload, QuizResponsesPayload,
+  QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload,
+  SourceRoleId, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UploadJobPayload,
+  UploadPartPayload, UsbVolumesPayload,
 } from '@eduscope/shared';
 import { hasSeqGap, isStale } from './connection.js';
 import { useTelemetryStore } from './telemetry-store.js';
@@ -34,6 +35,16 @@ export interface WsState {
   /** S-17: the latest `quiz.responses` batch — the leaderboard hook folds its deltas incrementally, never stores ranks (INV-LB-1). */
   responses: QuizResponsesPayload | null;
   alerts: Record<string, SystemAlert>;
+  /** S-21/S-22: live recording.artifact keyed by recordingId (merge/ready/failed/deleted). */
+  artifacts: Record<string, RecordingArtifactPayload>;
+  /** S-21/S-35: live upload.job keyed by recordingId (one job per recording, INV-UJ-1). */
+  uploadJobs: Record<string, UploadJobPayload>;
+  /** S-35: live upload.part keyed by partId (expanded rows). */
+  uploadParts: Record<string, UploadPartPayload>;
+  /** S-23: live export.job keyed by jobId. */
+  exportJobs: Record<string, ExportJobPayload>;
+  /** S-23: the latest session-scoped usb.volumes list (CG-3). */
+  usbVolumes: UsbVolumesPayload | null;
 
   connection: ConnectionStatus | null;
   /** events.md §1: a gap forces a full snapshot re-request, never a patch. */
@@ -52,6 +63,7 @@ const EMPTY = {
   recording: null, audioControls: {}, lastSegment: null, expectedShutdown: false,
   sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
+  artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
   connection: null, needsResync: false, stale: false,
 } satisfies Omit<
   WsState,
@@ -136,6 +148,16 @@ export const useWsStore = create<WsState>((set, get) => ({
           else next[envelope.payload.id] = envelope.payload;
           return { alerts: next };
         }
+        case 'recording.artifact':
+          return { artifacts: { ...get().artifacts, [envelope.payload.recordingId]: envelope.payload } };
+        case 'upload.job':
+          return { uploadJobs: { ...get().uploadJobs, [envelope.payload.recordingId]: envelope.payload } };
+        case 'upload.part':
+          return { uploadParts: { ...get().uploadParts, [envelope.payload.partId]: envelope.payload } };
+        case 'export.job':
+          return { exportJobs: { ...get().exportJobs, [envelope.payload.jobId]: envelope.payload } };
+        case 'usb.volumes':
+          return { usbVolumes: envelope.payload };
         default:
           return {}; // catalog events with no slice yet (log.entry, upload.*, …)
       }

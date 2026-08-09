@@ -92,4 +92,29 @@ describe('ws store', () => {
     );
     expect(useWsStore.getState().alerts).toEqual({});
   });
+
+  it('ingests recording.artifact keyed by recordingId', () => {
+    useWsStore.getState().ingest(envelope('recording.artifact', {
+      recordingId: 'R1', sessionId: 'S1', state: 'deleted', mergeState: 'done',
+      durationMs: null, totalBytes: null, deleteReason: 'disk-pressure',
+    }, 0));
+    expect(useWsStore.getState().artifacts['R1']?.state).toBe('deleted');
+  });
+
+  it('ingests upload.job keyed by recordingId and export.job by jobId', () => {
+    useWsStore.getState().ingest(envelope('upload.job', {
+      jobId: 'J1', recordingId: 'R2', state: 'queued', attempt: 0,
+      failureClass: null, nextAttemptAt: null, progressPct: 0, lastError: null, blockedBy: null,
+    }, 1));
+    useWsStore.getState().ingest(envelope('export.job', {
+      jobId: 'E1', state: 'copying', bytesCopied: 10, bytesTotal: 100, error: null,
+    }, 2));
+    expect(useWsStore.getState().uploadJobs['R2']?.state).toBe('queued');
+    expect(useWsStore.getState().exportJobs['E1']?.bytesCopied).toBe(10);
+  });
+
+  it('ingests usb.volumes as the latest list', () => {
+    useWsStore.getState().ingest(envelope('usb.volumes', { volumes: [] }, 3));
+    expect(useWsStore.getState().usbVolumes?.volumes).toEqual([]);
+  });
 });

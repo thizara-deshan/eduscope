@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
 import {
   useAiSet, useAlert, useAudioControlRow, useExpectedShutdown, useLastSegment,
-  usePublicationsList, useQuestionEvents, useQuizSession, useRecordingState, useWsShallow,
+  usePublicationsList, useQuestionEvents, useQuizSession, useRecordingState, useUploadJobEvents,
+  useWsShallow,
 } from './selectors.js';
 
 const envelope = (event: string, payload: unknown, seq: number) =>
@@ -150,6 +151,30 @@ describe('wave 4 store slices', () => {
 
     const { result } = renderHook(() => usePublicationsList());
     expect(result.current).toEqual([payload]);
+  });
+
+  it('useUploadJobEvents returns a stable reference across an unrelated ingest', () => {
+    const payload = {
+      jobId: 'J1', recordingId: 'R1', state: 'queued', attempt: 0,
+      failureClass: null, nextAttemptAt: null, progressPct: 0, lastError: null, blockedBy: null,
+    };
+    act(() => useWsStore.getState().ingest(envelope('upload.job', payload, 0)));
+
+    let renders = 0;
+    function Probe() {
+      useUploadJobEvents();
+      renders += 1;
+      return null;
+    }
+    render(<Probe />);
+    const baseline = renders;
+    act(() => {
+      useWsStore.getState().ingest(envelope('device.health', { ntpSynced: true }, 1));
+    });
+    expect(renders, 'an unrelated ingest must not re-render a useUploadJobEvents consumer').toBe(baseline);
+
+    const { result } = renderHook(() => useUploadJobEvents());
+    expect(result.current).toEqual({ R1: payload });
   });
 
   it('useAiSet returns the store slice', () => {

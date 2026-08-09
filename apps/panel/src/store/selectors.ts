@@ -39,6 +39,16 @@ export const usePublicationsList = () => useWsShallow((s) => Object.values(s.pub
 /** S-14: live `ai.question` deltas keyed by questionId (a discarded row is pruned in the store). */
 export const useQuestionEvents = () => useWsShallow((s) => s.questions);
 
+/** S-21/S-22: live recording.artifact deltas keyed by recordingId. */
+export const useArtifactEvents = () => useWsShallow((s) => s.artifacts);
+/** S-21/S-35: live upload.job deltas keyed by recordingId. */
+export const useUploadJobEvents = () => useWsShallow((s) => s.uploadJobs);
+/** S-35: live upload.part deltas keyed by partId. */
+export const useUploadPartEvents = () => useWsShallow((s) => s.uploadParts);
+/** S-23: live export.job deltas keyed by jobId. */
+export const useExportJobEvents = () => useWsShallow((s) => s.exportJobs);
+export const useUsbVolumes = () => useWsStore((s) => s.usbVolumes);
+
 /**
  * Keyed reads take the key so the selector returns a stable primitive-or-row
  * reference rather than the whole map, which `ingest` rebuilds by spread.
