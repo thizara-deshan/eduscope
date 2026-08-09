@@ -44,6 +44,18 @@
   font-weight: 600;
 }
 
+.us-header__recordings {
+  margin-left: auto;
+  color: var(--on-ink);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-3);
+}
+
 .us-clock {
   position: absolute;
   left: 50%;

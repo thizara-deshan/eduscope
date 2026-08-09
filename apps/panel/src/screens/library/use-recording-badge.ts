@@ -18,8 +18,8 @@ export interface RecordingBadge {
 }
 
 export interface RecordingBadgeLive {
-  readonly progressPct?: number;
-  readonly nextAttemptAt?: string | null;
+  readonly progressPct?: number | undefined;
+  readonly nextAttemptAt?: string | null | undefined;
 }
 
 const RETENTION_KEPT_SECONDARY = "Kept — never uploaded (won't auto-delete)";

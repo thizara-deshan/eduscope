@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useAuth } from '../auth/auth-context.js';
 import { PanelClock } from './panel-clock.js';
 import { UserMenu } from './user-menu.js';
@@ -20,6 +21,7 @@ export function PanelHeader(): JSX.Element {
           </>
         )}
       </div>
+      {user && <Link to="/library" className="us-header__recordings">Recordings</Link>}
       <PanelClock />
       {user && <UserMenu displayName={user.displayName} />}
     </header>
