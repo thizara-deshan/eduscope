@@ -302,7 +302,12 @@
   inset: 0;
   display: grid;
   place-items: center;
-  padding: var(--sp-10);
+  /* Shrinks the centering box (not just the modal) when KeyboardHost opens,
+   * so the whole dialog shifts up above the 380px on-screen keyboard rather
+   * than sitting centered behind it (frontend-conventions §3: read the
+   * shared --osk-h custom property, no OSK-open state threaded in here). */
+  padding: var(--sp-10) var(--sp-10) calc(var(--sp-10) + var(--osk-h, 0px));
+  transition: padding-bottom 0.2s ease;
   background: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
@@ -861,6 +866,12 @@
   flex-direction: column;
   gap: var(--sp-5);
   padding: var(--sp-6);
+  background:
+    radial-gradient(120% 80% at 15% 0%, rgba(91, 140, 255, 0.08), transparent 60%),
+    var(--ink);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
   transition: max-height 0.2s ease, opacity 0.2s ease;
 }
 
@@ -868,6 +879,13 @@
   flex: 0 0 auto;
   max-height: 62px;
   overflow: hidden;
+  /* The meeting-layout accordion (W3-D-6) can push total sidebar content
+   * past the scrollport — sticky keeps the tab header reachable rather than
+   * letting it scroll out of view and read as "gone" on a kiosk touch UI
+   * with no visible scrollbar affordance. */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
 }
 
 .us-insightswrap__body {
