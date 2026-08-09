@@ -1,5 +1,6 @@
-import type { PanelOperationId, Problem } from '@eduscope/shared';
+import type { PanelEventName, PanelOperationId, Problem } from '@eduscope/shared';
 import type { TransitionId } from '../machines/types.js';
+import type { Seed } from '../seed/index.js';
 
 /** frontend-conventions §4 — extend this catalog, never fork it. */
 export type ScenarioName =
@@ -15,7 +16,10 @@ export type ScenarioName =
   /** Added for Wave 2's S-12 (W2-D-3, CG-16). */
   | 'poweroff-not-halted'
   /** Added for Wave 3's S-08/S-26/S-27 (W3-D-3). */
-  | 'channel-failures';
+  | 'channel-failures'
+  /** Added for Wave 5's S-23 (usb-pull) and S-35 (wan-loss). */
+  | 'usb-pull'
+  | 'wan-loss';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }
@@ -88,6 +92,16 @@ export interface ScenarioScript {
   readonly timeline?: readonly TimelineEntry[];
   /** ws-flap only: drop and restore the socket on a cycle (events.md §1). */
   readonly wsFlap?: { readonly afterMs: number; readonly downMs: number; readonly repeat: number };
+  /** Wave 5 — raw entity events this script schedules with no machine behind them (usb-pull, wan-loss, disk-full's retention removal). */
+  readonly emits?: readonly ScheduledEmit[];
+}
+
+/** A raw entity event a script schedules on the world clock (no machine behind it). */
+export interface ScheduledEmit {
+  readonly event: PanelEventName;
+  readonly afterMs: number;
+  /** Built from the seed so it can reference deterministic seed ids. */
+  readonly payload: (seed: Seed) => unknown;
 }
 
 export interface TraceEntry {

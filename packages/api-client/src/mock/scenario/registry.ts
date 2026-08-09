@@ -8,6 +8,8 @@ import { quizNetworkLoss } from './scripts/quiz-network-loss.js';
 import { authFailures } from './scripts/auth-failures.js';
 import { poweroffNotHalted } from './scripts/poweroff-not-halted.js';
 import { channelFailures } from './scripts/channel-failures.js';
+import { usbPull } from './scripts/usb-pull.js';
+import { wanLoss } from './scripts/wan-loss.js';
 import type { ForcedTransition, ScenarioName, ScenarioScript } from './types.js';
 
 /** The catalog, in overlay display order. Extend the scripts; never fork them. */
@@ -22,6 +24,8 @@ const CATALOG: Record<ScenarioName, ScenarioScript> = {
   'auth-failures': authFailures,
   'poweroff-not-halted': poweroffNotHalted,
   'channel-failures': channelFailures,
+  'usb-pull': usbPull,
+  'wan-loss': wanLoss,
 };
 
 export function getScenario(name: ScenarioName): ScenarioScript {

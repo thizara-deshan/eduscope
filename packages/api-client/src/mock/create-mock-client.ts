@@ -151,6 +151,10 @@ export function createMockClient(
       world.schedule(entry.transition, entry.afterMs);
     }
 
+    for (const e of script.emits ?? []) {
+      world.clock.setTimeout(() => world.emit(e.event, e.payload(seed)), e.afterMs);
+    }
+
     // events.md §1: the server emits the current snapshot on subscribe.
     seedSnapshot(world, seed);
     current = name;

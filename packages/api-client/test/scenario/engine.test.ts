@@ -42,6 +42,8 @@ describe('scenario engine', () => {
       'auth-failures',
       'poweroff-not-halted',
       'channel-failures',
+      'usb-pull',
+      'wan-loss',
     ]);
   });
 

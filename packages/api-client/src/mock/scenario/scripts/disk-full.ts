@@ -25,4 +25,18 @@ export const diskFull: ScenarioScript = {
     },
     { on: { transition: 'R-01' }, replace: 'R-02' },
   ],
+  emits: [
+    {
+      event: 'recording.artifact',
+      afterMs: 3_000,
+      payload: (seed) => {
+        const r = seed.recordings[0]!; // a visible, uploaded library row
+        return {
+          recordingId: r.id, sessionId: r.sessionId, state: 'deleted',
+          mergeState: r.mergeState, durationMs: r.durationMs, totalBytes: r.totalBytes,
+          deleteReason: 'disk-pressure',
+        };
+      },
+    },
+  ],
 };
