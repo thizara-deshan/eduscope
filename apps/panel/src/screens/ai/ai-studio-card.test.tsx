@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError } from '@eduscope/api-client';
 import { ClientContext } from '../../client/client-provider.js';
+import { OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { AiStudioCard } from './ai-studio-card.js';
@@ -31,10 +32,14 @@ function renderCard(methods: Partial<EduscopeClient> = {}) {
     listQuestions: vi.fn(() => Promise.resolve([])),
     generateNow: vi.fn(() => Promise.resolve({ commandId: 'c1', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 })),
     setAiInterval: vi.fn(() => Promise.resolve({ commandId: 'c2', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 })),
+    getQuizSession: vi.fn(() => Promise.resolve({
+      state: 'absent', quizSessionId: null, lectureSessionId: null, joinUrl: null, joinCode: null, joinedCount: 0, syncState: null,
+    })),
     ...methods,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
-    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
+    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client },
+      createElement(OverlayProvider, null, children)),
   );
   return { ...render(<AiStudioCard />, { wrapper }), client };
 }

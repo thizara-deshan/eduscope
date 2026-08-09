@@ -1,6 +1,7 @@
 import type { IntervalMinutes } from '@eduscope/shared';
 import { useTicker } from '../../hooks/use-ticker.js';
 import { useAiStudio } from '../../ai/use-ai-studio.js';
+import { QuizJoinChip } from './quiz-join-chip.js';
 import '../../ai/ai.css';
 
 const INTERVALS: readonly IntervalMinutes[] = [10, 15, 20, 30];
@@ -55,7 +56,7 @@ export function AiStudioCard() {
             <p className="us-assistant__sub">Turn your lecture into instant classroom questions</p>
           </div>
         </div>
-        {/* S-20 chip mounts here (Task 4). */}
+        <QuizJoinChip />
       </header>
 
       <div className="us-studio__body">

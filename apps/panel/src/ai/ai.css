@@ -253,3 +253,173 @@
   font-size: var(--fs-sm);
   font-weight: 700;
 }
+
+/* ── S-20 quiz join chip (mounted in the S-13 header, dark scope) ─────────── */
+
+.us-quizchip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.us-quizchip:disabled {
+  cursor: default;
+}
+
+.us-quizchip--skeleton {
+  width: 130px;
+  background: var(--surface-2);
+  opacity: 0.6;
+}
+
+.us-quizchip--failed {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+.us-quizchip--stale {
+  color: var(--text-muted);
+}
+
+.us-quizchip__stale {
+  color: var(--warning);
+}
+
+/* ── Shared 680 px overlay modal shell (first used by S-20; S-14/S-15 reuse) ── */
+
+.us-modal__scrim {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-10);
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.us-modal__panel {
+  width: min(var(--modal-w), 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* ── S-20 quiz join modal body ──────────────────────────────────────────── */
+
+.us-quizmodal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-8) var(--sp-9);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-quizmodal__head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.us-quizmodal__close {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+
+.us-quizmodal__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-7);
+  padding: var(--sp-9);
+  overflow-y: auto;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.us-quizmodal__qrframe {
+  display: inline-flex;
+  padding: var(--sp-5);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+
+.us-quizmodal__code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.us-quizmodal__codelabel {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.us-quizmodal__codevalue {
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+}
+
+.us-quizmodal__url {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.us-quizmodal__footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.us-quizmodal__stalenote,
+.us-quizmodal__freshness {
+  color: var(--warning);
+}
+
+.us-quizmodal__failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.us-quizmodal__failhead {
+  margin: 0;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.us-quizmodal__status {
+  margin: 0;
+  color: var(--text-muted);
+}

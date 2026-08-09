@@ -45,6 +45,7 @@ function renderSession(aiEnabled: boolean | undefined) {
     getStorageOverview: vi.fn(() => new Promise<never>(() => undefined)),
     getAiCountdown: vi.fn(() => new Promise<never>(() => undefined)),
     listQuestions: vi.fn(() => Promise.resolve([])),
+    getQuizSession: vi.fn(() => new Promise<never>(() => undefined)),
     pauseRecording: vi.fn(), resumeRecording: vi.fn(), stopRecording: vi.fn(),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
