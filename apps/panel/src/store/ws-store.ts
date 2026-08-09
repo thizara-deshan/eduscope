@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
 import type {
   AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
-  DeviceHealthPayload, EventEnvelope, QuizPublicationPayload, QuizSessionPayload,
+  DeviceHealthPayload, EventEnvelope, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload,
   RecordingSegmentPayload, RecordingStatePayload, SourceRoleId, SourcesStatusPayload,
   StorageStatusPayload, SystemAlert,
 } from '@eduscope/shared';
@@ -31,6 +31,8 @@ export interface WsState {
   questions: Record<string, AiQuestionPayload>;
   quizSession: QuizSessionPayload | null;
   publications: Record<string, QuizPublicationPayload>;
+  /** S-17: the latest `quiz.responses` batch — the leaderboard hook folds its deltas incrementally, never stores ranks (INV-LB-1). */
+  responses: QuizResponsesPayload | null;
   alerts: Record<string, SystemAlert>;
 
   connection: ConnectionStatus | null;
@@ -49,7 +51,7 @@ export interface WsState {
 const EMPTY = {
   recording: null, audioControls: {}, lastSegment: null, expectedShutdown: false,
   sources: {}, channels: {}, storage: null, deviceHealth: null,
-  aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, alerts: {},
+  aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   connection: null, needsResync: false, stale: false,
 } satisfies Omit<
   WsState,
@@ -115,6 +117,7 @@ export const useWsStore = create<WsState>((set, get) => ({
           return { questions: { ...get().questions, [envelope.payload.questionId]: envelope.payload } };
         }
         case 'quiz.session': return { quizSession: envelope.payload };
+        case 'quiz.responses': return { responses: envelope.payload };
         case 'quiz.publication': {
           const next = { ...get().publications };
           // Bounded: a closed, unprojected publication is history, and history

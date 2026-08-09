@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LeaderboardTab } from './leaderboard-tab.js';
 import { PreviousQuestionsTab } from './previous-questions-tab.js';
 import '../../ai/ai.css';
 
@@ -41,7 +42,7 @@ export function InsightsColumn({ collapsed = false }: { readonly collapsed?: boo
       </div>
       {!collapsed ? (
         <div className="us-insightswrap__body">
-          {tab === 'previous' ? <PreviousQuestionsTab /> : null}
+          {tab === 'previous' ? <PreviousQuestionsTab /> : <LeaderboardTab />}
         </div>
       ) : null}
     </section>

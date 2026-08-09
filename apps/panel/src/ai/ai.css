@@ -986,3 +986,74 @@
 .us-pqcard__statbtn--incorrect {
   color: var(--warning);
 }
+
+/* ── S-17 leaderboard tab (panel-only, dark scope) ─────────────────────────── */
+
+.us-lb__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--tap-min);
+}
+
+.us-lb__live {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-circle);
+  background: var(--record);
+  animation: pulse-rec 1.4s ease-in-out infinite;
+}
+
+.us-lb__stale {
+  color: var(--warning);
+  font-size: var(--fs-xs);
+}
+
+.us-lb__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.us-lb__row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto auto auto;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--tap-row);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+
+.us-lb__rank {
+  font-weight: 700;
+  text-align: center;
+}
+
+.us-lb__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.us-lb__fraction {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.us-lb__statvalue {
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.us-lb__accuracy,
+.us-lb__time {
+  color: var(--text-faint);
+  font-size: var(--fs-2xs);
+}

@@ -32,6 +32,7 @@ export const useExpectedShutdown = () => useWsStore((s) => s.expectedShutdown);
 export const useAudioControlRow = (roleId: SourceRoleId) =>
   useWsStore((s) => s.audioControls[roleId]);
 export const useAlert = (id: string) => useWsStore((s) => s.alerts[id]);
+export const useResponsesEvent = () => useWsStore((s) => s.responses);
 
 /** Object.values(...) is a fresh array every call — useWsShallow keeps it stable across an unrelated ingest. */
 export const usePublicationsList = () => useWsShallow((s) => Object.values(s.publications));

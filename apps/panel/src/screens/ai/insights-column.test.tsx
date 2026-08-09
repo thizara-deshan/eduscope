@@ -20,6 +20,13 @@ function renderColumn(collapsed = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const client = {
     listPublications: vi.fn(() => Promise.resolve([])),
+    getLeaderboard: vi.fn(() => Promise.resolve({
+      sessionId: '01J00000000000000000000001', entries: [], computedAt: '2026-08-05T10:00:00Z', stale: false,
+    })),
+    getQuizSession: vi.fn(() => Promise.resolve({
+      state: 'open', quizSessionId: '01J00000000000000000000009', lectureSessionId: '01J00000000000000000000001',
+      joinUrl: 'https://q/1', joinCode: '111111', joinedCount: 1, syncState: 'synced',
+    })),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
