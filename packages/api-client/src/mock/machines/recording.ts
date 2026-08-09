@@ -169,7 +169,21 @@ TRANSITION_DATA_REDUCERS['R-01'] = (w) => {
   delete w.data['session.currentSegmentStartedAtMs'];
   delete w.data['session.lastSegmentDurationMs'];
 };
-TRANSITION_DATA_REDUCERS['R-05'] = openSegment;
+// W4-D-1: record-start is machine 4a's Z-01 guard moment (recording ∧ configured ∧
+// AI enabled) and machine 2a's Q-01 arm. Schedule them here — gated by the seed
+// flags bootstrapFromSeed stamped — rather than as unconditional `fire` effects, so
+// an AI-disabled or quiz-unavailable world stays absent/unavailable. Idempotent by
+// the machines' own `from` guards (Q-01 only from `unavailable`, Z-01 only from
+// `absent`), so a second R-05 (e.g. after a resume path) cannot double-arm.
+TRANSITION_DATA_REDUCERS['R-05'] = (w) => {
+  openSegment(w);
+  if (w.data['ai.enabledAtStart'] === true && w.state('ai.countdown') === 'unavailable') {
+    w.schedule('Q-01', 400);
+  }
+  if (w.data['quiz.available'] === true && w.state('quiz.session') === 'absent') {
+    w.schedule('Z-01', 400);
+  }
+};
 TRANSITION_DATA_REDUCERS['R-17'] = openSegment;
 for (const transition of ['R-08', 'R-09'] as const) {
   TRANSITION_DATA_REDUCERS[transition] = (w) => {

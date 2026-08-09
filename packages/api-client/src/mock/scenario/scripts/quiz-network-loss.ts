@@ -6,13 +6,14 @@ import type { ScenarioScript } from '../types.js';
  * questions stay on the projector, and recording is untouched (QZ-7).
  *
  * CG-19 (S-20 §10, row 1): the joined-count staleness must be demonstrable. The
- * `timeline` DRIVES the quiz session `open` (Z-01, which fires Z-02 itself) and
- * then Z-30 (sync `stale`) — no command sits behind either (types.ts). With CG-19
- * on `quiz.session`, Z-30 re-emits that event carrying `syncState: stale`, so
- * S-20's chip/modal flip to the stale rendering LIVE (the joined count freezes and
- * is marked out of date) rather than only on the next REST snapshot. Z-31 is left
- * for a future timeline to drive — the forced `Z-31 -> Z-32` rule below stands
- * ready but is not scheduled here, keeping this run to the CG-19 stale state.
+ * quiz session is opened by record-start itself (W4-D-1, `R-05`'s Z-01 schedule)
+ * — this script's own `timeline` only needs to DRIVE Z-30 (sync `stale`) once
+ * that has happened. With CG-19 on `quiz.session`, Z-30 re-emits that event
+ * carrying `syncState: stale`, so S-20's chip/modal flip to the stale rendering
+ * LIVE (the joined count freezes and is marked out of date) rather than only on
+ * the next REST snapshot. Z-31 is left for a future timeline to drive — the
+ * forced `Z-31 -> Z-32` rule below stands ready but is not scheduled here,
+ * keeping this run to the CG-19 stale state.
  */
 export const quizNetworkLoss: ScenarioScript = {
   name: 'quiz-network-loss',
@@ -22,7 +23,6 @@ export const quizNetworkLoss: ScenarioScript = {
     'Send to Projector is refused with a named reason, and the lecture recording ' +
     'continues normally.',
   timeline: [
-    { transition: 'Z-01', afterMs: 800 }, // absent -> requesting -> (Z-02 @ +1200) open
     { transition: 'Z-30', afterMs: 3_000 }, // synced -> stale, once the session is open
   ],
   forced: [

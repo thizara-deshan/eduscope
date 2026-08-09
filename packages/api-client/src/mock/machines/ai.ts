@@ -34,10 +34,15 @@ export const aiCountdownMachine: MachineDef = {
       emit('ai.countdown'),
       fire('Q-02', 6_000)),
 
+    // W4-D-2: Q-04/Q-05 are driven by the coupled QuestionSet's own outcome
+    // (Q-12/Q-13 below), not by a blind post-request timer — the doc's own
+    // triggers are "2b reached ready" (Q-04) and "2b failed" (Q-05), and firing
+    // Q-04 unconditionally here would always race ahead of (and mask) a
+    // coupled failure.
     t(M_COUNTDOWN, 'Q-02', ['armed'], 'generating', citeA('Q-02'),
       emit('ai.countdown'),
       emit('ai.set', { state: 'requested' }),
-      fire('Q-04', TIMERS['T-LLM-REQUEST'] / 15)),
+      fire('Q-11', 50)), // W4-D-2: drive the QuestionSet lifecycle
 
     // LP-16: manual generate_now resets the countdown to the full interval —
     // load-bearing, not a cosmetic detail (brief Step 5).
@@ -45,7 +50,7 @@ export const aiCountdownMachine: MachineDef = {
       set('ai.remainingMs', DEFAULT_REMAINING_MS),
       emit('ai.countdown', { remainingMs: DEFAULT_REMAINING_MS }),
       emit('ai.set', { state: 'requested', trigger: 'manual' }),
-      fire('Q-04', TIMERS['T-LLM-REQUEST'] / 15)),
+      fire('Q-11', 50)), // W4-D-2
 
     t(M_COUNTDOWN, 'Q-04', ['generating'], 'armed', citeA('Q-04'),
       set('ai.remainingMs', DEFAULT_REMAINING_MS),
@@ -116,11 +121,17 @@ export const aiSetMachine: MachineDef = {
       set('ai.set.count', 4),
       emit('ai.set', { count: 4 }),
       // N× in the doc; the mock emits one representative draft per set.
-      emit('ai.question', { state: 'draft', provenance: 'generated', edited: false })),
+      emit('ai.question', { state: 'draft', provenance: 'generated', edited: false }),
+      // W4-D-2: this set's own success is 2a's Q-04 trigger ("2b reached ready").
+      fire('Q-04', 50)),
 
     t(M_SET, 'Q-13', ['generating'], 'failed', citeB('Q-13'),
       set('ai.set.error', 'timeout'),
-      emit('ai.set', { error: 'timeout' })),
+      emit('ai.set', { error: 'timeout' }),
+      // W4-D-2: the mock does not auto-fire Q-14's retry (nothing schedules it
+      // today), so every Q-13 is "after retries" from 2a's point of view —
+      // Q-05's trigger ("2b failed ... after retries").
+      fire('Q-05', 50)),
 
     t(M_SET, 'Q-14', ['failed'], 'generating', citeB('Q-14'),
       set('ai.set.attempt', 1),

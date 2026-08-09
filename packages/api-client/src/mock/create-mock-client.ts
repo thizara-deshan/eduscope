@@ -242,6 +242,12 @@ function bootstrapFromSeed(world: MockWorld, seed: Seed, worldSeed: Partial<Worl
   if (pressure === 'warning' || pressure === 'critical') world.apply('HL-10');
   if (pressure === 'critical') world.apply('HL-12');
 
+  // Wave 4 (W4-D-1): the AI studio arms and the quiz session opens on record-start
+  // (R-05's data reducer reads these), gated by the same world seeds the overlay
+  // already exposes. Stamped here so REST snapshots and the record-start drive agree.
+  world.data['ai.enabledAtStart'] = worldSeed.aiEnabled ?? true;
+  world.data['quiz.available'] = worldSeed.quizAvailable ?? true;
+
   // sources (5a): the four bound roles boot `online` — rest/sources.ts's
   // getSourcesStatus() always reads the live machine for these, whose
   // `initial` is `unknown`, so without this every REST/WS surface would

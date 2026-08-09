@@ -235,6 +235,26 @@ export function ScenarioOverlay() {
             >
               Meeting off
             </button>
+            <button
+              type="button"
+              data-testid="dev-generate-now"
+              onClick={() => swallow(client.generateNow())}
+            >
+              Generate now
+            </button>
+            <button
+              type="button"
+              data-testid="dev-send-to-projector"
+              onClick={() => {
+                // W4-D-8: demo shortcut only — the real screens (S-14) issue
+                // sendToProjector against a question the user picked; this
+                // reaches for whatever draft the world last minted.
+                const draftId = client.world.data['ai.question.ulid'];
+                if (typeof draftId === 'string') swallow(client.sendToProjector(draftId));
+              }}
+            >
+              Send to projector
+            </button>
             {active === 'channel-failures' && (
               <>
                 <button
