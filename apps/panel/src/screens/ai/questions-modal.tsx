@@ -1,18 +1,24 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { useQuestions } from '../../ai/use-questions.js';
+import { useOverlays } from '../../overlays/overlay-host.js';
+import { AddQuestionDialog } from './add-question-dialog.js';
 import { QuestionCard } from './question-card.js';
 import '../../ai/ai.css';
 
 /**
  * S-14: the 680 px questions review modal — `empty`/`loading`/`populated`
  * bodies, a single-column accordion of `QuestionCard`s (collapsed by
- * default), Regenerate (= `generateNow`), and Add Question (S-15, wired by
- * Task 6).
+ * default), Regenerate (= `generateNow`), and Add Question (opens S-15).
  */
 export function QuestionsModal({ onClose }: { readonly onClose: () => void }) {
   const q = useQuestions();
+  const overlays = useOverlays();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  const openAddQuestion = () => {
+    const id = overlays.open(<AddQuestionDialog onClose={() => overlays.close(id)} />);
+  };
 
   useEffect(() => closeRef.current?.focus(), []);
 
@@ -85,8 +91,7 @@ export function QuestionsModal({ onClose }: { readonly onClose: () => void }) {
         </div>
 
         <footer className="us-qmodal__foot">
-          {/* Opens S-15 (Task 6). */}
-          <button type="button" className="us-qmodal__addbtn">Add Question</button>
+          <button type="button" className="us-qmodal__addbtn" onClick={openAddQuestion}>Add Question</button>
           <button
             type="button"
             className="us-qmodal__regenbtn"
