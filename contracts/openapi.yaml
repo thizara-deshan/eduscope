@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eduscope core-api — public REST surface
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contract v0 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
     is built against this contract on a mock adapter before any backend exists
@@ -526,7 +526,11 @@ paths:
       tags: [recordings]
       operationId: listRecordings
       summary: Library list (LP-10) — ownership filtered SERVER-SIDE (INV-RC-5)
-      description: Lecturers see their own recordings; admins see all. Deleted recordings are excluded unless `includeDeleted` (admin).
+      description: |
+        Lecturers see their own recordings; admins see all. Deleted recordings
+        are excluded unless `includeDeleted` (admin). Filtering is server-side —
+        `q` and `ownerUserId` re-issue the query and reset the cursor; a
+        cursor-paged list is never client-filtered (CG-5, S-21 §2.3 / LIB-D-2).
       parameters:
         - { $ref: '#/components/parameters/cursor' }
         - { $ref: '#/components/parameters/limit' }
@@ -536,6 +540,16 @@ paths:
         - name: includeDeleted
           in: query
           schema: { type: boolean, default: false }
+        - name: q
+          in: query
+          description: Case-insensitive title substring (CG-5). Server-side; no date range (the 14-day window makes `from`/`to` low-value — LIB-D-2).
+          schema: { type: string, maxLength: 256 }
+        - name: ownerUserId
+          in: query
+          description: |
+            Admin-only owner filter (CG-5). A lecturer's owner is already pinned
+            server-side (INV-RC-5), so the param is ignored/forbidden for them.
+          schema: { $ref: '#/components/schemas/Ulid' }
       responses:
         '200':
           description: Page of recordings with derived upload badges.
@@ -578,6 +592,26 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
+  /recordings/{recordingId}/retry-merge:
+    post:
+      tags: [recordings]
+      operationId: retryMergeRecording
+      summary: RA-07 — admin retry of a failed merge (CG-7); binds cmd.recording.retry-merge
+      x-required-role: admin
+      description: |
+        202: RA-07 resets the merge attempt counter and re-runs machine 1b; the
+        recording returns to `merging` and the transition arrives as
+        recording.artifact{merging} (no new event). The only manual merge control
+        in the product — merging is otherwise automatic (A-12, SM-D-1); S-22 §2.4
+        hosts it and S-21's merge-failed badge deep-links here (LIB-D-4).
+        403: lecturer (U-6, G-ADMIN). 409: the recording is not in `failed`
+        (already succeeded, or deleted while open).
+      parameters: [{ $ref: '#/components/parameters/recordingId' }]
+      responses:
+        '202': { $ref: '#/components/responses/CommandAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
   /recordings/{recordingId}/files/{fileId}/media:
     get:
       tags: [recordings]
@@ -609,7 +643,13 @@ paths:
       tags: [recordings]
       operationId: listExportTargets
       summary: Connected USB drives (LP-11); system + recordings volumes never listed (INV-EX-2)
-      description: Live insert/remove updates arrive as usb.volumes events scoped to this session (B-38 fix).
+      description: |
+        Live insert/remove updates arrive as usb.volumes events scoped to this
+        session (B-38 fix). Calling this operation marks the requesting
+        AuthSession subscribed to `usb.volumes` for a TTL, refreshed by continued
+        reads — the defined trigger for the scoped stream (CG-3, EXP-D-4). No WS
+        client→server message exists (events.md §1); opening the flow is the
+        subscription.
       responses:
         '200':
           description: Candidate targets; the user picks — never "the first drive".
@@ -628,7 +668,13 @@ paths:
       tags: [recordings]
       operationId: createExport
       summary: Multi-select copy-to-USB with real transfer progress (LP-10, INV-EX-1)
-      description: 202 + ExportJob; progress arrives as export.job events scoped to the requesting AuthSession.
+      description: |
+        202 + ExportJob; progress arrives as export.job events scoped to the
+        requesting AuthSession — this operation marks that session subscribed to
+        `export.job` for the created job (CG-3, EXP-D-4). 422
+        `export.insufficient-space` when the target lacks room for the selection
+        (the listing→copy race; the client pre-checks in the picker, the server
+        is the backstop — CG-21, EXP-D-5).
       requestBody:
         required: true
         content:
@@ -647,6 +693,10 @@ paths:
       tags: [recordings]
       operationId: getExport
       summary: Export job state (REST mirror of export.job)
+      description: |
+        REST mirror of the export.job event; reading it (re-)marks the requesting
+        AuthSession subscribed to `export.job` for this job (CG-3, EXP-D-4) — the
+        re-attach path when a panel reopens the overlay on an in-flight copy.
       parameters: [{ $ref: '#/components/parameters/exportId' }]
       responses:
         '200':
@@ -1430,6 +1480,11 @@ paths:
       operationId: queryLogs
       summary: AD-7 queryable log store (PF-15)
       x-required-role: admin
+      description: |
+        Calling this operation marks the requesting AuthSession subscribed to the
+        live `log.entry` stream for a TTL, refreshed by continued reads — the same
+        implicit-subscription mechanism S-23's export flow uses (CG-3, EXP-D-4).
+        No WS client→server message exists (events.md §1).
       parameters:
         - name: level
           in: query
@@ -1765,6 +1820,7 @@ components:
             - poweroff.refused
             - format.refused
             - export.invalid-target
+            - export.insufficient-space
             - upload.not-requeueable
             - import.rejected
         title: { type: string }
@@ -1844,6 +1900,19 @@ components:
     UploadJobState:
       type: string
       enum: [queued, uploading, completing, done, failed, dead-letter, cancelled]
+    UploadFailureClass:
+      type: string
+      enum: [connectivity, server, permanent]
+      description: |
+        The §4.4 failure classification the emitter already computes (it decides
+        whether `attempt` increments): `connectivity` (no route/DNS/TLS/connect
+        timeout — does NOT consume attempts, retries at the 6 h cap indefinitely,
+        `upload.offline` after 24 h); `server` (5xx/reset/stall — consumes
+        attempts, dead-letters at the cap); `permanent` (4xx/part-missing —
+        dead-letters fast). Lets S-35 render `offline` distinctly instead of
+        "failed N of 8" for a device that is merely offline (CG-20, UQ-D-2). Null
+        when `state ∉ {failed, dead-letter}`; parsing `lastError` for the class is
+        forbidden (INV-RF-1).
     UploadFilePartState:
       type: string
       enum: [pending, uploading, uploaded, missing, failed]
@@ -2369,7 +2438,7 @@ components:
       type: object
       description: One job per Recording (INV-UJ-1, DM-3). AD-9 queue row.
       x-decision: D-02b
-      required: [id, recordingId, recordingTitle, adapterId, state, attempt, nextAttemptAt, lastError, lastErrorAt, remoteLectureId, progressPct, blockedBy, enqueuedAt, startedAt, completedAt, requeuedAt]
+      required: [id, recordingId, recordingTitle, adapterId, state, attempt, failureClass, nextAttemptAt, lastError, lastErrorAt, remoteLectureId, progressPct, blockedBy, enqueuedAt, startedAt, completedAt, requeuedAt]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
         recordingId: { $ref: '#/components/schemas/Ulid' }
@@ -2377,6 +2446,15 @@ components:
         adapterId: { type: string, maxLength: 64, description: '"placeholder" until [D-02b] lands (A-19).' }
         state: { $ref: '#/components/schemas/UploadJobState' }
         attempt: { type: integer }
+        failureClass:
+          oneOf:
+            - { $ref: '#/components/schemas/UploadFailureClass' }
+            - type: 'null'
+          description: |
+            CG-20 — the §4.4 class of the current failure; null unless
+            `state ∈ {failed, dead-letter}`. A `failed` job with
+            `failureClass=connectivity` is S-35's `offline` row-state (no attempts
+            spent), distinct from `failed`/`server` ("attempt N of 8").
         nextAttemptAt:
           oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }]
         lastError: { type: [string, 'null'] }

@@ -31,6 +31,7 @@ import {
   zStoragePressure,
   zSystemAlert,
   zUlid,
+  zUploadFailureClass,
   zUploadFilePartState,
   zUploadJobState,
   zUsbVolume,
@@ -207,12 +208,17 @@ export const zQuizResponsesPayload = z.object({
   stale: z.boolean(),
 });
 
-/** §2.18 */
+/** §2.18 — `failureClass` added by CG-20 (v0.5), mirroring `UploadJob.failureClass`
+ * so S-35 can distinguish an offline stall (`connectivity`, no attempts spent)
+ * from a server failure (`server`, "attempt N of 8") live over the socket, not
+ * only on a REST snapshot. Null unless `state ∈ {failed, dead-letter}` (§4.4);
+ * parsing `lastError` for the class is forbidden (INV-RF-1). */
 export const zUploadJobPayload = z.object({
   jobId: zUlid,
   recordingId: zUlid,
   state: zUploadJobState,
   attempt: z.number().int().nonnegative(),
+  failureClass: zUploadFailureClass.nullable(),
   nextAttemptAt: zEventInstant.nullable(),
   progressPct: z.number().int().min(0).max(100),
   lastError: z.string().nullable(),

@@ -35,6 +35,7 @@ export const zProblem = z.object({
         'poweroff.refused',
         'format.refused',
         'export.invalid-target',
+        'export.insufficient-space',
         'upload.not-requeueable',
         'import.rejected'
     ]),
@@ -176,6 +177,12 @@ export const zUploadJobState = z.enum([
     'failed',
     'dead-letter',
     'cancelled'
+]);
+
+export const zUploadFailureClass = z.enum([
+    'connectivity',
+    'server',
+    'permanent'
 ]);
 
 export const zUploadFilePartState = z.enum([
@@ -786,6 +793,10 @@ export const zUploadJob = z.object({
     adapterId: z.string().max(64),
     state: zUploadJobState,
     attempt: z.number().int(),
+    failureClass: z.union([
+        zUploadFailureClass,
+        z.null()
+    ]),
     nextAttemptAt: z.union([
         zInstant,
         z.null()
@@ -1589,6 +1600,8 @@ export const zListRecordingsResponse = z.object({
 export const zDeleteRecordingResponse = zCommandAccepted;
 
 export const zGetRecordingResponse = zRecordingDetail;
+
+export const zRetryMergeRecordingResponse = zCommandAccepted;
 
 export const zGetRecordingMediaResponse = z.union([
     z.string(),

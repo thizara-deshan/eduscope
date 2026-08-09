@@ -22,14 +22,14 @@ export type CommandAccepted = {
 /**
  * Stable machine code — see packages/shared ErrorCode for the closed list.
  */
-export type Code = 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
+export type Code = 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'export.insufficient-space' | 'upload.not-requeueable' | 'import.rejected';
 
 export type Problem = {
     status: number;
     /**
      * Stable machine code — see packages/shared ErrorCode for the closed list.
      */
-    code: 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'upload.not-requeueable' | 'import.rejected';
+    code: 'auth.invalid-credentials' | 'auth.account-disabled' | 'auth.session-revoked' | 'auth.password-reset-required' | 'not-authorized' | 'not-found' | 'validation.invalid' | 'conflict' | 'recorder.busy' | 'storage.critical' | 'provisioning.incomplete' | 'volume.unavailable' | 'config.invalid' | 'session.not-active' | 'question.immutable' | 'quiz.unavailable' | 'ai.unavailable' | 'poweroff.refused' | 'format.refused' | 'export.invalid-target' | 'export.insufficient-space' | 'upload.not-requeueable' | 'import.rejected';
     title: string;
     detail?: string;
     /**
@@ -99,6 +99,20 @@ export type SmartStatus = 'good' | 'warning' | 'failing' | 'unknown';
 export type CaptureCardState = 'present' | 'absent' | 'recovering' | 'failed';
 
 export type UploadJobState = 'queued' | 'uploading' | 'completing' | 'done' | 'failed' | 'dead-letter' | 'cancelled';
+
+/**
+ * The §4.4 failure classification the emitter already computes (it decides
+ * whether `attempt` increments): `connectivity` (no route/DNS/TLS/connect
+ * timeout — does NOT consume attempts, retries at the 6 h cap indefinitely,
+ * `upload.offline` after 24 h); `server` (5xx/reset/stall — consumes
+ * attempts, dead-letters at the cap); `permanent` (4xx/part-missing —
+ * dead-letters fast). Lets S-35 render `offline` distinctly instead of
+ * "failed N of 8" for a device that is merely offline (CG-20, UQ-D-2). Null
+ * when `state ∉ {failed, dead-letter}`; parsing `lastError` for the class is
+ * forbidden (INV-RF-1).
+ *
+ */
+export type UploadFailureClass = 'connectivity' | 'server' | 'permanent';
 
 export type UploadFilePartState = 'pending' | 'uploading' | 'uploaded' | 'missing' | 'failed';
 
@@ -556,6 +570,14 @@ export type UploadJob = {
     adapterId: string;
     state: UploadJobState;
     attempt: number;
+    /**
+     * CG-20 — the §4.4 class of the current failure; null unless
+     * `state ∈ {failed, dead-letter}`. A `failed` job with
+     * `failureClass=connectivity` is S-35's `offline` row-state (no attempts
+     * spent), distinct from `failed`/`server` ("attempt N of 8").
+     *
+     */
+    failureClass: UploadFailureClass | null;
     nextAttemptAt: Instant | null;
     lastError: string | null;
     lastErrorAt: Instant | null;
@@ -1871,6 +1893,16 @@ export type ListRecordingsData = {
         limit?: number;
         state?: RecordingState;
         includeDeleted?: boolean;
+        /**
+         * Case-insensitive title substring (CG-5). Server-side; no date range (the 14-day window makes `from`/`to` low-value — LIB-D-2).
+         */
+        q?: string;
+        /**
+         * Admin-only owner filter (CG-5). A lecturer's owner is already pinned
+         * server-side (INV-RC-5), so the param is ignored/forbidden for them.
+         *
+         */
+        ownerUserId?: Ulid;
     };
     url: '/recordings';
 };
@@ -1947,6 +1979,40 @@ export type GetRecordingResponses = {
 };
 
 export type GetRecordingResponse = GetRecordingResponses[keyof GetRecordingResponses];
+
+export type RetryMergeRecordingData = {
+    body?: never;
+    path: {
+        recordingId: Ulid;
+    };
+    query?: never;
+    url: '/recordings/{recordingId}/retry-merge';
+};
+
+export type RetryMergeRecordingErrors = {
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    403: Problem;
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    409: Problem;
+};
+
+export type RetryMergeRecordingError = RetryMergeRecordingErrors[keyof RetryMergeRecordingErrors];
+
+export type RetryMergeRecordingResponses = {
+    /**
+     * Command accepted (rule SM-R-2): the state transition arrives over the
+     * WS event channel; nothing final is returned here. If no event resolves
+     * the command within resolveBySec, the UI shows a failure.
+     *
+     */
+    202: CommandAccepted;
+};
+
+export type RetryMergeRecordingResponse = RetryMergeRecordingResponses[keyof RetryMergeRecordingResponses];
 
 export type GetRecordingMediaData = {
     body?: never;

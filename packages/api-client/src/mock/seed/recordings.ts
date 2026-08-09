@@ -15,7 +15,11 @@ const HOUR = 60 * 60_000;
 const at = (offsetMs: number) => new Date(Date.parse(SEED_EPOCH) + offsetMs).toISOString();
 const retentionDeleteAfter = (startedAtMs: number) => new Date(startedAtMs + 90 * 24 * HOUR).toISOString();
 
-/** Six rows spanning ready/merging/failed so the library badge vocabulary is exercised. */
+/**
+ * Eight rows spanning ready/merging/failed/deleted so the library badge
+ * vocabulary is exercised, plus the two CG-20 upload-failure classes (offline vs
+ * server) and two USB targets (one too small) for the CG-21 space refusal.
+ */
 export function createRecordingsSeed(users: User[]): RecordingsSeed {
   const lecturer = users.find((u) => u.username === 'a.perera')!;
 
@@ -140,6 +144,52 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
       deletedAt: at(-2 * HOUR),
       deleteReason: 'retention',
     },
+    // CG-20 — an OFFLINE upload: the device can't reach the upload server, so the
+    // job is `failed`/`connectivity` and spends NO attempts (§4.4). S-35 must read
+    // this as "Waiting for the network", never "attempt N of 8".
+    {
+      id: seedId('recording'),
+      sessionId: seedId('session'),
+      title: 'CS2013 — Data Structures, Lecture 6',
+      hallDisplayName: 'Engineering Auditorium A301',
+      ownerUserId: lecturer.id,
+      ownerDisplayName: lecturer.displayName,
+      startedAt: at(-145 * HOUR),
+      endedAt: at(-145 * HOUR + 49 * 60_000),
+      state: 'ready',
+      layoutPresetId: 'fifty-fifty',
+      durationMs: 49 * 60_000,
+      totalBytes: 1_490_000_000,
+      segmentCount: 1,
+      mergeState: 'done',
+      uploadState: 'failed',
+      retentionDeleteAfter: retentionDeleteAfter(Date.parse(SEED_EPOCH) - 145 * HOUR),
+      deletedAt: null,
+      deleteReason: null,
+    },
+    // CG-20 — a SERVER-class failure that IS spending attempts and will dead-letter
+    // at the cap: S-35 reads this as "Upload failed · attempt 3 of 8", the honest
+    // counterpart the offline row must be distinguishable from.
+    {
+      id: seedId('recording'),
+      sessionId: seedId('session'),
+      title: 'CS2013 — Data Structures, Lecture 5',
+      hallDisplayName: 'Engineering Auditorium A301',
+      ownerUserId: lecturer.id,
+      ownerDisplayName: lecturer.displayName,
+      startedAt: at(-169 * HOUR),
+      endedAt: at(-169 * HOUR + 47 * 60_000),
+      state: 'ready',
+      layoutPresetId: 'fifty-fifty',
+      durationMs: 47 * 60_000,
+      totalBytes: 1_430_000_000,
+      segmentCount: 1,
+      mergeState: 'done',
+      uploadState: 'failed',
+      retentionDeleteAfter: retentionDeleteAfter(Date.parse(SEED_EPOCH) - 169 * HOUR),
+      deletedAt: null,
+      deleteReason: null,
+    },
   ];
   const recordings = rows.map((row) => validated(zRecording, row));
 
@@ -151,6 +201,7 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
       adapterId: 'institute-lms',
       state: 'done',
       attempt: 1,
+      failureClass: null,
       nextAttemptAt: null,
       lastError: null,
       lastErrorAt: null,
@@ -190,6 +241,7 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
       adapterId: 'institute-lms',
       state: 'uploading',
       attempt: 1,
+      failureClass: null,
       nextAttemptAt: null,
       lastError: null,
       lastErrorAt: null,
@@ -229,6 +281,7 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
       adapterId: 'institute-lms',
       state: 'dead-letter',
       attempt: 5,
+      failureClass: 'server',
       nextAttemptAt: null,
       lastError: 'remote host returned 503 five times in a row',
       lastErrorAt: at(-40 * HOUR),
@@ -261,6 +314,89 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
         files: [{ streamKey: 'main', sizeBytes: 1_320_000_000, durationMs: recordings[2]!.durationMs, checksum: null }],
       },
     },
+    // CG-20 offline: failed + connectivity, ZERO attempts spent (§4.4). Retries
+    // at the 6 h cap; `nextAttemptAt` is set but no attempt is burned.
+    {
+      id: seedId('upload'),
+      recordingId: recordings[6]!.id,
+      recordingTitle: recordings[6]!.title,
+      adapterId: 'institute-lms',
+      state: 'failed',
+      attempt: 0,
+      failureClass: 'connectivity',
+      nextAttemptAt: at(-1 * HOUR),
+      lastError: 'connect timeout — no route to the upload server',
+      lastErrorAt: at(-145 * HOUR + 55 * 60_000),
+      remoteLectureId: null,
+      progressPct: 0,
+      blockedBy: null,
+      enqueuedAt: recordings[6]!.endedAt!,
+      startedAt: recordings[6]!.endedAt!,
+      completedAt: null,
+      requeuedAt: null,
+      parts: [
+        {
+          id: seedId('upload-part'),
+          uploadJobId: '',
+          recordingFileId: seedId('file'),
+          streamKey: 'main',
+          state: 'pending',
+          bytesTotal: 1_490_000_000,
+          bytesSent: 0,
+          attempt: 0,
+          lastError: null,
+        },
+      ],
+      metadata: {
+        title: recordings[6]!.title,
+        hallCode: 'ENG-A301',
+        startedAt: recordings[6]!.startedAt,
+        endedAt: recordings[6]!.endedAt!,
+        recordedDurationMs: recordings[6]!.durationMs!,
+        files: [{ streamKey: 'main', sizeBytes: 1_490_000_000, durationMs: recordings[6]!.durationMs, checksum: null }],
+      },
+    },
+    // CG-20 server-class: failed + server, attempts ARE spending toward the cap.
+    {
+      id: seedId('upload'),
+      recordingId: recordings[7]!.id,
+      recordingTitle: recordings[7]!.title,
+      adapterId: 'institute-lms',
+      state: 'failed',
+      attempt: 3,
+      failureClass: 'server',
+      nextAttemptAt: at(1 * HOUR),
+      lastError: 'remote host returned 500',
+      lastErrorAt: at(-169 * HOUR + 58 * 60_000),
+      remoteLectureId: null,
+      progressPct: 0,
+      blockedBy: null,
+      enqueuedAt: recordings[7]!.endedAt!,
+      startedAt: recordings[7]!.endedAt!,
+      completedAt: null,
+      requeuedAt: null,
+      parts: [
+        {
+          id: seedId('upload-part'),
+          uploadJobId: '',
+          recordingFileId: seedId('file'),
+          streamKey: 'main',
+          state: 'failed',
+          bytesTotal: 1_430_000_000,
+          bytesSent: 0,
+          attempt: 3,
+          lastError: 'remote host returned 500',
+        },
+      ],
+      metadata: {
+        title: recordings[7]!.title,
+        hallCode: 'ENG-A301',
+        startedAt: recordings[7]!.startedAt,
+        endedAt: recordings[7]!.endedAt!,
+        recordedDurationMs: recordings[7]!.durationMs!,
+        files: [{ streamKey: 'main', sizeBytes: 1_430_000_000, durationMs: recordings[7]!.durationMs, checksum: null }],
+      },
+    },
   ].map((row) => {
     const detail = { ...row, parts: row.parts.map((p) => ({ ...p, uploadJobId: row.id })) };
     validated(zUploadJob, detail); // the base shape must independently validate too
@@ -274,6 +410,17 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
       label: 'BACKUP-1',
       capacityBytes: 64_000_000_000,
       freeBytes: 40_000_000_000,
+    },
+    // Two candidates so the picker must ask the user (never "the first drive",
+    // B-38 / EXP-D-1). This one is deliberately too small for a multi-recording
+    // selection — the per-card space check (C-6) and, on the listing→copy race,
+    // the CG-21 `export.insufficient-space` refusal both key off its freeBytes.
+    {
+      devicePath: '/dev/sdc1',
+      mountPath: '/media/usb1',
+      label: 'LECTURE-STICK',
+      capacityBytes: 8_000_000_000,
+      freeBytes: 900_000_000,
     },
   ].map((row) => validated(zUsbVolume, row));
 

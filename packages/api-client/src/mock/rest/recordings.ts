@@ -51,14 +51,26 @@ export function createRecordingsOperations(ctx: RestContext) {
       limit?: number;
       state?: RecordingState;
       includeDeleted?: boolean;
+      q?: string;
+      ownerUserId?: Ulid;
     }): Promise<Page<Recording>> => {
       const me = currentUser(ctx);
       const admin = isAdmin(ctx);
       const includeDeleted = admin && (query?.includeDeleted ?? false);
 
+      // C-1: ownership is the SERVER's filter, never the client's — a lecturer's
+      // page is already scoped, so the `ownerUserId` param is honoured for admins
+      // only and ignored for a lecturer (CG-5).
       let rows = seed.recordings.filter((r) => admin || r.ownerUserId === me.id);
       if (!includeDeleted) rows = rows.filter((r) => r.state !== 'deleted');
       if (query?.state) rows = rows.filter((r) => r.state === query.state);
+      if (admin && query?.ownerUserId) {
+        rows = rows.filter((r) => r.ownerUserId === query.ownerUserId);
+      }
+      if (query?.q) {
+        const needle = query.q.toLowerCase();
+        rows = rows.filter((r) => r.title.toLowerCase().includes(needle));
+      }
 
       const limit = query?.limit ?? DEFAULT_LIMIT;
       const start = query?.cursor ? Number.parseInt(query.cursor, 10) : 0;
@@ -84,6 +96,32 @@ export function createRecordingsOperations(ctx: RestContext) {
       row.state = 'deleted';
       row.deletedAt = nowIsoZ(world.clock);
       row.deleteReason = 'admin';
+      return validated(zCommandAccepted, {
+        commandId: nextUlid(world),
+        acceptedAt: nowIsoZ(world.clock),
+        resolveBySec: RESOLVE_BY_SEC,
+      });
+    },
+
+    // x-required-role: admin (RA-07, CG-7) — the only manual merge control; merging
+    // is otherwise automatic (A-12, SM-D-1). 409 unless the recording is `failed`.
+    retryMergeRecording: async (recordingId: Ulid): Promise<CommandAccepted> => {
+      requireAdmin(ctx);
+      const refusal = engine.onCommand('retryMergeRecording');
+      if (refusal) throw new ProblemError(refusal);
+      const row = seed.recordings.find((r) => r.id === recordingId);
+      if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown recording: ${recordingId}` });
+      if (row.mergeState !== 'failed') {
+        throw new ProblemError({
+          status: 409,
+          code: 'conflict',
+          title: 'This recording is not in a failed merge state',
+        });
+      }
+      // RA-07 resets the attempt counter and re-runs machine 1b; the recording
+      // returns to `merging` and resolves on recording.artifact{merging}.
+      row.state = 'merging';
+      row.mergeState = 'running';
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),
@@ -117,6 +155,18 @@ export function createRecordingsOperations(ctx: RestContext) {
         const r = seed.recordings.find((x) => x.id === id);
         return sum + (r?.totalBytes ?? 0);
       }, 0);
+      // CG-21 / EXP-D-5: the server is the authoritative backstop for the
+      // listing→copy race. The client pre-checks per-card (C-6), but a drive can
+      // fill between listing and copy, so a target without room is refused with a
+      // NAMED reason U-5 can render, not a generic validation.invalid.
+      if (target.freeBytes < bytesTotal) {
+        throw new ProblemError({
+          status: 422,
+          code: 'export.insufficient-space',
+          title: 'That drive filled up — free space or pick another',
+          detail: `Needs ${bytesTotal} bytes; ${target.label} has ${target.freeBytes} free.`,
+        });
+      }
       const job = validated(zExportJob, {
         id: nextUlid(world),
         requestedAt: nowIsoZ(world.clock),

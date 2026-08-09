@@ -121,4 +121,45 @@ describe('rest schema coverage', () => {
     expect(ok('ALLUPPERCASE1')).toBe(false); // no lowercase
     expect(ok('NoDigitsHere')).toBe(false); // no digit
   });
+
+  // ── contract v0.5 (docs/design/contract-amendments.md, 2026-08-09) ──
+
+  it('CG-21: export.insufficient-space is a Problem code', () => {
+    expect(rest.zProblem.shape.code.options).toContain('export.insufficient-space');
+  });
+
+  it('CG-20: UploadFailureClass is the §4.4 closed set', () => {
+    expect(rest.zUploadFailureClass.options).toEqual(['connectivity', 'server', 'permanent']);
+  });
+
+  it('CG-20: UploadJob carries a nullable failureClass', () => {
+    const base = {
+      id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+      recordingId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D',
+      recordingTitle: 'Lecture 9',
+      adapterId: 'placeholder',
+      state: 'failed' as const,
+      attempt: 0,
+      nextAttemptAt: null,
+      lastError: null,
+      lastErrorAt: null,
+      remoteLectureId: null,
+      progressPct: 0,
+      blockedBy: null,
+      enqueuedAt: '2026-08-09T09:00:00Z',
+      startedAt: null,
+      completedAt: null,
+      requeuedAt: null,
+    };
+    // an offline stall — no attempts spent, connectivity class
+    expect(rest.zUploadJob.parse({ ...base, failureClass: 'connectivity' }).failureClass).toBe(
+      'connectivity',
+    );
+    // null is valid (state ∉ {failed, dead-letter} in practice, but the field is nullable)
+    expect(rest.zUploadJob.parse({ ...base, state: 'done', failureClass: null }).failureClass).toBe(
+      null,
+    );
+    // missing failureClass fails — it is a required key (contract UploadJob.required)
+    expect(rest.zUploadJob.safeParse(base).success).toBe(false);
+  });
 });

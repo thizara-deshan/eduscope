@@ -12,6 +12,138 @@ during a plan, and never speculatively.
 
 ---
 
+## 0.4.0 → 0.5.0 — 2026-08-09 · Wave 5 (Library, playback, export, upload queue) gate
+
+Carries the **five** gaps the W-5…W-9 wireframe gate answered — **CG-5** (S-21),
+**CG-7** (S-22), **CG-3** and **CG-21** (S-23), **CG-20** (S-35). Four are
+additive and one (CG-3) is a prose-only semantic; none is breaking. Wave 5's plan
+run is unblocked by this amendment. **S-24 (W-8) required no contract change** —
+`deleteRecording`, RA-06's real audit columns and the resolving events already
+exist; it is the wave's clean "a run can add nothing" case.
+
+Sources: [S-21 §9](screens/S-21-design.md#9-contract-changes-this-design-requires),
+[S-22 §9](screens/S-22-design.md#9-contract-changes-this-design-requires),
+[S-23 §8](screens/S-23-design.md#8-contract-changes-this-design-requires),
+[S-35 §9](screens/S-35-design.md#9-contract-changes-this-design-requires),
+[open-decisions](../discovery/open-decisions.md) (D-13 upload timing underpins the
+requeue/offline story CG-20 renders). Rationale lives in the §10 "Resolved by"
+links and is not restated here.
+
+`info.version` `0.4.0` → `0.5.0`.
+
+**`contracts/events.md` WAS touched — one WS-visible change plus one §1 note.**
+The WS change: §2.18 `UploadJobPayload` gains `failureClass` (CG-20), mirroring
+the new openapi `UploadJob.failureClass`. The note: §1's "Scoping" section now
+records the implicit scoped-subscription semantic (CG-3) — calling a flow's REST
+entry marks the `AuthSession` subscribed to its scoped stream, honouring "clients
+send no WS messages" with no new endpoint or client→server frame. events.md's own
+version header moves `0.4.0` → `0.5.0`. **The other three gaps (CG-5, CG-7, CG-21)
+are REST-only and touch `openapi.yaml` alone.**
+
+### Amendment rows
+
+| # | CG | Decision | Severity | Change |
+|---|---|---|---|---|
+| **A-10** | [CG-5](screen-inventory.md#10-contract-gaps) | LIB-D-2 | **additive** (two optional query params; no schema change) | `listRecordings` gains `?q=` (case-insensitive title substring) and `?ownerUserId=` (admin-only). No `?from=`/`?to=` |
+| **A-11** | CG-7 | DTL-D-6 | **additive** (one operation binding an already-modelled command) | New `POST /recordings/{recordingId}/retry-merge` — admin, 202-async, resolves via existing `recording.artifact{merging}`; `403`/`409` refusals |
+| **A-12** | CG-3 | EXP-D-4 | **behavioral** (prose only; no schema change) | Op descriptions of `listExportTargets`/`createExport`/`getExport`/`queryLogs` + events.md §1 state that calling the REST entry marks the `AuthSession` subscribed to its scoped stream for a TTL |
+| **A-13** | CG-21 | EXP-D-5 | **additive** (one enum value) | `Problem.code` gains `export.insufficient-space`; `createExport` returns it (`422`) when the target lacks room |
+| **A-14** | CG-20 | UQ-D-2 | **additive** (one nullable field + one enum, both on data the emitter already holds) | `UploadJob` + `UploadJobPayload` gain `failureClass` (`connectivity`/`server`/`permanent`/null); new `UploadFailureClass` enum |
+
+---
+
+#### A-10 · CG-5 · `listRecordings` — `q` + `ownerUserId`
+
+*Additive.* Two optional query params; `Recording` is unchanged. Filtering is
+server-side and resets the cursor (a cursor-paged list cannot be client-filtered).
+`ownerUserId` is admin-only — a lecturer is already owner-scoped server-side
+(INV-RC-5), so the param is ignored for them. `?from=`/`?to=` were deliberately
+**not** added (the 14-day window is already small, LIB-D-2). No existing caller
+breaks: both params are optional and default to today's unfiltered behaviour.
+
+#### A-11 · CG-7 · `POST /recordings/{recordingId}/retry-merge`
+
+*Additive.* One operation binding the already-modelled `cmd.recording.retry-merge`
+(RA-07, admin, `G-ADMIN`). 202-async; RA-07 resets the merge attempt counter and
+the recording returns to `merging`, resolving on the **existing**
+`recording.artifact{merging}` event — no new event, no schema change. Refusals:
+`403` (lecturer, U-6) and `409` (the recording is not in `failed`). This is the
+only manual merge control in the product; merging is otherwise automatic (A-12,
+SM-D-1). Without it the `merge failed` state (S-22 §2.4) was a reachable dead end.
+Consequence for the shared/mock coverage gates: the panel operation count moves
+77 → 78 (81 → 82 including the four server-side quiz-sync ops); the count
+assertions in `packages/shared/test/constants.test.ts` and
+`packages/api-client/test/gate-contract-coverage.test.ts` are updated to match.
+
+#### A-12 · CG-3 · scoped-subscription semantic
+
+*Behavioral / prose only — no schema change.* events.md §1 already scopes
+`export.job`/`usb.volumes`/`log.entry` to specific sessions, but also states
+clients send no WS messages, leaving no defined moment a session *becomes*
+subscribed. The answer (EXP-D-4): calling the flow's REST entry marks the calling
+`AuthSession` subscribed for a TTL, refreshed by continued reads —
+`GET /exports/targets` → `usb.volumes`; `createExport`/`GET /exports/{id}` →
+`export.job`; `GET /logs` → `log.entry`. Recorded in the four operation
+descriptions **and** in events.md §1's "Scoping" section. No new endpoint, no
+client→server frame; the mock's export/log streams are already session-local, so
+no adapter behaviour changes. S-34's live-log tail reuses the same mechanism.
+
+#### A-13 · CG-21 · `Problem.code` — add `export.insufficient-space`
+
+*Additive.* One value alongside `export.invalid-target`. The client pre-checks
+space per drive-card (C-6), but a drive can fill between listing and copy;
+`createExport` now refuses that race with a **named**, U-5-renderable reason
+(`422`) instead of a generic `validation.invalid`. Adding a value to the closed
+`Problem.code` enum is a compile event, not merely a doc change (as CG-10 was):
+the exhaustive `checkedProblem` switch in
+`apps/panel/src/screens/dashboard/use-start-recording.ts` gains the matching
+`case` so the union stays exhaustively handled. The mock `createExport` returns
+the code when `target.freeBytes < Σ selected bytes`.
+
+#### A-14 · CG-20 · `UploadJob` / `UploadJobPayload` — add `failureClass`
+
+*Additive.* One nullable field mirrored on the REST schema and the WS payload,
+plus the new `UploadFailureClass` enum (`connectivity`/`server`/`permanent`). The
+value is the §4.4 classification the emitter already computes — it is what decides
+whether `attempt` increments — so nothing new is calculated; it is only surfaced.
+It lets S-35 render an `offline` stall (`failed` + `connectivity`, no attempts
+spent) distinctly from a server failure (`failed` + `server`, "attempt N of 8"),
+the exact §4.4 lie the `offline` state exists to prevent. `null` when
+`state ∉ {failed, dead-letter}`; parsing `lastError` for the class stays forbidden
+(INV-RF-1). Required on `UploadJob` (mirrors the "every field required, nullability
+carries absence" convention the schema already follows).
+
+### Mock adapter (kept in lockstep — the mock must never lag the contract)
+
+- **CG-5:** mock `listRecordings` honours `q` (title `includes`) and, for admins
+  only, `ownerUserId`; ownership stays the server's filter (C-1), never the
+  client's.
+- **CG-7:** mock `retryMergeRecording` is admin-gated, refuses `409` unless
+  `mergeState = failed`, and drives the seeded `merge failed` recording (Lecture
+  8) back to `merging`. The real client throws `NotImplemented` via the operation
+  loop, as designed for Phase 2.
+- **CG-21:** mock `createExport` refuses `export.insufficient-space` when the
+  target lacks room; the seed now offers **two** USB volumes (one deliberately too
+  small — `LECTURE-STICK`, 0.9 GB free) so the picker must ask the user (EXP-D-1)
+  and both the per-card check and the refusal are reachable.
+- **CG-20:** every seeded `UploadJob` carries `failureClass`; two new recordings +
+  jobs make both new row-states reachable — an **offline** job (`failed` /
+  `connectivity`, `attempt = 0`) and a **server-failed** job (`failed` / `server`,
+  `attempt = 3`). Richer scenario scripting (a live `wan-loss`, `usb-pull`) stays
+  Wave 5 plan-run work per each design doc's §10 "Mock & scenario work Wave 5
+  inherits"; the catalog was not forked.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `packages/shared` codegen re-run from the amended contract | `types.gen.ts` + `zod.gen.ts` regenerated; `UploadFailureClass`, `UploadJob.failureClass`, `export.insufficient-space`, the `q`/`ownerUserId` params and `retryMergeRecording` all present |
+| `pnpm typecheck` (4 projects) | pass (after the CG-21 exhaustive-switch `case` was added) |
+| `pnpm test` | **1092 pass** — shared 24 (incl. 3 new CG-20/CG-21 assertions), api-client 257, panel 801, quiz 10; 0 fail |
+| Contract-honesty gate | every mocked `listRecordings`/`listUploadJobs`/`getUploadJob`/`createExport` validates against the regenerated zod schemas, including `failureClass` |
+
+---
+
 ## 0.3.0 → 0.4.0 — 2026-08-08 · Wave 4 (AI & quiz) gate
 
 Carries **CG-19**, the one gap the S-20 (Quiz join / QR card) wireframe gate

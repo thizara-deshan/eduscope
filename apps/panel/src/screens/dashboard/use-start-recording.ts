@@ -42,6 +42,7 @@ function checkedProblem(problem: Problem): Problem {
     case 'poweroff.refused':
     case 'format.refused':
     case 'export.invalid-target':
+    case 'export.insufficient-space':
     case 'upload.not-requeueable':
     case 'import.rejected':
       return problem;

@@ -80,9 +80,15 @@ export interface EduscopeClient {
     limit?: number;
     state?: RecordingState;
     includeDeleted?: boolean;
+    /** CG-5 — case-insensitive title substring; server-side (LIB-D-2). */
+    q?: string;
+    /** CG-5 — admin-only owner filter; ignored for a server-scoped lecturer. */
+    ownerUserId?: Ulid;
   }): Promise<Page<Recording>>;
   getRecording(recordingId: Ulid): Promise<RecordingDetail>;
   deleteRecording(recordingId: Ulid): Promise<CommandAccepted>;
+  /** x-required-role: admin (RA-07, CG-7). 409 if the recording is not in `failed`. */
+  retryMergeRecording(recordingId: Ulid): Promise<CommandAccepted>;
   /** Media bytes (openapi.yaml: 200 Blob, 206 partial-content on Range). */
   getRecordingMedia(recordingId: Ulid, fileId: Ulid, query?: { download?: boolean }): Promise<Blob>;
   listExportTargets(): Promise<UsbVolume[]>;

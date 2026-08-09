@@ -1,6 +1,6 @@
 # Eduscope WS Event Catalog — Contract v0
 
-> Contract **v0.4.0** — the realtime half of [openapi.yaml](openapi.yaml).
+> Contract **v0.5.0** — the realtime half of [openapi.yaml](openapi.yaml).
 > Successor of state-machines.md §10; that section now defers here (see its
 > catalog note). Payload schemas are the zod definitions in
 > [`packages/shared/src/schemas/events.ts`](../packages/shared/src/schemas/events.ts)
@@ -13,6 +13,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 0.5.0 | 2026-08-09 | §2.18 `UploadJobPayload` gains `failureClass` (CG-20), mirroring the openapi `UploadJob.failureClass` so S-35 can tell an offline stall from a server failure live, not only on a REST snapshot. §1 records the implicit scoped-subscription semantic (CG-3): calling a flow's REST entry marks the AuthSession subscribed to its scoped stream — no WS client→server message. Wave 5 (S-35/S-23) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.4.0 | 2026-08-08 | §2.15 `QuizSessionPayload` gains `syncState` (CG-19), mirroring `QuizSessionProjection.syncState` so the joined-count staleness is knowable live and not only on REST snapshot. Wave 4 (S-20) wireframe-gate answer; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.3.0 | 2026-08-05 | §2.1 `RecordingStatePayload` gains `takeoverAt` + `takeoverByDisplayName` (CG-14). §2.10 `system.alert` emitter list gains R-22 (CG-17). Both Wave 2 (S-06/S-12) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.1.0 | 2026-07-30 | Initial contract. Adopts state-machines §10 verbatim, plus four additions that §10 lacked but screens require: `audio.control` (INV-AC-1), `export.job` + `usb.volumes` (LP-10/LP-11, B-38 session scoping), `firmware.state` (AD-5). `ai.batch_ready` from earlier sketches is **superseded** by `ai.set` (state `ready` *is* batch-ready) per state-machines §10. Defines the WebRTC preview-signaling envelope (A-17) and the device↔quiz-server sync contract (DM-P5). |
@@ -61,6 +62,15 @@ Exceptions, scoped to specific connections:
 | `export.job`, `usb.volumes` | the AuthSession that requested the export / has the export flow open | B-38's `io.emit` broadcast bug |
 | `log.entry` | connections that subscribed to the live log view (AD-7 open) | volume |
 | `audio.levels` | panel connections only | telemetry volume (§5 budget) |
+
+**How a session becomes subscribed (CG-3, v0.5).** Clients send no WS messages,
+so there is no explicit subscribe frame. Instead, **calling a scoped stream's
+REST entry marks the calling `AuthSession` subscribed for a TTL**, refreshed by
+continued reads and expiring on TTL or session end: `GET /exports/targets`
+subscribes to `usb.volumes`; `createExport`/`GET /exports/{id}` subscribe to
+`export.job` for that job; `GET /logs` subscribes to `log.entry`. This gives the
+scoped streams a defined trigger without a new endpoint or a client→server
+message (S-23 EXP-D-4; the same mechanism S-34's live tail reuses).
 
 **Secrets never appear in any event** — stream keys, upload credentials, RTSP
 passwords (INV-ST-1, INV-UJ-5, PF-17, B-59).
@@ -246,7 +256,7 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | | |
 |---|---|
 | Direction | core-api → admin AD-9, panel library |
-| Payload | `UploadJobPayload` — `jobId`, `recordingId`, `state`, `attempt`, `nextAttemptAt`, `progressPct`, `lastError`, `blockedBy` `[D-02b]` |
+| Payload | `UploadJobPayload` — `jobId`, `recordingId`, `state`, `attempt`, `failureClass` (CG-20 — `connectivity`/`server`/`permanent`/null, mirrors `UploadJob.failureClass`; null unless `state ∈ {failed, dead-letter}`), `nextAttemptAt`, `progressPct`, `lastError`, `blockedBy` `[D-02b]` |
 | Emitter | Machine 3a: U-01…U-10 |
 | Frequency | On transition + progress steps ≥ 5 % |
 | Consumers | AD-9 queue rows (waiting/uploading/done/failed/dead-letter + retry history), library upload badge (LP-10) |
