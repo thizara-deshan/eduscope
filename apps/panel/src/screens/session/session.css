@@ -33,16 +33,11 @@
 }
 
 .us-capturecard,
-.us-sessionlayout__ai-slot,
 .us-sessionlayout__skeleton {
   min-height: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
   background: var(--surface);
-}
-
-.us-sessionlayout__ai-slot {
-  padding: var(--sp-10);
 }
 
 .us-sessionlayout__skeleton {

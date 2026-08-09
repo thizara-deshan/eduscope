@@ -43,6 +43,8 @@ function renderSession(aiEnabled: boolean | undefined) {
     listSourceRoles: vi.fn(() => new Promise<never>(() => undefined)),
     getSourcesStatus: vi.fn(() => new Promise<never>(() => undefined)),
     getStorageOverview: vi.fn(() => new Promise<never>(() => undefined)),
+    getAiCountdown: vi.fn(() => new Promise<never>(() => undefined)),
+    listQuestions: vi.fn(() => Promise.resolve([])),
     pauseRecording: vi.fn(), resumeRecording: vi.fn(), stopRecording: vi.fn(),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
@@ -60,14 +62,14 @@ function renderSession(aiEnabled: boolean | undefined) {
 
 describe('SessionLayout', () => {
   it('mounts Capture Assurance, not S-13, when AI is disabled', () => {
-    const view = renderSession(false);
+    renderSession(false);
     expect(screen.getByTestId('capture-assurance-card')).toBeInTheDocument();
-    expect(view.container.querySelector('[data-screen="S-13"]')).toBeNull();
+    expect(screen.queryByTestId('ai-studio-card')).toBeNull();
   });
 
-  it('mounts the Wave 4 S-13 slot, not capture assurance, when AI is enabled', () => {
-    const view = renderSession(true);
-    expect(view.container.querySelector('[data-screen="S-13"][data-wave="4"]')).toBeInTheDocument();
+  it('mounts the Wave 4 S-13 AI Studio card, not capture assurance, when AI is enabled', () => {
+    renderSession(true);
+    expect(screen.getByTestId('ai-studio-card')).toBeInTheDocument();
     expect(screen.queryByTestId('capture-assurance-card')).toBeNull();
   });
 

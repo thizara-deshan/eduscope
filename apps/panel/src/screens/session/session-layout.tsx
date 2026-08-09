@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AiStudioCard } from '../ai/ai-studio-card.js';
 import { TimerCard } from '../transport/timer-card.js';
 import { CaptureAssuranceCard } from './capture-assurance-card.js';
 import { MeetingChannelCard } from './meeting-channel-card.js';
@@ -26,9 +27,7 @@ export function SessionLayout(): JSX.Element {
             aria-label="Loading session content"
           />
         ) : aiEnabled ? (
-          <div className="us-sessionlayout__ai-slot" data-screen="S-13" data-wave="4">
-            AI Quiz Studio
-          </div>
+          <AiStudioCard />
         ) : (
           <CaptureAssuranceCard />
         )}
