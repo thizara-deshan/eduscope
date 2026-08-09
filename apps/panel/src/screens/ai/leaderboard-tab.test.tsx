@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import type { Leaderboard } from '@eduscope/shared';
 import { ClientContext } from '../../client/client-provider.js';
+import { OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { LeaderboardTab } from './leaderboard-tab.js';
@@ -43,7 +44,8 @@ function renderTab(methods: Partial<EduscopeClient> = {}) {
     ...methods,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
-    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
+    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client },
+      createElement(OverlayProvider, null, children)),
   );
   return render(<LeaderboardTab />, { wrapper });
 }

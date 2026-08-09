@@ -1,4 +1,6 @@
 import { useLeaderboard } from '../../ai/use-leaderboard.js';
+import { useOverlays } from '../../overlays/overlay-host.js';
+import { StudentDetailDialog } from './student-detail-dialog.js';
 import '../../ai/ai.css';
 
 const MEDALS: Record<1 | 2 | 3, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
@@ -14,6 +16,11 @@ function medalFor(rank: number): string | null {
  */
 export function LeaderboardTab() {
   const lb = useLeaderboard();
+  const overlays = useOverlays();
+
+  const openStudent = (studentIdNumber: string) => {
+    const id = overlays.open(<StudentDetailDialog studentIdNumber={studentIdNumber} onClose={() => overlays.close(id)} />);
+  };
 
   if (lb.loading) {
     return <div className="us-insights__skeleton" data-testid="leaderboard-loading" aria-label="Loading" />;
@@ -41,13 +48,20 @@ export function LeaderboardTab() {
       ) : (
         <ol className="us-lb__list" aria-label="Leaderboard ranking">
           {lb.entries.map((entry) => (
-            <li key={entry.studentIdNumber} className="us-lb__row" data-testid={`leaderboard-row-${entry.studentIdNumber}`}>
-              <span className="us-lb__rank">{medalFor(entry.rank) ?? entry.rank}</span>
-              <span className="us-lb__name">{entry.displayName}</span>
-              <span className="us-lb__fraction">{entry.correct}/{entry.answered}</span>
-              <span className="us-lb__statvalue">{entry.points}</span>
-              <span className="us-lb__accuracy">{Math.round(entry.accuracy * 100)}%</span>
-              <span className="us-lb__time">{Math.round(entry.avgResponseMs / 1000)}s</span>
+            <li key={entry.studentIdNumber}>
+              <button
+                type="button"
+                className="us-lb__row"
+                data-testid={`leaderboard-row-${entry.studentIdNumber}`}
+                onClick={() => openStudent(entry.studentIdNumber)}
+              >
+                <span className="us-lb__rank">{medalFor(entry.rank) ?? entry.rank}</span>
+                <span className="us-lb__name">{entry.displayName}</span>
+                <span className="us-lb__fraction">{entry.correct}/{entry.answered}</span>
+                <span className="us-lb__statvalue">{entry.points}</span>
+                <span className="us-lb__accuracy">{Math.round(entry.accuracy * 100)}%</span>
+                <span className="us-lb__time">{Math.round(entry.avgResponseMs / 1000)}s</span>
+              </button>
             </li>
           ))}
         </ol>

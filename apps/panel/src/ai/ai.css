@@ -1019,15 +1019,19 @@
 }
 
 .us-lb__row {
+  width: 100%;
   display: grid;
   grid-template-columns: 28px 1fr auto auto auto auto;
   align-items: center;
   gap: var(--sp-4);
   min-height: var(--tap-row);
   padding: 0 var(--sp-4);
+  border: none;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
-  font-size: var(--fs-sm);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
 }
 
 .us-lb__rank {
@@ -1129,4 +1133,99 @@
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   font-size: var(--fs-sm);
+}
+
+/* ── S-19 student detail dialog (light — mounted via OverlayHost) ─────────── */
+
+.us-studentdialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-8) var(--sp-9);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-studentdialog__head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.us-studentdialog__close {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+
+.us-studentdialog__stale {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-9);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+}
+
+.us-studentdialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--sp-7) var(--sp-9);
+}
+
+.us-studentdialog__skeleton {
+  min-height: 120px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.us-studentdialog__summary {
+  display: flex;
+  gap: var(--sp-7);
+  font-weight: 700;
+  margin-bottom: var(--sp-5);
+}
+
+.us-studentdialog__partial {
+  margin: 0 0 var(--sp-5);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.us-studentdialog__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.us-studentdialog__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+
+.us-studentdialog__correct {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.us-studentdialog__incorrect {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.us-studentdialog__unanswered {
+  color: var(--text-faint);
 }
