@@ -1,4 +1,6 @@
 import { useInsights, type InsightsPublicationView } from '../../ai/use-insights.js';
+import { useOverlays } from '../../overlays/overlay-host.js';
+import { NamesDialog } from './names-dialog.js';
 import '../../ai/ai.css';
 
 const CLOSE_REASON_COPY: Record<NonNullable<InsightsPublicationView['closeReason']>, string> = {
@@ -14,8 +16,11 @@ const CLOSE_REASON_COPY: Record<NonNullable<InsightsPublicationView['closeReason
  */
 export function PreviousQuestionsTab() {
   const insights = useInsights();
-  // Opens S-18 (Task 9).
-  const openNames: (publicationId: string) => void = () => {};
+  const overlays = useOverlays();
+
+  const openNames = (publicationId: string) => {
+    const id = overlays.open(<NamesDialog publicationId={publicationId} onClose={() => overlays.close(id)} />);
+  };
 
   if (insights.loading) {
     return <div className="us-insights__skeleton" data-testid="previous-questions-loading" aria-label="Loading" />;

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ClientContext } from '../../client/client-provider.js';
+import { OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { InsightsColumn } from './insights-column.js';
@@ -29,7 +30,8 @@ function renderColumn(collapsed = false) {
     })),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
-    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
+    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client },
+      createElement(OverlayProvider, null, children)),
   );
   return render(<InsightsColumn collapsed={collapsed} />, { wrapper });
 }
