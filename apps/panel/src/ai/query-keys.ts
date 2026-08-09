@@ -6,7 +6,13 @@ import type { Ulid } from '@eduscope/shared';
  */
 export const AI_KEYS = {
   countdown: ['ai', 'countdown'] as const,
-  questions: (sessionId: Ulid | undefined) => ['ai', 'questions', sessionId] as const,
+  /**
+   * `state` is part of the key, not just the queryFn's argument — S-13 reads
+   * `draft`-only for its ready-banner count while S-14 reads the unfiltered
+   * list; two different queryFns behind the same key would let TanStack Query
+   * serve one screen's cached (filtered) response to the other.
+   */
+  questions: (sessionId: Ulid | undefined, state?: string) => ['ai', 'questions', sessionId, state ?? 'all'] as const,
   publications: (sessionId: Ulid | undefined) => ['ai', 'publications', sessionId] as const,
   leaderboard: (sessionId: Ulid | undefined) => ['ai', 'leaderboard', sessionId] as const,
   quizSession: ['quiz', 'session'] as const,

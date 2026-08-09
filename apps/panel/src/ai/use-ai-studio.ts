@@ -62,7 +62,7 @@ export function useAiStudio(): UseAiStudio {
     queryFn: () => client.getAiCountdown(),
   });
   const draftsQuery = useQuery({
-    queryKey: AI_KEYS.questions(sessionId),
+    queryKey: AI_KEYS.questions(sessionId, 'draft'),
     queryFn: () => client.listQuestions({ sessionId: sessionId!, state: 'draft' }),
     enabled: sessionId !== undefined,
   });

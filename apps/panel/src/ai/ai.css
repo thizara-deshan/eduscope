@@ -987,6 +987,18 @@
   color: var(--warning);
 }
 
+.us-pqcard__closebtn {
+  margin-top: var(--sp-4);
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
 /* ── S-17 leaderboard tab (panel-only, dark scope) ─────────────────────────── */
 
 .us-lb__head {

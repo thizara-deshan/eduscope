@@ -42,6 +42,7 @@ export function AiStudioCard() {
       <div
         className="us-assistant us-studio us-studio--loading"
         data-testid="ai-studio-card"
+        data-screen="S-13"
         data-state="loading"
         aria-label="Loading AI Studio"
       />
@@ -56,6 +57,7 @@ export function AiStudioCard() {
     <section
       className={`us-assistant us-studio${studio.stale ? ' us-studio--stale' : ''}`}
       data-testid="ai-studio-card"
+      data-screen="S-13"
       data-state={studio.state}
       data-stale={studio.stale || undefined}
     >

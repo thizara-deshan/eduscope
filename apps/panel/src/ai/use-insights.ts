@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PublicationCloseReason, PublicationWithQuestion, QuizSyncState } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
 import { useRecordingSession, usePublicationsList, useWsShallow } from '../store/selectors.js';
@@ -42,6 +42,7 @@ export interface UseInsights {
  */
 export function useInsights(): UseInsights {
   const client = useClient();
+  const queryClient = useQueryClient();
   const session = useRecordingSession();
   const sessionId = session?.sessionId ?? undefined;
   const wsPublications = usePublicationsList();
@@ -52,6 +53,19 @@ export function useInsights(): UseInsights {
     queryFn: () => client.listPublications({ sessionId: sessionId! }),
     enabled: sessionId !== undefined,
   });
+
+  // A publication Q-30 mints mid-session has no REST row until the next
+  // snapshot — refetch once per newly-observed id rather than teaching this
+  // hook to hand-assemble a PublicationWithQuestion from WS fields alone.
+  const knownIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const row of query.data ?? []) knownIds.current.add(row.id);
+  }, [query.data]);
+  useEffect(() => {
+    if (sessionId === undefined) return;
+    const unseen = wsPublications.some((p) => !knownIds.current.has(p.publicationId));
+    if (unseen) void queryClient.invalidateQueries({ queryKey: AI_KEYS.publications(sessionId) });
+  }, [wsPublications, sessionId, queryClient]);
 
   const deltaById = new Map(wsPublications.map((p) => [p.publicationId, p]));
   const publications: InsightsPublicationView[] = (query.data ?? []).map((row) => {
@@ -74,7 +88,7 @@ export function useInsights(): UseInsights {
       syncState: delta?.syncState ?? row.syncState,
       reveal: state === 'closed' && projectorState === 'showing',
     };
-  }).sort((a, b) => (a.publicationId < b.publicationId ? 1 : -1));
+  }).reverse(); // newest-first: live-created rows are always appended after the REST snapshot's own order
 
   const syncFailed = alerts.some((a) => a.code === 'quiz.sync-stale' && a.clearedAt === null);
 

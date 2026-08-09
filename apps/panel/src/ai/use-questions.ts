@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProblemError } from '@eduscope/api-client';
 import { TIMERS, type Question, type QuestionUpdate } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
@@ -42,6 +42,7 @@ const SEND_REFUSAL_REASON = 'Students cannot receive this question right now —
  */
 export function useQuestions(): UseQuestions {
   const client = useClient();
+  const queryClient = useQueryClient();
   const session = useRecordingSession();
   const sessionId = session?.sessionId ?? undefined;
   const wsSet = useAiSet();
@@ -53,6 +54,21 @@ export function useQuestions(): UseQuestions {
     queryFn: () => client.listQuestions({ sessionId: sessionId! }),
     enabled: sessionId !== undefined,
   });
+
+  // A question a live event announces (Q-12's own generated draft, or a
+  // freshly `createQuestion`d one) has no REST row until the next snapshot —
+  // refetch once per newly-observed id so its real prompt/options load,
+  // rather than teaching this hook to hand-assemble full Question content
+  // from the WS delta alone (which never carries it).
+  const knownIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const row of query.data ?? []) knownIds.current.add(row.id);
+  }, [query.data]);
+  useEffect(() => {
+    if (sessionId === undefined) return;
+    const unseen = Object.keys(questionDeltas).some((id) => !knownIds.current.has(id));
+    if (unseen) void queryClient.invalidateQueries({ queryKey: AI_KEYS.questions(sessionId) });
+  }, [questionDeltas, sessionId, queryClient]);
 
   const merged = new Map<string, Question>();
   for (const row of query.data ?? []) merged.set(row.id, row);

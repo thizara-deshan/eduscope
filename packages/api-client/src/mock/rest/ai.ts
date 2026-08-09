@@ -19,6 +19,70 @@ function asIntervalMinutes(n: unknown): IntervalMinutes {
 }
 
 export function createAiOperations({ world, engine, seed }: RestContext) {
+  // W4-D-2's coupling (Q-02/Q-03 -> Q-11 -> Q-12) means a QuestionSet reaching
+  // `ready` mints and broadcasts a genuinely NEW draft that Q-12 never adds to
+  // `seed.questions` (it only emits the WS event) — so a later edit/discard/
+  // send against that exact id 404s even though the lecturer just saw it in
+  // S-14. Mirror it into the seed the moment it is announced, with a
+  // placeholder prompt/options (Q-12 carries no real content, same as the
+  // rest of this mock's "one representative draft per set" simplification —
+  // see ai.ts's module comment).
+  world.subscribeEvents((envelope) => {
+    if (envelope.event !== 'ai.question' || envelope.payload.state !== 'draft') return;
+    if (seed.questions.some((q) => q.id === envelope.payload.questionId)) return;
+    if (envelope.payload.provenance !== 'generated') return; // lecturer-authored rows are pushed by createQuestion itself
+    const questionId = envelope.payload.questionId;
+    const options = (['A', 'B', 'C', 'D'] as const).map((label, i) => ({
+      id: seedId('option'), questionId, label, text: `Option ${label}`, position: i,
+    }));
+    seed.questions.push(
+      validated(zQuestion, {
+        id: questionId,
+        sessionId: seed.questions[0]?.sessionId ?? seedId('session'),
+        questionSetId: envelope.payload.setId,
+        kind: 'mcq',
+        prompt: 'Generated question',
+        options,
+        correctOptionId: options[0]!.id,
+        provenance: 'generated',
+        edited: false,
+        state: 'draft',
+        createdAt: nowIsoZ(world.clock),
+        orderHint: null,
+      }),
+    );
+  });
+
+  // Same gap, one machine over: Q-30 (sendToProjector's own resolving
+  // transition) mints a publication and only emits `quiz.publication` — it
+  // never appears in `seed.publications`, so S-16's listPublications snapshot
+  // can never show a question a lecturer just sent, and a later
+  // closePublication/setProjector against that id would 404. Mirror it in.
+  world.subscribeEvents((envelope) => {
+    if (envelope.event !== 'quiz.publication' || envelope.payload.state !== 'publishing') return;
+    if (seed.publications.some((p) => p.id === envelope.payload.publicationId)) return;
+    const question = seed.questions.find((q) => q.id === envelope.payload.questionId);
+    if (!question) return; // the id-correlation fix above always seeds this first; defensive only
+    seed.publications.push(
+      validated(zPublicationWithQuestion, {
+        id: envelope.payload.publicationId,
+        questionId: question.id,
+        quizSessionId: (world.data['quiz.session.ulid'] as string | undefined) ?? seedId('quiz-session'),
+        state: 'publishing',
+        publishedAt: null,
+        closedAt: null,
+        closeReason: null,
+        isShowing: false,
+        projectorState: 'not-shown',
+        syncState: world.state('quiz.sync'),
+        question,
+        responseCount: 0,
+        correctCount: 0,
+        incorrectCount: 0,
+      }),
+    );
+  });
+
   /** Scenario refusal only — does NOT schedule. Split out so commands that
    * target an existing entity can validate the entity before any transition
    * fires (see the four ops below and task-10-report.md's I3 finding: a
@@ -94,7 +158,7 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
       if (!body.options || body.options.length === 0) {
         throw new ProblemError({ status: 422, code: 'validation.invalid', title: 'createQuestion requires at least one option' });
       }
-      const accepted = accept('createQuestion');
+      checkRefusal('createQuestion');
       const questionId = seedId('question');
       const options = body.options.map((o, i) => ({
         id: seedId('option'),
@@ -120,7 +184,10 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
           orderHint: null,
         }),
       );
-      return accepted;
+      // Q-19's own echo must correlate back to THIS row, not mint a stray id.
+      world.data['ai.question.ulid'] = questionId;
+      runPlan('createQuestion');
+      return buildAccepted();
     },
 
     // Order matters (task-10-report.md I3): refusal check, THEN find/validate
@@ -146,6 +213,9 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
         row.correctOptionId = row.options[body.options.findIndex((o) => o.isCorrect)]?.id ?? null;
       }
       row.edited = true;
+      // Q-20's own echo must name THIS question, not whatever id an earlier
+      // creation event happened to leave tracked.
+      world.data['ai.question.ulid'] = questionId;
       runPlan('editQuestion');
       return buildAccepted();
     },
@@ -158,6 +228,7 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
         throw new ProblemError({ status: 409, code: 'question.immutable', title: 'Only draft questions can be discarded' });
       }
       row.state = 'discarded';
+      world.data['ai.question.ulid'] = questionId;
       runPlan('discardQuestion');
       return buildAccepted();
     },
@@ -167,6 +238,9 @@ export function createAiOperations({ world, engine, seed }: RestContext) {
       const row = seed.questions.find((q) => q.id === questionId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown question: ${questionId}` });
       row.state = 'sent';
+      // Q-30/Q-31's ai.question/quiz.publication echoes must name THIS
+      // question, not a freshly-minted stray one (the id-correlation fix).
+      world.data['ai.publication.questionId'] = questionId;
       runPlan('sendToProjector');
       return buildAccepted();
     },

@@ -193,12 +193,26 @@ export const aiQuestionMachine: MachineDef = {
   ],
 };
 
-/** Q-12 (2b) is the same doc-level creation event as Q-18 (its own row's trigger is literally "Q-12 (generated)"); Q-19 is the lecturer-authored equivalent. Every other id (edit/discard/send/close, plus 2d's re-broadcasts) mutates the *same* question, so it must keep the memoized id — otherwise a consumer can never correlate a question across its own lifecycle. */
-const QUESTION_CREATION_IDS = new Set(['Q-12', 'Q-18', 'Q-19']);
+/**
+ * Q-12 (2b) is a genuinely autonomous creation event (the countdown/manual
+ * cycle, no caller-supplied id) and mints its own id here. Q-19
+ * (lecturer-authored, via `createQuestion`) is NOT — the REST layer already
+ * minted a real id and pushed the row into `seed.questions` before
+ * scheduling Q-19, so re-minting here would desync the WS echo from the row
+ * a consumer can actually look up. Q-20/Q-21 (edit/discard) are likewise
+ * targeted at a caller-supplied existing id, set by rest/ai.ts before
+ * scheduling — never minted here.
+ */
+const QUESTION_CREATION_IDS = new Set(['Q-12', 'Q-18']);
+
+/** Machine 2d transitions whose `ai.question` re-broadcast is about the publication's OWN target question, not machine 2c's tracked one. */
+const PUBLICATION_QUESTION_IDS = new Set(['Q-31', 'Q-33', 'Q-34', 'Q-35']);
 
 PAYLOAD_BUILDERS['ai.question'] = (w: MockWorld, tr: Transition) => {
   if (QUESTION_CREATION_IDS.has(tr.id)) w.data['ai.question.ulid'] = nextUlid(w);
-  const questionId = (w.data['ai.question.ulid'] as string | undefined) ?? nextUlid(w);
+  const questionId = PUBLICATION_QUESTION_IDS.has(tr.id)
+    ? (w.data['ai.publication.questionId'] as string | undefined) ?? nextUlid(w)
+    : (w.data['ai.question.ulid'] as string | undefined) ?? nextUlid(w);
   return {
     questionId,
     setId: (w.data['ai.set.ulid'] as string | undefined) ?? null,
@@ -247,15 +261,22 @@ export const aiPublicationMachine: MachineDef = {
       emit('quiz.publication', { state: 'failed', isShowing: false }),
       alert('quiz.publish-failed', 'error')),
 
+    // Reset projectorState to `not-shown` on close — otherwise it stays
+    // `showing` from Q-31 forever, and a consumer inferring "reveal mode"
+    // from `state:closed ∧ projectorState:showing` (Q-36's own signature)
+    // would misread every ordinary close as a reveal the instant it closes.
     t(M_PUBLICATION, 'Q-33', ['open'], 'closed', citeD('Q-33'),
+      set('ai.publication.projectorState', 'not-shown'),
       emit('quiz.publication', { state: 'closed', isShowing: false, closeReason: 'next-question' }),
       emit('ai.question', { state: 'closed' })),
 
     t(M_PUBLICATION, 'Q-34', ['open'], 'closed', citeD('Q-34'),
+      set('ai.publication.projectorState', 'not-shown'),
       emit('quiz.publication', { state: 'closed', isShowing: false, closeReason: 'session-ended' }),
       emit('ai.question', { state: 'closed' })),
 
     t(M_PUBLICATION, 'Q-35', ['open'], 'closed', citeD('Q-35'),
+      set('ai.publication.projectorState', 'not-shown'),
       emit('quiz.publication', { state: 'closed', isShowing: false, closeReason: 'lecturer-closed' }),
       emit('ai.question', { state: 'closed' })),
 
@@ -277,9 +298,13 @@ export const aiPublicationMachine: MachineDef = {
  * this mock tracks one "current" publication, not a full history.
  */
 PAYLOAD_BUILDERS['quiz.publication'] = (w: MockWorld, tr: Transition) => {
+  // Q-30 mints a fresh publication id but does NOT re-mint questionId — the
+  // REST layer's sendToProjector(questionId) already stamped the real target
+  // into w.data before scheduling Q-30, and overwriting it here is exactly
+  // the bug that broke Q-31's `ai.question{sent}` echo correlating back to
+  // the question a lecturer actually sent.
   if (tr.id === 'Q-30') {
     w.data['ai.publication.ulid'] = nextUlid(w);
-    w.data['ai.publication.questionId'] = nextUlid(w);
   }
   return {
     publicationId: (w.data['ai.publication.ulid'] as string | undefined) ?? nextUlid(w),

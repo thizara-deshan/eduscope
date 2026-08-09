@@ -1,5 +1,5 @@
 import { act, createElement, type ReactNode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
@@ -40,6 +40,8 @@ function renderTab(methods: Partial<EduscopeClient> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const client = {
     listPublications: vi.fn(() => Promise.resolve([])),
+    closePublication: vi.fn(() => Promise.resolve({ commandId: 'c', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 })),
+    setProjector: vi.fn(() => Promise.resolve({ commandId: 'c', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 })),
     ...methods,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
@@ -132,5 +134,24 @@ describe('PreviousQuestionsTab', () => {
       projectorState: 'not-shown', syncState: 'synced', closeReason: null,
     }, 0)));
     expect(screen.getByTestId('publication-card-pub1-failed')).toBeInTheDocument();
+  });
+
+  it('an open card offers Close, which calls closePublication', async () => {
+    const closePublication = vi.fn(() => Promise.resolve({ commandId: 'c', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 }));
+    renderTab({ listPublications: vi.fn(() => Promise.resolve([publication({ state: 'open' })])), closePublication });
+    await waitFor(() => expect(screen.getByTestId('publication-card-pub1')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closePublication).toHaveBeenCalledWith('pub1');
+  });
+
+  it('a closed card offers Re-project, which calls setProjector', async () => {
+    const setProjector = vi.fn(() => Promise.resolve({ commandId: 'c', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 }));
+    renderTab({
+      listPublications: vi.fn(() => Promise.resolve([publication({ state: 'closed', isShowing: false, closeReason: 'lecturer-closed' })])),
+      setProjector,
+    });
+    await waitFor(() => expect(screen.getByTestId('publication-card-pub1')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Re-project' }));
+    expect(setProjector).toHaveBeenCalledWith({ publicationId: 'pub1' });
   });
 });

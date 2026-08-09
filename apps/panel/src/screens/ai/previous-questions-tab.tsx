@@ -92,6 +92,24 @@ export function PreviousQuestionsTab() {
                   {p.incorrectCount} Incorrect
                 </button>
               </div>
+
+              {p.state === 'open' ? (
+                <button
+                  type="button"
+                  className="us-pqcard__closebtn"
+                  onClick={() => insights.closePublication(p.publicationId)}
+                >
+                  Close
+                </button>
+              ) : p.state === 'closed' ? (
+                <button
+                  type="button"
+                  className="us-pqcard__closebtn"
+                  onClick={() => insights.reproject(p.publicationId)}
+                >
+                  Re-project
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
