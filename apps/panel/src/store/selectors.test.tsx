@@ -3,8 +3,8 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
 import {
-  useAudioControlRow, useExpectedShutdown, useLastSegment, useRecordingState,
-  useWsShallow,
+  useAiSet, useAlert, useAudioControlRow, useExpectedShutdown, useLastSegment,
+  usePublicationsList, useQuizSession, useRecordingState, useWsShallow,
 } from './selectors.js';
 
 const envelope = (event: string, payload: unknown, seq: number) =>
@@ -97,5 +97,79 @@ describe('wave 2 store slices', () => {
     expect(result.current).toBe(true);
     act(() => useWsStore.getState().reset());
     expect(result.current).toBe(false);
+  });
+});
+
+describe('wave 4 store slices', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('useQuizSession returns the store slice and re-renders only on quiz.session ingest', () => {
+    let renders = 0;
+    function Probe() {
+      useQuizSession();
+      renders += 1;
+      return null;
+    }
+    render(<Probe />);
+    const baseline = renders;
+    act(() => {
+      useWsStore.getState().ingest(envelope('storage.status', { pressure: 'warning' }, 0));
+    });
+    expect(renders, 'an unrelated slice must not re-render a quiz.session consumer').toBe(baseline);
+
+    const payload = {
+      state: 'open', quizSessionId: '01J00000000000000000000001', joinUrl: 'https://q/482913',
+      joinCode: '482913', joinedCount: 3, syncState: 'synced',
+    };
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', payload, 1)));
+    const { result } = renderHook(() => useQuizSession());
+    expect(result.current).toEqual(payload);
+  });
+
+  it('usePublicationsList returns a stable array across an unrelated ingest', () => {
+    const payload = {
+      publicationId: '01J00000000000000000000002', questionId: '01J00000000000000000000003',
+      state: 'open', isShowing: true, projectorState: 'showing', syncState: 'synced', closeReason: null,
+    };
+    act(() => useWsStore.getState().ingest(envelope('quiz.publication', payload, 0)));
+
+    let renders = 0;
+    function Probe() {
+      usePublicationsList();
+      renders += 1;
+      return null;
+    }
+    render(<Probe />);
+    const baseline = renders;
+    act(() => {
+      useWsStore.getState().ingest(envelope('device.health', { ntpSynced: true }, 1));
+    });
+    expect(renders, 'an unrelated ingest must not re-render a usePublicationsList consumer').toBe(baseline);
+
+    const { result } = renderHook(() => usePublicationsList());
+    expect(result.current).toEqual([payload]);
+  });
+
+  it('useAiSet returns the store slice', () => {
+    const payload = {
+      setId: '01J00000000000000000000005', sessionId: '01J00000000000000000000006',
+      state: 'ready', trigger: 'countdown', count: 4, error: null, attempt: 0,
+    };
+    act(() => useWsStore.getState().ingest(envelope('ai.set', payload, 0)));
+    const { result } = renderHook(() => useAiSet());
+    expect(result.current).toEqual(payload);
+  });
+
+  it('useAlert selects one alert row by id', () => {
+    const payload = {
+      id: '01J00000000000000000000004', code: 'ai.unavailable', severity: 'error', category: 'System',
+      title: 'ai.unavailable', detail: null, raisedAt: '2026-07-30T09:00:00Z', clearedAt: null,
+      clearedReason: null, acknowledgedBy: null, context: null, relatedEntity: null,
+    };
+    act(() => useWsStore.getState().ingest(envelope('system.alert', payload, 0)));
+    const { result } = renderHook(() => useAlert(payload.id));
+    expect(result.current).toEqual(payload);
   });
 });

@@ -25,10 +25,16 @@ export const useConnectionPhase = () => useWsStore((s) => s.connection?.phase ??
 export const useStoragePressure = () => useWsStore((s) => s.storage?.pressure ?? 'ok');
 export const useStorageStatus = () => useWsStore((s) => s.storage);
 export const useAiCountdown = () => useWsStore((s) => s.aiCountdown);
+export const useAiSet = () => useWsStore((s) => s.aiSet);
+export const useQuizSession = () => useWsStore((s) => s.quizSession);
 export const useLastSegment = () => useWsStore((s) => s.lastSegment);
 export const useExpectedShutdown = () => useWsStore((s) => s.expectedShutdown);
 export const useAudioControlRow = (roleId: SourceRoleId) =>
   useWsStore((s) => s.audioControls[roleId]);
+export const useAlert = (id: string) => useWsStore((s) => s.alerts[id]);
+
+/** Object.values(...) is a fresh array every call — useWsShallow keeps it stable across an unrelated ingest. */
+export const usePublicationsList = () => useWsShallow((s) => Object.values(s.publications));
 
 /**
  * Keyed reads take the key so the selector returns a stable primitive-or-row
