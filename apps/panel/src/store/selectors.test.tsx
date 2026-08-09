@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
 import {
   useAiSet, useAlert, useAudioControlRow, useExpectedShutdown, useLastSegment,
-  usePublicationsList, useQuizSession, useRecordingState, useWsShallow,
+  usePublicationsList, useQuestionEvents, useQuizSession, useRecordingState, useWsShallow,
 } from './selectors.js';
 
 const envelope = (event: string, payload: unknown, seq: number) =>
@@ -160,6 +160,18 @@ describe('wave 4 store slices', () => {
     act(() => useWsStore.getState().ingest(envelope('ai.set', payload, 0)));
     const { result } = renderHook(() => useAiSet());
     expect(result.current).toEqual(payload);
+  });
+
+  it('useQuestionEvents keys live ai.question deltas by questionId, discard included', () => {
+    act(() => useWsStore.getState().ingest(envelope('ai.question', {
+      questionId: 'q1', setId: null, state: 'draft', provenance: 'lecturer-authored', edited: false,
+    }, 0)));
+    const { result } = renderHook(() => useQuestionEvents());
+    expect(result.current.q1).toMatchObject({ state: 'draft' });
+    act(() => useWsStore.getState().ingest(envelope('ai.question', {
+      questionId: 'q1', setId: null, state: 'discarded', provenance: 'lecturer-authored', edited: false,
+    }, 1)));
+    expect(result.current.q1).toMatchObject({ state: 'discarded' });
   });
 
   it('useAlert selects one alert row by id', () => {

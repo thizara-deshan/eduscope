@@ -35,6 +35,8 @@ export const useAlert = (id: string) => useWsStore((s) => s.alerts[id]);
 
 /** Object.values(...) is a fresh array every call — useWsShallow keeps it stable across an unrelated ingest. */
 export const usePublicationsList = () => useWsShallow((s) => Object.values(s.publications));
+/** S-14: live `ai.question` deltas keyed by questionId (a discarded row is pruned in the store). */
+export const useQuestionEvents = () => useWsShallow((s) => s.questions);
 
 /**
  * Keyed reads take the key so the selector returns a stable primitive-or-row

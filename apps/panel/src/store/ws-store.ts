@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
 import type {
-  AiCountdownPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
+  AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
   DeviceHealthPayload, EventEnvelope, QuizPublicationPayload, QuizSessionPayload,
   RecordingSegmentPayload, RecordingStatePayload, SourceRoleId, SourcesStatusPayload,
   StorageStatusPayload, SystemAlert,
@@ -27,6 +27,8 @@ export interface WsState {
   deviceHealth: DeviceHealthPayload | null;
   aiCountdown: AiCountdownPayload | null;
   aiSet: AiSetPayload | null;
+  /** S-14: keyed by questionId; a `discarded` row is pruned (INV-Q — a discarded draft leaves the list). */
+  questions: Record<string, AiQuestionPayload>;
   quizSession: QuizSessionPayload | null;
   publications: Record<string, QuizPublicationPayload>;
   alerts: Record<string, SystemAlert>;
@@ -47,7 +49,7 @@ export interface WsState {
 const EMPTY = {
   recording: null, audioControls: {}, lastSegment: null, expectedShutdown: false,
   sources: {}, channels: {}, storage: null, deviceHealth: null,
-  aiCountdown: null, aiSet: null, quizSession: null, publications: {}, alerts: {},
+  aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, alerts: {},
   connection: null, needsResync: false, stale: false,
 } satisfies Omit<
   WsState,
@@ -106,6 +108,12 @@ export const useWsStore = create<WsState>((set, get) => ({
         case 'device.health': return { deviceHealth: envelope.payload };
         case 'ai.countdown': return { aiCountdown: envelope.payload };
         case 'ai.set': return { aiSet: envelope.payload };
+        // Keeps `discarded` rows in the map (not pruned) — a consumer merging
+        // this against a REST snapshot needs the discard signal itself to
+        // filter the row out; deleting it here would make that delta invisible.
+        case 'ai.question': {
+          return { questions: { ...get().questions, [envelope.payload.questionId]: envelope.payload } };
+        }
         case 'quiz.session': return { quizSession: envelope.payload };
         case 'quiz.publication': {
           const next = { ...get().publications };

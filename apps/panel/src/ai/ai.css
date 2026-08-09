@@ -423,3 +423,228 @@
   margin: 0;
   color: var(--text-muted);
 }
+
+/* ── S-14 questions review modal (light — mounted via OverlayHost) ────────── */
+
+.us-qmodal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-8) var(--sp-9);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-qmodal__head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.us-qmodal__close {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+
+.us-qmodal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-8) var(--sp-9);
+}
+
+.us-qmodal__skeleton {
+  min-height: 120px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.us-qmodal__status {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.us-empty {
+  margin: 0;
+  padding: var(--sp-9);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.us-qmodal__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.us-qmodal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-7) var(--sp-9);
+  border-top: 1px solid var(--border);
+}
+
+.us-qmodal__addbtn,
+.us-qmodal__regenbtn {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-8);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+.us-qmodal__regenbtn:disabled,
+.us-qmodal__addbtn:disabled {
+  opacity: 0.5;
+}
+
+/* ── S-14 question card ─────────────────────────────────────────────────── */
+
+.us-qcard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.us-qcard__head {
+  width: 100%;
+  min-height: var(--tap-row);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: 0 var(--sp-7);
+  border: none;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.us-qcard__prompt {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.us-qcard__custom {
+  flex: 0 0 auto;
+  padding: 2px var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+.us-qcard__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-7);
+}
+
+.us-qcard__optionlist,
+.us-qcard__options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.us-qcard__optionlist li {
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.us-qcard__option--correct {
+  background: var(--success-soft) !important;
+  color: var(--success) !important;
+  font-weight: 600;
+}
+
+.us-qcard__optionbtn {
+  min-height: var(--tap-min);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  font-size: var(--fs-sm);
+}
+
+.us-qcard__optionbtn[aria-pressed="true"] {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success);
+  font-weight: 600;
+}
+
+.us-qcard__promptinput {
+  min-height: var(--tap-min);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-sm);
+}
+
+.us-qcard__actions,
+.us-qcard__editactions {
+  display: flex;
+  gap: var(--sp-5);
+}
+
+.us-qcard__actions button,
+.us-qcard__editactions button {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.us-qcard__actions button:disabled,
+.us-qcard__editactions button:disabled {
+  opacity: 0.5;
+}
+
+.us-qcard__problem {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+}
+
+.us-qcard__sendreason {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-2xs);
+}

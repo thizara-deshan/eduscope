@@ -1,6 +1,8 @@
 import type { IntervalMinutes } from '@eduscope/shared';
 import { useTicker } from '../../hooks/use-ticker.js';
+import { useOverlays } from '../../overlays/overlay-host.js';
 import { useAiStudio } from '../../ai/use-ai-studio.js';
+import { QuestionsModal } from './questions-modal.js';
 import { QuizJoinChip } from './quiz-join-chip.js';
 import '../../ai/ai.css';
 
@@ -22,9 +24,18 @@ function formatRemaining(ms: number | null): string {
  */
 export function AiStudioCard() {
   const studio = useAiStudio();
+  const overlays = useOverlays();
   // INV-G-7: the countdown ticks LOCALLY from the absolute `nextAt` — this is
   // the only per-second re-render in the card, never a WS subscription.
   const now = useTicker(1_000);
+
+  const openReview = () => {
+    const id = overlays.open(<QuestionsModal onClose={() => overlays.close(id)} />);
+  };
+  const generateAndReview = () => {
+    studio.generateNow();
+    openReview();
+  };
 
   if (studio.loading) {
     return (
@@ -108,7 +119,7 @@ export function AiStudioCard() {
                 type="button"
                 className="us-genbtn"
                 disabled={studio.state === 'held' || studio.state === 'generating' || studio.generatePending}
-                onClick={studio.generateNow}
+                onClick={generateAndReview}
               >
                 {studio.state === 'generating' || studio.generatePending ? 'Generating…' : 'Generate Questions Now'}
               </button>
@@ -144,8 +155,7 @@ export function AiStudioCard() {
                 {studio.draftCount} {studio.draftCount === 1 ? 'question' : 'questions'} drafted from your lecture
               </span>
             </div>
-            {/* Opens S-14 (Task 5). */}
-            <button type="button" className="us-readybanner__btn">Review Questions</button>
+            <button type="button" className="us-readybanner__btn" onClick={openReview}>Review Questions</button>
           </div>
         ) : null}
       </div>
