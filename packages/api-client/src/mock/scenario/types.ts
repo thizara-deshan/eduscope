@@ -61,6 +61,10 @@ export interface WorldSeed {
   readonly studentsCameraBound: boolean;
   /** W3-D-4 — starting-world fact: no stream targets are seeded/enabled for the streaming channel. */
   readonly streamTargetsConfigured: boolean;
+  /** Wave 5 — when false, the recordings/uploads seed is empty: S-21 & S-35 empty states. */
+  readonly recordingsPresent: boolean;
+  /** Wave 5 — how a live export terminates (S-23 `usb-pull` uses 'drive-removed'). */
+  readonly exportOutcome: 'complete' | 'drive-removed' | 'failed';
 }
 
 /** A transition the script drives on its own schedule, with no command behind it. */

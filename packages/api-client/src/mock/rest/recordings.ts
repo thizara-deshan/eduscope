@@ -42,6 +42,38 @@ function deriveDetail(r: Recording): RecordingDetail {
   return { ...r, segments: [segment], files: [file] };
 }
 
+/** Drives a queued export through byte-stepping `export.job` events to a terminal state (S-23 real-progress + `usb-pull`). */
+function driveExport(world: RestContext['world'], job: ExportJob, outcome: 'complete' | 'drive-removed' | 'failed') {
+  const STEP_MS = 300;
+  const steps = 6; // ~5% granularity of bytesTotal across the copy
+  world.clock.setTimeout(() => {
+    world.emit('export.job', { jobId: job.id, state: 'copying', bytesCopied: 0, bytesTotal: job.bytesTotal, error: null });
+  }, STEP_MS);
+  for (let i = 1; i <= steps; i += 1) {
+    const copied = Math.floor((job.bytesTotal * i) / steps);
+    const failHere = outcome !== 'complete' && i === Math.ceil(steps / 2);
+    world.clock.setTimeout(() => {
+      if (failHere) {
+        job.state = 'failed';
+        world.emit('export.job', {
+          jobId: job.id, state: 'failed', bytesCopied: copied, bytesTotal: job.bytesTotal,
+          error: outcome === 'drive-removed' ? 'The drive was removed before the copy finished' : 'The copy failed',
+        });
+        return;
+      }
+      if (job.state !== 'queued' && job.state !== 'copying') return; // cancelled/failed already
+      if (i === steps) {
+        job.state = 'completed';
+        job.bytesCopied = job.bytesTotal;
+        world.emit('export.job', { jobId: job.id, state: 'completed', bytesCopied: job.bytesTotal, bytesTotal: job.bytesTotal, error: null });
+      } else {
+        job.bytesCopied = copied;
+        world.emit('export.job', { jobId: job.id, state: 'copying', bytesCopied: copied, bytesTotal: job.bytesTotal, error: null });
+      }
+    }, STEP_MS * (i + 1));
+  }
+}
+
 export function createRecordingsOperations(ctx: RestContext) {
   const { world, engine, seed } = ctx;
 
@@ -199,6 +231,7 @@ export function createRecordingsOperations(ctx: RestContext) {
         error: null,
       });
       seed.exportJobs.push(job);
+      driveExport(world, job, ctx.worldSeed.exportOutcome);
       return job;
     },
 

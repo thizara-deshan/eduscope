@@ -94,6 +94,8 @@ export function createMockClient(
       audioApplyFails: false,
       studentsCameraBound: true,
       streamTargetsConfigured: true,
+      recordingsPresent: true,
+      exportOutcome: 'complete',
       ...script.seed,
       ...seedOverride,
     };

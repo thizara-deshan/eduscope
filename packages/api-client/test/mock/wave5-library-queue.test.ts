@@ -3,6 +3,7 @@ import type {
   EventEnvelope, ExportJobPayload, RecordingArtifactPayload, UploadJobPayload, UsbVolumesPayload,
 } from '@eduscope/shared';
 import { createMockClient } from '../../src/mock/create-mock-client.js';
+import { createVirtualClock } from '../../src/mock/clock.js';
 
 function eventsOf<T>(client: ReturnType<typeof createMockClient>, event: string) {
   const seen: T[] = [];
@@ -122,6 +123,65 @@ describe('Wave 5, Task 2 — mock resolving-event emits + per-request recording 
 
     await loginOtherLecturer(client);
     await expect(client.getRecordingMedia(owned.id, fileId)).rejects.toMatchObject({ problem: { status: 403 } });
+
+    client.dispose();
+  });
+});
+
+describe('Wave 5, Task 3 — live export progression + recordingsPresent/exportOutcome world knobs', () => {
+  it('happy: createExport drives export.job queued -> copying (bytes increasing) -> completed', async () => {
+    const clock = createVirtualClock('2026-08-08T09:00:00.000Z');
+    const client = createMockClient('happy', { clock });
+    const events = eventsOf<ExportJobPayload>(client, 'export.job');
+
+    const targets = await client.listExportTargets();
+    const drive = targets.find((v) => v.freeBytes > 1_000_000_000)!;
+    const page = await client.listRecordings({});
+    const job = await client.createExport({ recordingIds: [page.items[0]!.id], targetDevicePath: drive.devicePath });
+
+    clock.advance(3_000);
+
+    const copying = events.filter((e) => e.jobId === job.id && e.state === 'copying');
+    expect(copying.length).toBeGreaterThan(1);
+    const increasing = copying.every((e, i) => i === 0 || e.bytesCopied >= copying[i - 1]!.bytesCopied);
+    expect(increasing).toBe(true);
+
+    const completed = events.find((e) => e.jobId === job.id && e.state === 'completed');
+    expect(completed).toBeDefined();
+    expect(completed!.bytesCopied).toBe(completed!.bytesTotal);
+
+    client.dispose();
+  });
+
+  it("exportOutcome:'drive-removed' terminates with a named failure short of full copy", async () => {
+    const clock = createVirtualClock('2026-08-08T09:00:00.000Z');
+    const client = createMockClient('happy', { clock, seed: { exportOutcome: 'drive-removed' } });
+    const events = eventsOf<ExportJobPayload>(client, 'export.job');
+
+    const targets = await client.listExportTargets();
+    const drive = targets.find((v) => v.freeBytes > 1_000_000_000)!;
+    const page = await client.listRecordings({});
+    const job = await client.createExport({ recordingIds: [page.items[0]!.id], targetDevicePath: drive.devicePath });
+
+    clock.advance(3_000);
+
+    const terminal = events.find((e) => e.jobId === job.id && e.state === 'failed');
+    expect(terminal).toBeDefined();
+    expect(terminal!.error).toMatch(/removed/i);
+    expect(terminal!.bytesCopied).toBeLessThan(terminal!.bytesTotal);
+
+    client.dispose();
+  });
+
+  it('recordingsPresent:false empties listRecordings (lecturer) and listUploadJobs (admin)', async () => {
+    const client = createMockClient('happy', { seed: { recordingsPresent: false } });
+    await loginAdmin(client);
+
+    const recordings = await client.listRecordings({});
+    expect(recordings).toEqual({ items: [], nextCursor: null });
+
+    const jobs = await client.listUploadJobs({});
+    expect(jobs.items).toEqual([]);
 
     client.dispose();
   });

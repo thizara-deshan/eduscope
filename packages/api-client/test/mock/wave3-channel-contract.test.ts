@@ -32,6 +32,8 @@ function build() {
       audioApplyFails: false,
       studentsCameraBound: true,
       streamTargetsConfigured: true,
+      recordingsPresent: true,
+      exportOutcome: 'complete',
     },
     credentials: createCredentialStore(),
   }) as unknown as EduscopeClient;

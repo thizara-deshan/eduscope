@@ -72,7 +72,9 @@ export function createSeed(overrides: Partial<WorldSeed> = {}): Seed {
     users,
     ...deviceSeed,
     ...createSourcesSeed(overrides, deviceSeed.streamTargets),
-    ...createRecordingsSeed(users),
+    ...createRecordingsSeed(users, overrides.recordingsPresent === undefined
+      ? {}
+      : { recordingsPresent: overrides.recordingsPresent }),
     ...createAiSeed(),
   };
   return Object.freeze(seed);

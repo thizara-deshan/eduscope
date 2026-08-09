@@ -203,6 +203,27 @@ export function ScenarioOverlay() {
               />
               No streaming destinations configured
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.recordingsPresent}
+                onChange={(event) => rebuild(active, { ...seed, recordingsPresent: !event.target.checked })}
+                aria-label="No recordings on device (empty state)"
+              />
+              No recordings on device (empty state)
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={client.worldSeed.exportOutcome === 'drive-removed'}
+                onChange={(event) => rebuild(active, {
+                  ...seed,
+                  exportOutcome: event.target.checked ? 'drive-removed' : 'complete',
+                })}
+                aria-label="Export fails mid-copy (drive removed)"
+              />
+              Export fails mid-copy (drive removed)
+            </label>
           </fieldset>
           <div className="us-devoverlay__transport">
             <button

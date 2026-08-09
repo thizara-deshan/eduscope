@@ -15,12 +15,39 @@ const HOUR = 60 * 60_000;
 const at = (offsetMs: number) => new Date(Date.parse(SEED_EPOCH) + offsetMs).toISOString();
 const retentionDeleteAfter = (startedAtMs: number) => new Date(startedAtMs + 90 * 24 * HOUR).toISOString();
 
+/** Two candidates so the picker must ask the user (never "the first drive", B-38 / EXP-D-1). One is deliberately too small for a multi-recording selection (C-6, CG-21). Listed even when `recordingsPresent:false` — the export flow still lists drives. */
+function createUsbVolumesSeed(): UsbVolume[] {
+  return [
+    {
+      devicePath: '/dev/sdb1',
+      mountPath: '/media/usb0',
+      label: 'BACKUP-1',
+      capacityBytes: 64_000_000_000,
+      freeBytes: 40_000_000_000,
+    },
+    {
+      devicePath: '/dev/sdc1',
+      mountPath: '/media/usb1',
+      label: 'LECTURE-STICK',
+      capacityBytes: 8_000_000_000,
+      freeBytes: 900_000_000,
+    },
+  ].map((row) => validated(zUsbVolume, row));
+}
+
 /**
  * Eight rows spanning ready/merging/failed/deleted so the library badge
  * vocabulary is exercised, plus the two CG-20 upload-failure classes (offline vs
  * server) and two USB targets (one too small) for the CG-21 space refusal.
  */
-export function createRecordingsSeed(users: User[]): RecordingsSeed {
+export function createRecordingsSeed(
+  users: User[],
+  opts?: { recordingsPresent?: boolean },
+): RecordingsSeed {
+  if (opts?.recordingsPresent === false) {
+    return { recordings: [], uploadJobs: [], exportJobs: [], usbVolumes: createUsbVolumesSeed() };
+  }
+
   const lecturer = users.find((u) => u.username === 'a.perera')!;
 
   const rows: Recording[] = [
@@ -403,26 +430,7 @@ export function createRecordingsSeed(users: User[]): RecordingsSeed {
     return validated(zUploadJobDetail, detail);
   });
 
-  const usbVolumes = [
-    {
-      devicePath: '/dev/sdb1',
-      mountPath: '/media/usb0',
-      label: 'BACKUP-1',
-      capacityBytes: 64_000_000_000,
-      freeBytes: 40_000_000_000,
-    },
-    // Two candidates so the picker must ask the user (never "the first drive",
-    // B-38 / EXP-D-1). This one is deliberately too small for a multi-recording
-    // selection — the per-card space check (C-6) and, on the listing→copy race,
-    // the CG-21 `export.insufficient-space` refusal both key off its freeBytes.
-    {
-      devicePath: '/dev/sdc1',
-      mountPath: '/media/usb1',
-      label: 'LECTURE-STICK',
-      capacityBytes: 8_000_000_000,
-      freeBytes: 900_000_000,
-    },
-  ].map((row) => validated(zUsbVolume, row));
+  const usbVolumes = createUsbVolumesSeed();
 
   const exportJobs: ExportJob[] = [];
 
