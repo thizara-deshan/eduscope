@@ -819,3 +819,170 @@
 .us-addq__cancel:disabled {
   opacity: 0.5;
 }
+
+/* ── shared tab strip (first used by S-16/S-17's insights column) ─────────── */
+
+.us-tabs {
+  display: inline-flex;
+  gap: var(--sp-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1);
+  flex: 0 0 auto;
+}
+
+.us-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  min-height: var(--tap-min);
+}
+
+.us-tab--active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* ── S-16/S-17 insights column (dark scope, sidebar) ───────────────────────── */
+
+.us-insightswrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  transition: max-height 0.2s ease, opacity 0.2s ease;
+}
+
+.us-insightswrap--collapsed {
+  flex: 0 0 auto;
+  max-height: 62px;
+  overflow: hidden;
+}
+
+.us-insightswrap__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.us-insights__skeleton {
+  min-height: 120px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.us-insights__stalebanner {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+}
+
+.us-insights__syncfailed {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.us-insights__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* ── S-16 previous-question card ("pqcard") ────────────────────────────────── */
+
+.us-pqcard {
+  padding: var(--sp-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.us-pqcard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.us-pqcard__prompt {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.us-pqcard__badge {
+  flex: 0 0 auto;
+  padding: 2px var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.us-pqcard__correct {
+  margin: var(--sp-3) 0 0;
+  color: var(--success);
+  font-size: var(--fs-xs);
+}
+
+.us-pqcard__closed,
+.us-pqcard__reveal {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-2xs);
+}
+
+.us-pqcard__failed {
+  margin: var(--sp-3) 0 0;
+  color: var(--warning);
+  font-size: var(--fs-2xs);
+}
+
+.us-pqcard__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.us-pqcard__statbtn {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
+.us-pqcard__statbtn--correct {
+  color: var(--success);
+}
+
+.us-pqcard__statbtn--incorrect {
+  color: var(--warning);
+}

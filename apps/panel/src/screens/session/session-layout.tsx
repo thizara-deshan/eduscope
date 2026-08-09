@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AiStudioCard } from '../ai/ai-studio-card.js';
+import { InsightsColumn } from '../ai/insights-column.js';
 import { TimerCard } from '../transport/timer-card.js';
 import { CaptureAssuranceCard } from './capture-assurance-card.js';
 import { MeetingChannelCard } from './meeting-channel-card.js';
@@ -39,6 +40,7 @@ export function SessionLayout(): JSX.Element {
       >
         <TimerCard />
         <MeetingChannelCard expanded={meetingLayoutsOpen} onExpandedChange={setMeetingLayoutsOpen} />
+        {aiEnabled ? <InsightsColumn collapsed={meetingLayoutsOpen} /> : null}
       </aside>
     </main>
   );

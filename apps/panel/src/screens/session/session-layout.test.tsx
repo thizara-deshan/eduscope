@@ -46,6 +46,7 @@ function renderSession(aiEnabled: boolean | undefined) {
     getAiCountdown: vi.fn(() => new Promise<never>(() => undefined)),
     listQuestions: vi.fn(() => Promise.resolve([])),
     getQuizSession: vi.fn(() => new Promise<never>(() => undefined)),
+    listPublications: vi.fn(() => Promise.resolve([])),
     pauseRecording: vi.fn(), resumeRecording: vi.fn(), stopRecording: vi.fn(),
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
@@ -74,12 +75,12 @@ describe('SessionLayout', () => {
     expect(screen.queryByTestId('capture-assurance-card')).toBeNull();
   });
 
-  it('never mounts the insights wrapper in either layout', () => {
+  it('mounts the insights wrapper only when AI is enabled (Wave 4)', () => {
     const off = renderSession(false);
     expect(off.container.querySelector('.us-insightswrap')).toBeNull();
     off.unmount();
     const on = renderSession(true);
-    expect(on.container.querySelector('.us-insightswrap')).toBeNull();
+    expect(on.container.querySelector('.us-insightswrap')).toBeInTheDocument();
   });
 
   it('keeps the sidebar exactly --sidebar-w wide', () => {
