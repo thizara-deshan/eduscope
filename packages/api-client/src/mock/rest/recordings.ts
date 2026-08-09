@@ -83,6 +83,10 @@ export function createRecordingsOperations(ctx: RestContext) {
     getRecording: async (recordingId: Ulid): Promise<RecordingDetail> => {
       const row = seed.recordings.find((r) => r.id === recordingId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown recording: ${recordingId}` });
+      const me = currentUser(ctx);
+      if (!isAdmin(ctx) && row.ownerUserId !== me.id) {
+        throw new ProblemError({ status: 403, code: 'not-authorized', title: 'You do not have access to this recording' });
+      }
       return validated(zRecordingDetail, deriveDetail(row));
     },
 
@@ -96,6 +100,11 @@ export function createRecordingsOperations(ctx: RestContext) {
       row.state = 'deleted';
       row.deletedAt = nowIsoZ(world.clock);
       row.deleteReason = 'admin';
+      world.emit('recording.artifact', {
+        recordingId: row.id, sessionId: row.sessionId, state: 'deleted',
+        mergeState: row.mergeState, durationMs: row.durationMs,
+        totalBytes: row.totalBytes, deleteReason: 'admin',
+      });
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),
@@ -122,6 +131,11 @@ export function createRecordingsOperations(ctx: RestContext) {
       // returns to `merging` and resolves on recording.artifact{merging}.
       row.state = 'merging';
       row.mergeState = 'running';
+      world.emit('recording.artifact', {
+        recordingId: row.id, sessionId: row.sessionId, state: 'merging',
+        mergeState: 'running', durationMs: row.durationMs,
+        totalBytes: row.totalBytes, deleteReason: null,
+      });
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),
@@ -136,13 +150,20 @@ export function createRecordingsOperations(ctx: RestContext) {
     ): Promise<Blob> => {
       const row = seed.recordings.find((r) => r.id === recordingId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown recording: ${recordingId}` });
+      const me = currentUser(ctx);
+      if (!isAdmin(ctx) && row.ownerUserId !== me.id) {
+        throw new ProblemError({ status: 403, code: 'not-authorized', title: 'You do not have access to this recording' });
+      }
       void fileId;
       void query;
       return new Blob([`mock media bytes for ${recordingId}`], { type: 'video/mp4' });
     },
 
-    listExportTargets: async (): Promise<UsbVolume[]> =>
-      seed.usbVolumes.map((v) => validated(zUsbVolume, v)),
+    listExportTargets: async (): Promise<UsbVolume[]> => {
+      const volumes = seed.usbVolumes.map((v) => validated(zUsbVolume, v));
+      world.emit('usb.volumes', { volumes });
+      return volumes;
+    },
 
     createExport: async (body: ExportCreateRequest): Promise<ExportJob> => {
       const refusal = engine.onCommand('createExport');
@@ -196,6 +217,10 @@ export function createRecordingsOperations(ctx: RestContext) {
         throw new ProblemError({ status: 409, code: 'conflict', title: 'Export already finished' });
       }
       job.state = 'cancelled';
+      world.emit('export.job', {
+        jobId: job.id, state: 'cancelled', bytesCopied: job.bytesCopied,
+        bytesTotal: job.bytesTotal, error: null,
+      });
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),

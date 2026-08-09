@@ -58,6 +58,11 @@ export function createUploadsOperations(ctx: RestContext) {
       row.lastError = null;
       row.lastErrorAt = null;
       row.requeuedAt = nowIsoZ(world.clock);
+      world.emit('upload.job', {
+        jobId: row.id, recordingId: row.recordingId, state: 'queued',
+        attempt: row.attempt, failureClass: null, nextAttemptAt: null,
+        progressPct: 0, lastError: null, blockedBy: null,
+      });
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),
