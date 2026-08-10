@@ -17,7 +17,7 @@ describe('quiz route skeletons (screen-inventory §6)', () => {
   it.each([
     ['S-37', () => <JoinPage params={{ joinCode: 'ABC123' }} />],
     ['S-38', () => <RegisterPage params={{ joinCode: 'ABC123' }} />],
-    ['S-39', () => <PlayPage params={{ quizSessionId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D' }} />],
+    ['S-39', () => <PlayPage />],
   ])('renders %s', (id, Component) => {
     render(
       <QuizAppProviders>
