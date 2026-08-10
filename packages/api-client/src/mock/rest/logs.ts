@@ -2,7 +2,7 @@ import {
   zPage, zLogEntry,
   type LogCategory, type LogEntry, type LogLevel, type Page, type Ulid,
 } from '@eduscope/shared';
-import { validated } from '../seed/index.js';
+import { validated, nowIsoZ, seedId } from '../seed/index.js';
 import { requireAdmin } from './auth.js';
 import type { RestContext } from './index.js';
 
@@ -32,7 +32,8 @@ function applyFilter(rows: LogEntry[], filter: LogFilter): LogEntry[] {
 }
 
 export function createLogsOperations(ctx: RestContext) {
-  const { seed } = ctx;
+  const { world, seed } = ctx;
+  let tailStarted = false;
 
   return {
     queryLogs: async (query?: LogFilter & { cursor?: string; limit?: number }): Promise<Page<LogEntry>> => {
@@ -42,6 +43,24 @@ export function createLogsOperations(ctx: RestContext) {
       const start = query?.cursor ? Number.parseInt(query.cursor, 10) : 0;
       const page = rows.slice(start, start + limit);
       const nextCursor = start + limit < rows.length ? String(start + limit) : null;
+
+      // The tail starts on the FIRST subscribe of a world's lifetime, not on
+      // every query — otherwise switching a filter would restart the stream.
+      if (!tailStarted) {
+        tailStarted = true;
+        const kinds = [
+          { level: 'INFO', category: 'System', message: 'Heartbeat OK.' },
+          { level: 'WARN', category: 'Hardware', message: 'students-cam signal dipped.' },
+          { level: 'INFO', category: 'Auth', message: 'admin viewed the log.' },
+        ] as const;
+        kinds.forEach((k, i) => world.clock.setTimeout(() => {
+          world.emit('log.entry', validated(zLogEntry, {
+            id: seedId('log'), at: nowIsoZ(world.clock), service: 'core-api',
+            sessionId: null, userId: null, context: null, ...k,
+          }));
+        }, (i + 1) * 1_500));
+      }
+
       return validated(zPage(zLogEntry), { items: page, nextCursor });
     },
 
