@@ -68,7 +68,10 @@ export function createUsersOperations(ctx: RestContext) {
       if (body.displayName !== undefined) row.displayName = body.displayName;
       if (body.role !== undefined) row.role = body.role;
       if (body.disabled !== undefined) row.disabled = body.disabled;
-      if (body.password !== undefined) credentials[row.username] = body.password;
+      if (body.password !== undefined) {
+        credentials[row.username] = body.password;
+        row.mustResetPassword = true; // admin-triggered reset (§11 Q-3)
+      }
       return validated(zUser, row);
     },
 

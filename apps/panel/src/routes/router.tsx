@@ -14,6 +14,7 @@ import { NetworkScreen } from '../screens/advanced/network/network-screen.js';
 import { EncoderScreen } from '../screens/advanced/encoder/encoder-screen.js';
 import { StorageScreen } from '../screens/advanced/storage/storage-screen.js';
 import { FirmwareScreen } from '../screens/advanced/firmware/firmware-screen.js';
+import { UserManagementScreen } from '../screens/advanced/users/user-management-screen.js';
 import { RecordingDetailScreen } from '../screens/library/detail/recording-detail-screen.js';
 import { LibraryScreen } from '../screens/library/library-screen.js';
 import { PanelShell } from './panel-shell.js';
@@ -84,6 +85,7 @@ const ADVANCED_SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-29': () => <EncoderScreen />,
   'S-30': () => <StorageScreen />,
   'S-31': () => <FirmwareScreen />,
+  'S-32': () => <UserManagementScreen />,
 };
 
 /** Admin-only Advanced children: a role mismatch lands back in the lecturer's own shell (U-6), not `/`. */
