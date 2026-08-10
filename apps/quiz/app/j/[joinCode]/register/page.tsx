@@ -1,8 +1,6 @@
 // S-38 Self-registration
+import { RegistrationScreen } from '../../../../src/screens/registration/registration-screen.js';
+
 export default function RegisterPage({ params }: { params: { joinCode: string } }) {
-  return (
-    <main data-testid="screen" data-screen="S-38">
-      <h1>Join {params.joinCode}</h1>
-    </main>
-  );
+  return <RegistrationScreen joinCode={params.joinCode} />;
 }
