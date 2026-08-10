@@ -104,7 +104,12 @@ export const useQuizStore = create<QuizStoreState>((set, get) => ({
         set({ connection: event.payload.connectionState });
         return;
       case 'quiz.question':
-        set({ question: event.payload });
+        // A newly OPENED publication supersedes any prior result — S-39
+        // reveals in place rather than S-40 going stale (Task 6 precedence).
+        set({
+          question: event.payload,
+          result: event.payload.state === 'open' ? null : get().result,
+        });
         return;
       case 'quiz.result':
         set({ result: event.payload });
