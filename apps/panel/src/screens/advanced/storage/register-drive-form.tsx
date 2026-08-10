@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 
 interface RegisterDriveFormProps {
   readonly onRegister: (uuid: string, label: string) => void;
@@ -10,6 +11,8 @@ interface RegisterDriveFormProps {
 export function RegisterDriveForm({ onRegister, registering, error, disabled }: RegisterDriveFormProps): JSX.Element {
   const [uuid, setUuid] = useState('');
   const [label, setLabel] = useState('');
+  const uuidBinding = useOskField({ value: uuid, onChange: setUuid });
+  const labelBinding = useOskField({ value: label, onChange: setLabel });
 
   return (
     <section className="us-adm__card us-storage__card" aria-label="Register drive">
@@ -21,6 +24,7 @@ export function RegisterDriveForm({ onRegister, registering, error, disabled }: 
           value={uuid}
           onChange={(e) => setUuid(e.target.value)}
           aria-label="Volume UUID"
+          {...uuidBinding}
         />
       </label>
       <label className="us-device__field">
@@ -30,6 +34,7 @@ export function RegisterDriveForm({ onRegister, registering, error, disabled }: 
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           aria-label="Volume label"
+          {...labelBinding}
         />
       </label>
       {error ? <p className="us-device__missing">{error}</p> : null}

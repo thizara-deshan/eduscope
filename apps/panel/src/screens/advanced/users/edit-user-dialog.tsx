@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { User, UserRole, UserUpdate } from '@eduscope/shared';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 
 interface EditUserDialogProps {
   readonly user: User;
@@ -16,6 +17,8 @@ export function EditUserDialog({ user, onSubmit, onCancel, pending, error }: Edi
   const [role, setRole] = useState<UserRole>(user.role);
   const [disabled, setDisabled] = useState(user.disabled);
   const [password, setPassword] = useState('');
+  const displayNameBinding = useOskField({ value: displayName, onChange: setDisplayName });
+  const passwordBinding = useOskField({ value: password, onChange: setPassword });
 
   return (
     <div className="us-dangerconfirm__scrim" role="presentation">
@@ -32,6 +35,7 @@ export function EditUserDialog({ user, onSubmit, onCancel, pending, error }: Edi
             disabled={readOnly}
             onChange={(e) => setDisplayName(e.target.value)}
             aria-label="Display name"
+            {...displayNameBinding}
           />
         </label>
         <label className="us-device__field">
@@ -49,7 +53,7 @@ export function EditUserDialog({ user, onSubmit, onCancel, pending, error }: Edi
         </label>
         <label className="us-device__field">
           <span className="us-device__label">New password (optional, forces reset)</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="New password" />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="New password" {...passwordBinding} />
         </label>
         {error ? <p className="us-device__missing">{error}</p> : null}
         <footer className="us-dangerconfirm__footer">

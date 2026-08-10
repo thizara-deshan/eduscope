@@ -65,6 +65,9 @@ describe('NetworkScreen', () => {
     await waitFor(() => expect(screen.getByLabelText('eth0 (lan)')).toBeInTheDocument());
     expect(screen.getByLabelText('eth0.100 (vlan)')).toBeInTheDocument();
     expect(screen.getByTestId('camera-lecturer-cam')).toBeInTheDocument();
+    for (const octet of screen.getAllByLabelText(/octet \d$/)) {
+      expect(octet).toHaveAttribute('data-osk', 'ip');
+    }
   });
 
   it('dirty and validating: an invalid IP disables Apply and shows the reason', async () => {

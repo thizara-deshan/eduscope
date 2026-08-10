@@ -16,6 +16,7 @@ describe('<LibraryFilters/> (S-21 §2.3) — chips map to real server parameters
 
     rerender(<LibraryFilters value={{}} isAdmin={true} onChange={vi.fn()} />);
     expect(screen.getByLabelText('Filter by owner')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by owner')).toHaveAttribute('data-osk', 'default');
     expect(screen.getByLabelText('Show deleted')).toBeInTheDocument();
   });
 

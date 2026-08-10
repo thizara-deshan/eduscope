@@ -72,6 +72,8 @@ describe('StorageScreen', () => {
     const registerStorageVolume = vi.fn(() => Promise.resolve(volume({ id: 'V2', uuid: 'b'.repeat(8) })));
     build({ registerStorageVolume });
     await waitFor(() => expect(screen.getByLabelText('Volume UUID')).toBeInTheDocument());
+    expect(screen.getByLabelText('Volume UUID')).toHaveAttribute('data-osk', 'default');
+    expect(screen.getByLabelText('Volume label')).toHaveAttribute('data-osk', 'default');
     fireEvent.change(screen.getByLabelText('Volume UUID'), { target: { value: 'aaaaaaaa-0000-4000-8000-000000000002' } });
     fireEvent.click(screen.getByRole('button', { name: /Register/ }));
     await waitFor(() => expect(registerStorageVolume).toHaveBeenCalled());

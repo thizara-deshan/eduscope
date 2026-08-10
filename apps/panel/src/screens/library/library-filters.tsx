@@ -21,6 +21,11 @@ export function LibraryFilters({
     onChange: (q) => onChange({ ...value, q: q || undefined }),
     layout: 'default',
   });
+  const ownerSearch = useOskField({
+    value: value.ownerUserId ?? '',
+    onChange: (ownerUserId) => onChange({ ...value, ownerUserId: ownerUserId || undefined }),
+    layout: 'default',
+  });
 
   return (
     <div className="us-libfilters">
@@ -55,6 +60,7 @@ export function LibraryFilters({
             aria-label="Filter by owner"
             value={value.ownerUserId ?? ''}
             onChange={(e) => onChange({ ...value, ownerUserId: e.target.value || undefined })}
+            {...ownerSearch}
           />
           {value.ownerUserId ? (
             <button
