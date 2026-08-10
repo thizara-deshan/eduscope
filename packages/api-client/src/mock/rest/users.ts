@@ -95,13 +95,47 @@ export function createUsersOperations(ctx: RestContext) {
       const refusal = engine.onCommand('importUsers');
       if (refusal) throw new ProblemError(refusal);
       void body.file;
+
+      if (ctx.worldSeed.userImportRejects) {
+        return validated(zUserImportBatch, {
+          id: seedId('import-batch'), filename: 'roster.xlsx', uploadedAt: nowIsoZ(world.clock),
+          state: 'rejected', rowCount: 3, acceptedCount: 0,
+          rejections: [
+            { row: 2, column: 'username', reason: 'username-exists' },
+            { row: 3, column: 'displayName', reason: 'empty-cell' },
+          ],
+        });
+      }
+
+      // Whole-batch success creates a small synthetic roster (INV-UI-1) — every
+      // accepted user is flagged for reset (INV-UI-2); the file itself is not
+      // retained (INV-UI-3).
+      const synthetic = [
+        { username: 'k.jayasuriya', displayName: 'K. Jayasuriya' },
+        { username: 'm.wickrama', displayName: 'M. Wickrama' },
+      ].filter((row) => !seed.users.some((u) => u.username === row.username));
+      for (const row of synthetic) {
+        const user = validated(zUser, {
+          id: seedId('user'),
+          username: row.username,
+          displayName: row.displayName,
+          role: 'lecturer',
+          source: 'local',
+          mustResetPassword: true,
+          disabled: false,
+          lastLoginAt: null,
+          createdAt: nowIsoZ(world.clock),
+        });
+        seed.users.push(user);
+        credentials[row.username] = `temp-${row.username}`;
+      }
       return validated(zUserImportBatch, {
         id: seedId('import-batch'),
         filename: 'roster.xlsx',
         uploadedAt: nowIsoZ(world.clock),
         state: 'applied',
-        rowCount: 0,
-        acceptedCount: 0,
+        rowCount: synthetic.length,
+        acceptedCount: synthetic.length,
         rejections: [],
       });
     },

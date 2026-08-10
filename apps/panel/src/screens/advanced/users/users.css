@@ -9,6 +9,10 @@
   justify-content: space-between;
   gap: var(--sp-4);
 }
+.us-users__headactions {
+  display: flex;
+  gap: var(--sp-3);
+}
 .us-users__search {
   display: flex;
   align-items: center;

@@ -8,6 +8,7 @@ import { ProblemError } from '@eduscope/api-client';
 import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../../../auth/auth-context.js';
 import { ClientContext } from '../../../client/client-provider.js';
+import { OverlayHost, OverlayProvider } from '../../../overlays/overlay-host.js';
 import { useWsStore } from '../../../store/ws-store.js';
 import { UserManagementScreen } from './user-management-screen.js';
 
@@ -40,7 +41,12 @@ function build(methods: Partial<EduscopeClient> = {}, meUser: User = admin()) {
     QueryClientProvider, { client: queryClient },
     createElement(AuthProvider, {
       initialUser: meUser,
-      children: createElement(ClientContext.Provider, { value: stub, children }),
+      children: createElement(ClientContext.Provider, {
+        value: stub,
+        children: createElement(OverlayProvider, {
+          children: createElement('div', null, children, createElement(OverlayHost)),
+        }),
+      }),
     }),
   );
   return render(createElement(UserManagementScreen), { wrapper });

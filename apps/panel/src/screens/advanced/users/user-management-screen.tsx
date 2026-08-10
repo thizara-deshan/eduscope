@@ -7,7 +7,9 @@ import { AddUserDialog } from './add-user-dialog.js';
 import { EditUserDialog } from './edit-user-dialog.js';
 import { DeleteUserConfirm } from './delete-user-confirm.js';
 import { useUsers } from './use-users.js';
+import { BulkImportOverlay } from './import/bulk-import-overlay.js';
 import { useAuth } from '../../../auth/auth-context.js';
+import { useOverlays } from '../../../overlays/overlay-host.js';
 import { useIsStale } from '../../../store/selectors.js';
 import './users.css';
 
@@ -18,6 +20,10 @@ export function UserManagementScreen(): JSX.Element {
   const { users, loading, hasMore, loadMore, createUser, updateUser, deleteUser } = useUsers({ q, role });
   const { user: me } = useAuth();
   const stale = useIsStale();
+  const overlays = useOverlays();
+  const openBulkImport = () => {
+    const id = overlays.open(<BulkImportOverlay onClose={() => overlays.close(id)} />);
+  };
 
   const [adding, setAdding] = useState(false);
   const [addPending, setAddPending] = useState(false);
@@ -71,7 +77,10 @@ export function UserManagementScreen(): JSX.Element {
     <div className="us-users" data-testid="screen" data-screen="S-32">
       <div className="us-users__head">
         <h1>User Management</h1>
-        <button type="button" className="us-adm__primary" disabled={stale} onClick={() => setAdding(true)}>Add user</button>
+        <div className="us-users__headactions">
+          <button type="button" className="us-adm__secondary" disabled={stale} onClick={openBulkImport}>Bulk Import</button>
+          <button type="button" className="us-adm__primary" disabled={stale} onClick={() => setAdding(true)}>Add user</button>
+        </div>
       </div>
       <UserSearch q={q} onQChange={setQ} role={role} onRoleChange={setRole} />
       {loading ? (
