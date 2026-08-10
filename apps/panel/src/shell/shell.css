@@ -45,7 +45,10 @@
 }
 
 .us-header__recordings {
-  margin-left: auto;
+  /* No margin-left:auto here — .us-usermenu already carries it, and two
+     auto margins in the same flex row split the free space between them
+     (CSS Flexbox §8.1), landing this link mid-header under the absolutely
+     positioned .us-clock instead of snug against the user menu. */
   color: var(--on-ink);
   font-size: var(--fs-sm);
   font-weight: 700;
