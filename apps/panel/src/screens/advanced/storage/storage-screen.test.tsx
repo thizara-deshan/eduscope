@@ -53,6 +53,8 @@ describe('StorageScreen', () => {
   it('populated: stats, SMART line, volume list, retention policy in real numbers', async () => {
     build();
     await waitFor(() => expect(screen.getByText(/260 GB free of 500 GB/)).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Local Storage' }).closest('.us-adm__pagehead')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Format…' })).toHaveClass('us-adm__danger');
     expect(screen.getByText('good')).toBeInTheDocument();
     expect(screen.getByText(/past 90 days/)).toBeInTheDocument();
   });

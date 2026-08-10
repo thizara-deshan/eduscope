@@ -65,6 +65,7 @@ describe('UserManagementScreen', () => {
   it('populated: local+institute, mustReset and disabled all show', async () => {
     build();
     await waitFor(() => expect(screen.getByTestId('user-row-admin')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'User Management' }).closest('.us-adm__pagehead')).not.toBeNull();
     expect(screen.getByTestId('user-row-a.perera')).toBeInTheDocument();
     expect(screen.getByTestId('user-row-n.silva')).toHaveTextContent('must reset password');
   });

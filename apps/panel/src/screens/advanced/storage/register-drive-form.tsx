@@ -15,7 +15,7 @@ export function RegisterDriveForm({ onRegister, registering, error, disabled }: 
   const labelBinding = useOskField({ value: label, onChange: setLabel });
 
   return (
-    <section className="us-adm__card us-storage__card" aria-label="Register drive">
+    <section className="us-adm__card us-adm__section us-storage__card" aria-label="Register drive">
       <h2 className="us-device__eyebrow">Register a drive</h2>
       <label className="us-device__field">
         <span className="us-device__label">Volume UUID</span>

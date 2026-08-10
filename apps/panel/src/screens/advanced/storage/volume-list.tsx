@@ -24,9 +24,9 @@ export function VolumeList({ volumes, formatVolume, formattingId, formatError, c
   };
 
   return (
-    <section className="us-adm__card us-storage__card" aria-label="Volumes">
+    <section className="us-adm__card us-adm__section us-storage__card" aria-label="Volumes">
       <h2 className="us-device__eyebrow">Volumes</h2>
-      {volumes.length === 0 ? <p className="us-adm__note">No registered volumes.</p> : (
+      {volumes.length === 0 ? <p className="us-adm__empty">No registered volumes.</p> : (
         <ul className="us-storage__volumelist">
           {volumes.map((v) => (
             <li key={v.id} className="us-storage__volumerow" data-testid={`volume-${v.id}`}>
@@ -38,7 +38,7 @@ export function VolumeList({ volumes, formatVolume, formattingId, formatError, c
               {v.role === 'recordings' ? (
                 <button
                   type="button"
-                  className="us-adm__secondary"
+                  className="us-adm__danger"
                   disabled={disabled}
                   onClick={() => { clearFormatError(); setOpenVolumeId(v.id); }}
                 >
