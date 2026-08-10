@@ -1,0 +1,51 @@
+.us-encoder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.us-encoder__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.us-encoder__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.us-encoder__select {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+}
+.us-encoder__select--invalid {
+  border-color: var(--danger);
+}
+.us-encoder__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.us-encoder__stepper button {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: var(--fs-lg);
+}
+.us-encoder__stepper--invalid .us-encoder__readout {
+  color: var(--danger);
+}
+.us-encoder__readout {
+  font-weight: 700;
+  min-width: 6ch;
+  text-align: center;
+}
+.us-encoder__range-hint {
+  font-size: var(--fs-2xs);
+  color: var(--danger);
+}
