@@ -6,8 +6,9 @@
   bottom: 0;
   height: 320px;
   z-index: 800;
-  background: var(--ink);
-  border-top: 1px solid var(--ink-border);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
   padding: var(--sp-2) var(--sp-5) var(--sp-3);
   display: flex;
   flex-direction: column;
@@ -22,10 +23,11 @@
 .us-osk__close {
   min-width: var(--tap-min);
   min-height: var(--tap-min);
-  border: 1px solid var(--ink-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--ink-2);
-  color: var(--on-ink);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
   font-size: var(--fs-md);
   display: flex;
   align-items: center;
@@ -39,7 +41,7 @@
 
 .us-osk__keys {
   height: 100%;
-  padding: 0;
+  padding: var(--sp-1);
   background: transparent;
 }
 
@@ -48,7 +50,27 @@
 }
 
 .us-osk__keys .hg-button {
-  min-height: 42px;
+  min-height: var(--tap-min);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
   font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.us-osk__keys .hg-button-bksp,
+.us-osk__keys .hg-button-enter,
+.us-osk__keys .hg-button-lock,
+.us-osk__keys .hg-button-shift,
+.us-osk__keys .hg-button-tab {
+  background: var(--surface-3);
+}
+
+.us-osk__keys .hg-button:active,
+.us-osk__close:active {
+  background: var(--surface-3);
+  box-shadow: none;
+  transform: translateY(1px);
 }

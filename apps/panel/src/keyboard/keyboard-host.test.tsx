@@ -112,15 +112,43 @@ describe('KeyboardHost', () => {
     expect(document.querySelector('[data-skbtn="q"]')).toBeNull();
   });
 
-  it('the default keyboard includes both letters and numbers', () => {
+  it('the default keyboard uses the library layout with standard special keys', () => {
     render(
       <Panel>
         <TextField />
       </Panel>,
     );
     fireEvent.focus(screen.getByLabelText('field'));
-    expect(document.querySelector('[data-skbtn="7"]')).not.toBeNull();
     expect(document.querySelector('[data-skbtn="q"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="{tab}"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="{lock}"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="-"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="="]')).not.toBeNull();
+  });
+
+  it('lets the library caps lock control uppercase input', async () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    const field = screen.getByLabelText('field') as HTMLInputElement;
+    fireEvent.focus(field);
+    await pressKey('{lock}');
+    await pressKey('Q');
+    expect(field.value).toBe('Q');
+  });
+
+  it('keeps the styling hooks for the light keyboard treatment', () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    fireEvent.focus(screen.getByLabelText('field'));
+    expect(document.querySelector('.us-osk')).not.toBeNull();
+    expect(document.querySelector('.us-osk__keys .hg-button')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Close keyboard' }).className).toContain('us-osk__close');
   });
 
   it('an IP field includes digits and a dot without letter keys', async () => {
