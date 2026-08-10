@@ -1,0 +1,17 @@
+.result-verdict { text-align: center; padding: var(--sp-9) 0; }
+.result-verdict__label { font-size: var(--fs-3xl); font-weight: 700; margin: 0; }
+.result-verdict--correct .result-verdict__label { color: var(--success); }
+.result-verdict--incorrect .result-verdict__label { color: var(--danger); }
+.result-verdict--missed .result-verdict__label { color: var(--text-muted); }
+.result-verdict__points { font-size: var(--fs-xl); color: var(--text-muted); margin: var(--sp-2) 0 0; }
+
+.result-reveal, .result-standing {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--sp-2) var(--sp-5);
+  margin: 0 0 var(--sp-6);
+}
+.result-reveal dt, .result-standing dt { color: var(--text-muted); }
+.result-reveal dd, .result-standing dd { margin: 0; font-weight: 600; text-align: right; }
+
+.result-wait { font-size: var(--fs-xl); font-weight: 600; text-align: center; margin-top: var(--sp-9); }
