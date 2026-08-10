@@ -1826,7 +1826,7 @@ before the wireframe is approved (revamp-guide prompt 07 "Done when").
 | W-7 | **S-23** USB export flow | Parity §5.1 items 1 + 10; drive picking and real progress are both new | — | ✅ **closed** 2026-08-09 | [S-23-design.md](screens/S-23-design.md) |
 | W-8 | **S-24** Delete recording confirm | Parity §2c delete row | — | ✅ **closed** 2026-08-09 | [S-24-design.md](screens/S-24-design.md) |
 | W-9 | **S-35** Upload queue | Parity §5.1 item 2 | G-3 demo | ✅ **closed** 2026-08-09 | [S-35-design.md](screens/S-35-design.md) |
-| W-10 | **S-36** Device & Identity | Parity §5.1 items 8, 9, 11 | J-5 | open — Wave 6 | — |
+| W-10 | **S-36** Device & Identity | Parity §5.1 items 8, 9, 11 | J-5 | ✅ **closed** 2026-08-10 | [S-36-design.md](screens/S-36-design.md) |
 | W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); also blocked on CG-1 | J-3 | open — Wave 7 | — |
 | W-12 | **S-42** Projector overlay | New (A-11/A-22); a legibility problem, not a UI problem; also blocked on CG-2 | J-2 | open — Wave 8 | — |
 | W-13 | **S-01** Login — *redesign* | Removing the prototype's role picker leaves a hole in the card layout | Wave 1 | ✅ **closed** 2026-08-04 | [S-01-design.md](screens/S-01-design.md) |

@@ -580,3 +580,20 @@ behaviour.
   (merge automatic, no user convert flow), B-35 (requeue, not a hardcoded manual
   endpoint), B-37 (playback, authenticated), B-38 (hotplug, session-scoped not
   broadcast, user picks the drive). None of the legacy bugs is reproduced.
+
+### 9.6 Open sub-question the S-36 wireframe surfaced (W-10) — NOT decided here
+
+The S-36 design is coherent under the stated default; the item is recorded so nothing is
+smuggled in as an assumption. It belongs to an owner other than the W-10 gate.
+
+| ID | Question | Who decides | Default the design assumes | Why it is open |
+|----|----------|-------------|----------------------------|----------------|
+| **DIO-1** | **Expected-vs-actual storage cross-check.** Should S-36 fetch `GET /storage` (S-30's) to compare the provisioned `expectedStorageVolumeUuid` against the actually-mounted volume and flag a **wrong drive** at install, or only **display** the expected uuid for a manual check? | PM + core-api / S-30 owner | **Display-only** in v0 — S-36 fetches `/provisioning` + `/health` + `/alerts` only; the uuid is shown copyable. See [S-36-design.md §9.2 / §14](../design/screens/S-36-design.md#9-contract-changes-this-design-requires) | A uuid mismatch is a real install failure worth flagging, but pulling `/storage` widens S-36's data surface beyond its three reads; the cross-check is additive and changes **no** wireframe if adopted later, so it is a refinement, not design-blocking |
+
+**S-36 required no contract change and no new token** — the clean "a design run can add
+nothing" case in the S-24 style (§9.5): `getProvisioning` / `getDeviceHealth` / `listAlerts`
+/ `acknowledgeAlert` + `device.health` / `system.alert` serve the whole read view as v0.5
+stands, and the `--danger` critical vocabulary is inherited from S-06 §3.
+
+**W-10 is closed**, leaving **W-11** (S-37…S-41 student quiz app) and **W-12** (S-42
+projector overlay) as the remaining open wireframe rows.
