@@ -51,9 +51,9 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
 }
 
 describe('panel router (screen-inventory §1.1)', () => {
-  it('declares the flat nav-map routes — Advanced (S-25..S-36) is its own nested route', () => {
+  it('declares the flat nav-map routes — Advanced (S-25..S-36, incl. the recording library) is its own nested route', () => {
     expect(ROUTES.map((r) => r.path)).toEqual([
-      '/login', '/login/reset', '/', '/library', '/library/:recordingId',
+      '/login', '/login/reset', '/',
     ]);
   });
 
@@ -66,8 +66,8 @@ describe('panel router (screen-inventory §1.1)', () => {
 
   it.each([
     ['/', 'S-04'],
-    ['/library', 'S-21'],
-    ['/library/R1', 'S-22'],
+    ['/advanced/library', 'S-21'],
+    ['/advanced/library/R1', 'S-22'],
   ])('renders %s as screen %s', (path, screenId) => {
     renderAt(path);
     expect(screen.getByTestId('screen').dataset.screen).toBe(screenId);
@@ -105,7 +105,9 @@ describe('panel router (screen-inventory §1.1)', () => {
   });
 
   it('reaches all 16 nav-map screens across the flat and nested route trees', () => {
-    const reached = [...ROUTES.map((r) => r.screen), 'S-25', ...ADVANCED_NAV_ITEMS.map((i) => i.screen)];
+    // S-22 (recording detail) is a nested Advanced child, not a sidebar nav
+    // item, so it is listed explicitly rather than pulled from ADVANCED_NAV_ITEMS.
+    const reached = [...ROUTES.map((r) => r.screen), 'S-25', 'S-22', ...ADVANCED_NAV_ITEMS.map((i) => i.screen)];
     expect(new Set(reached).size).toBe(16);
     expect(reached).toEqual(expect.arrayContaining([
       'S-01', 'S-02', 'S-04', 'S-21', 'S-22', 'S-25',
@@ -120,7 +122,7 @@ describe('panel router (screen-inventory §1.1)', () => {
   });
 
   it('gives the shell an overlay host on every route', () => {
-    renderAt('/library');
+    renderAt('/advanced/library');
     expect(screen.getByTestId('overlay-host')).toBeTruthy();
     // vitest.config.ts sets globals: false, so RTL's afterEach(cleanup) auto-
     // registration never fires — and cleanup only runs between tests anyway,

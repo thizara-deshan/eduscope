@@ -116,7 +116,7 @@ export function LibraryScreen(): JSX.Element {
           <>
             <h1>Recordings</h1>
             <LibraryFilters value={filters} isAdmin={isAdmin} onChange={setFilters} />
-            <button type="button" onClick={() => setSelectionMode(true)}>Select</button>
+            <button type="button" className="us-library__select" onClick={() => setSelectionMode(true)}>Select</button>
           </>
         )}
       </div>
@@ -142,8 +142,8 @@ export function LibraryScreen(): JSX.Element {
               showOwner={isAdmin}
               selectable={selectionMode}
               selected={selected.has(rec.id)}
-              onOpen={() => navigate(`/library/${rec.id}`)}
-              onPlay={() => navigate(`/library/${rec.id}`)}
+              onOpen={() => navigate(`/advanced/library/${rec.id}`)}
+              onPlay={() => navigate(`/advanced/library/${rec.id}`)}
               onToggle={() => toggleSelected(rec.id)}
               onMenu={() => {}}
               onDelete={isAdmin ? () => openDelete(rec) : undefined}

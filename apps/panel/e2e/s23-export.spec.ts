@@ -32,7 +32,12 @@ async function dismissAlerts(page: Page) {
 }
 
 async function selectFirstRowAndOpenExport(page: Page) {
-  await page.getByRole('link', { name: 'Recordings' }).click();
+  // The recording library now lives inside the Advanced shell (a dedicated
+  // sidebar section), not a header link.
+  await page.getByRole('button', { name: 'Show controls' }).click();
+  await page.getByRole('button', { name: 'Advanced' }).click();
+  await expect(page.getByTestId('advanced-shell')).toBeVisible();
+  await page.getByRole('button', { name: 'Recording Library' }).click();
   await expect(page.locator('[data-screen="S-21"]')).toBeVisible();
   await dismissAlerts(page);
   await page.getByRole('button', { name: 'Select' }).click();

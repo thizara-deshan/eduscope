@@ -56,19 +56,20 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
 }
 
 describe('S-25 Advanced shell', () => {
-  it('admin: title "System Administration", nav label "Categories", 10 items', () => {
+  it('admin: title "System Administration", nav label "Categories", 11 items', () => {
     renderShellDirect(makeUser('admin'));
     expect(screen.getByText('System Administration')).toBeInTheDocument();
     expect(screen.getByText('Categories')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Network Settings|Encoder Settings|Local Storage|Firmware Update|User Management|System Logs|Local Capture Layout|Streaming Configuration|Upload Queue|Device & Identity/ })).toHaveLength(10);
+    expect(screen.getAllByRole('button', { name: /Network Settings|Encoder Settings|Local Storage|Firmware Update|User Management|System Logs|Local Capture Layout|Streaming Configuration|Recording Library|Upload Queue|Device & Identity/ })).toHaveLength(11);
   });
 
-  it('lecturer: title "Advanced", nav label "Outputs", 2 items', () => {
+  it('lecturer: title "Advanced", nav label "Outputs", 3 items incl. the recording library', () => {
     renderShellDirect(makeUser('lecturer'));
     expect(screen.getByText('Advanced')).toBeInTheDocument();
     expect(screen.getByText('Outputs')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Local Capture Layout/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Streaming Configuration/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Recording Library/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Network Settings/ })).toBeNull();
   });
 

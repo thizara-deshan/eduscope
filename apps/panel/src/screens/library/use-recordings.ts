@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import type { Recording, RecordingState, Ulid } from '@eduscope/shared';
 import { useClient } from '../../client/client-provider.js';
 import { useArtifactEvents, useUploadJobEvents } from '../../store/selectors.js';
@@ -50,6 +50,13 @@ export function useRecordings(filters: LibraryFilters): UseRecordings {
     }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    // A filter change is a new query key (new cursor, C-7). Without this the
+    // key swap flips the query back to `pending`, LibraryScreen renders its
+    // skeleton branch, and LibraryFilters UNMOUNTS mid-keystroke — which
+    // stranded the on-screen keyboard on a stale empty target, so every OSK
+    // press replaced the field instead of appending. Keeping the previous
+    // page mounted while the next loads holds the search field steady.
+    placeholderData: keepPreviousData,
   });
 
   const baseRows = (query.data?.pages ?? []).flatMap((page) => page.items);

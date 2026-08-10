@@ -44,21 +44,6 @@
   font-weight: 600;
 }
 
-.us-header__recordings {
-  /* No margin-left:auto here — .us-usermenu already carries it, and two
-     auto margins in the same flex row split the free space between them
-     (CSS Flexbox §8.1), landing this link mid-header under the absolutely
-     positioned .us-clock instead of snug against the user menu. */
-  color: var(--on-ink);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  text-decoration: none;
-  min-height: var(--tap-min);
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--sp-3);
-}
-
 .us-clock {
   position: absolute;
   left: 50%;

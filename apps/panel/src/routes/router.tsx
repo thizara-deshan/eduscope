@@ -20,8 +20,6 @@ const SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-01': () => <LoginScreen />,
   'S-02': () => <ResetScreen />,
   'S-04': () => <DashboardScreen />,
-  'S-21': () => <LibraryScreen />,
-  'S-22': () => <RecordingDetailScreen />,
 };
 
 interface RouteSpec {
@@ -37,8 +35,6 @@ export const ROUTES: readonly RouteSpec[] = [
   { path: '/login', screen: 'S-01', title: 'Login', gate: 'public' },
   { path: '/login/reset', screen: 'S-02', title: 'Set a new password' },
   { path: '/', screen: 'S-04', title: 'Dashboard' },
-  { path: '/library', screen: 'S-21', title: 'Recordings' },
-  { path: '/library/:recordingId', screen: 'S-22', title: 'Recording detail' },
 ];
 
 const screenRoutes: RouteObject[] = ROUTES.map(({ path, screen, title, gate }) => {
@@ -65,12 +61,18 @@ interface AdvancedChildSpec {
 const ADVANCED_SHARED_CHILDREN: readonly AdvancedChildSpec[] = [
   { path: 'local-capture', screen: 'S-26', title: 'Local Capture Layout' },
   { path: 'streaming', screen: 'S-27', title: 'Streaming Configuration' },
+  // S-21/S-22 moved here from the flat nav-map: the recording library is now a
+  // dedicated section INSIDE the Advanced shell (both roles), not a header link.
+  { path: 'library', screen: 'S-21', title: 'Recording Library' },
+  { path: 'library/:recordingId', screen: 'S-22', title: 'Recording detail' },
 ];
 
 /** Screens with a real implementation among the Advanced children. */
 const ADVANCED_SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-26': () => <LocalCaptureScreen />,
   'S-27': () => <StreamingScreen />,
+  'S-21': () => <LibraryScreen />,
+  'S-22': () => <RecordingDetailScreen />,
   'S-35': () => <UploadQueueScreen />,
 };
 

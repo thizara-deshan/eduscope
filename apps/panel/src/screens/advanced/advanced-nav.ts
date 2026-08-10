@@ -23,6 +23,7 @@ export const ADVANCED_NAV_ITEMS: readonly AdvancedNavItem[] = [
   { path: '/advanced/logs', screen: 'S-34', label: 'System Logs', icon: '📄', roles: ['admin'] },
   { path: '/advanced/local-capture', screen: 'S-26', label: 'Local Capture Layout', icon: '🎬', roles: ['admin', 'lecturer'] },
   { path: '/advanced/streaming', screen: 'S-27', label: 'Streaming Configuration', icon: '📡', roles: ['admin', 'lecturer'] },
+  { path: '/advanced/library', screen: 'S-21', label: 'Recording Library', icon: '🎞️', roles: ['admin', 'lecturer'] },
   { path: '/advanced/uploads', screen: 'S-35', label: 'Upload Queue', icon: '⬆️', roles: ['admin'] },
   { path: '/advanced/device', screen: 'S-36', label: 'Device & Identity', icon: '🆔', roles: ['admin'] },
 ];

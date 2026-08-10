@@ -1,3 +1,460 @@
+/* ============================================================
+   S-21 Recording Library — now a dedicated section INSIDE the
+   Advanced shell (renders in .us-adm__content). The screen owns
+   its own height so the ROW LIST scrolls internally and the page
+   itself never scrolls (screen-inventory §8). This container was
+   previously undefined, which left .us-reclist with no bounded
+   height — the list overflowed the panel and its lower rows were
+   unreachable. .us-library now fixes that.
+   ============================================================ */
+
+.us-library {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+.us-library__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  padding-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-library__header h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+/* Select pushes to the far right; the filters sit between it and the title. */
+.us-library__select {
+  margin-left: auto;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-7);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.us-library__select:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+/* ---------- Filters ---------- */
+
+.us-libfilters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.us-libfilters__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* The whole chip lights up while the field inside it is focused — the input
+   itself drops its own outline (below) so the ring reads as one control. */
+.us-libfilters__chip:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.us-libfilters__chip--toggle {
+  cursor: pointer;
+  color: var(--text);
+}
+
+.us-libfilters__chip .us-input {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  min-width: 12ch;
+  padding: var(--sp-2) 0;
+}
+
+.us-libfilters__chip .us-input:focus {
+  outline: none;
+}
+
+.us-libfilters__chip .us-input::placeholder {
+  color: var(--text-faint);
+}
+
+.us-libfilters__chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-circle);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+}
+
+.us-libfilters__chip button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* ---------- Removed-under-you notices ---------- */
+
+.us-library__removed {
+  flex: 0 0 auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.us-library__removed li {
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--radius-md);
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* ---------- Empty state ---------- */
+
+.us-library__empty {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.us-library__empty p {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+
+.us-library__empty p:first-child {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ---------- The scrolling row list ---------- */
+
+.us-reclist {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  scrollbar-gutter: stable;
+}
+
+.us-reclist__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  /* The list is a flex COLUMN scroll container. Without this, once the rows
+     outgrow the viewport flex shrinks each one down to min-height and the
+     taller body (title + meta + badge) spills out the top and bottom of the
+     card. Rows must keep their natural height and let the list scroll. */
+  flex: 0 0 auto;
+  min-height: var(--tap-row-lg);
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.us-reclist__item:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.us-reclist__item--tombstone,
+.us-reclist__item--tombstone:hover {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border);
+}
+
+.us-reclist__item--skeleton {
+  flex: 0 0 auto;
+  min-height: var(--tap-row-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    100deg,
+    var(--surface) 30%,
+    var(--surface-2) 50%,
+    var(--surface) 70%
+  );
+  background-size: 200% 100%;
+  animation: us-reclist-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes us-reclist-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.us-reclist__checkbox {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  accent-color: var(--accent);
+}
+
+.us-reclist__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.us-reclist__title {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text);
+  transition: color 0.15s ease;
+}
+
+.us-reclist__body:hover .us-reclist__title {
+  color: var(--accent);
+}
+
+.us-reclist__meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.us-reclist__tombstone-note {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.us-reclist__play {
+  flex: 0 0 auto;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.us-reclist__play:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.us-reclist__menu {
+  flex: 0 0 auto;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+}
+
+.us-reclist__menu:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.us-reclist__menuwrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.us-reclist__menupopup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--sp-2));
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 160px;
+  overflow: hidden;
+}
+
+.us-reclist__menupopup button {
+  display: block;
+  width: 100%;
+  min-height: var(--tap-row);
+  text-align: left;
+  padding: 0 var(--sp-6);
+  border: none;
+  background: transparent;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.us-reclist__menupopup button:hover {
+  background: var(--danger-soft);
+}
+
+/* ---------- Load more ---------- */
+
+.us-library__load-more {
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.us-library__load-more:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.us-library__load-more:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ---------- Selection bar (replaces the header while selecting) ---------- */
+
+.us-selectionbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  min-height: var(--tap-row);
+  padding: var(--sp-2) var(--sp-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.us-selectionbar__summary {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.us-selectionbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.us-selectionbar__cancel {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.us-selectionbar__cancel:hover {
+  background: var(--surface-2);
+}
+
+.us-selectionbar__export {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-7);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.us-selectionbar__export:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.us-selectionbar__export:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ============================================================
+   Recording badges (shared by S-21 rows and S-22 detail).
+   ============================================================ */
+
 .us-badge-group {
   display: inline-flex;
   flex-direction: column;
@@ -48,160 +505,4 @@
 
 .us-badge__secondary {
   font-size: var(--fs-3xs);
-}
-
-.us-reclist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.us-reclist__item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-height: var(--tap-row-lg);
-  padding: var(--sp-6);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.us-reclist__item--tombstone {
-  background: var(--surface-2);
-  color: var(--text-faint);
-}
-
-.us-reclist__checkbox {
-  min-width: var(--tap-min);
-  min-height: var(--tap-min);
-}
-
-.us-reclist__body {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-
-.us-reclist__title {
-  font-size: var(--fs-md);
-  font-weight: 700;
-  color: var(--text);
-}
-
-.us-reclist__meta {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-}
-
-.us-reclist__tombstone-note {
-  font-size: var(--fs-xs);
-  color: var(--text-faint);
-}
-
-.us-reclist__play,
-.us-reclist__menu {
-  min-width: var(--tap-min);
-  min-height: var(--tap-min);
-  padding: var(--sp-2) var(--sp-3);
-}
-
-.us-reclist__menuwrap {
-  position: relative;
-}
-
-.us-reclist__menupopup {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  z-index: 10;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.2));
-  min-width: 140px;
-}
-
-.us-reclist__menupopup button {
-  display: block;
-  width: 100%;
-  min-height: var(--tap-min);
-  text-align: left;
-  padding: 0 var(--sp-4);
-  color: var(--danger);
-}
-
-.us-libfilters {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-.us-libfilters__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: var(--tap-min);
-  padding: 0 var(--sp-3);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.us-libfilters__chip .us-input {
-  border: none;
-  background: none;
-  font: inherit;
-  color: var(--text);
-  min-width: 8ch;
-}
-
-.us-libfilters__chip .us-input:focus {
-  outline: none;
-}
-
-.us-selectionbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--tap-row);
-  padding: 0 var(--sp-6);
-  background: var(--surface-2);
-}
-
-.us-selectionbar__summary {
-  font-size: var(--fs-sm);
-  color: var(--text);
-  font-weight: 700;
-}
-
-.us-selectionbar__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-.us-selectionbar__cancel,
-.us-selectionbar__export {
-  min-height: var(--tap-min);
-  padding: 0 var(--sp-6);
-}
-
-.us-selectionbar__export {
-  background: var(--accent);
-  color: white;
-  border-radius: var(--radius-md);
 }

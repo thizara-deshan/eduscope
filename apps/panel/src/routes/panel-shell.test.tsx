@@ -53,7 +53,7 @@ describe('PanelShell — header visibility (S-01 §12, S-02 §12)', () => {
     expect(document.querySelector('.us-header')).toBeNull();
   });
 
-  it.each(['/', '/library', '/advanced'])('renders a header at %s', (path) => {
+  it.each(['/', '/advanced/library', '/advanced'])('renders a header at %s', (path) => {
     renderAt(path);
     expect(document.querySelector('.us-header')).not.toBeNull();
   });
