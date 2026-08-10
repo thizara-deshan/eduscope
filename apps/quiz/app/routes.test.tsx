@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { QuizAppProviders } from '../src/app/quiz-app-providers.js';
 import JoinPage from './j/[joinCode]/page.js';
 import RegisterPage from './j/[joinCode]/register/page.js';
 import PlayPage from './s/[quizSessionId]/page.js';
@@ -18,7 +19,11 @@ describe('quiz route skeletons (screen-inventory §6)', () => {
     ['S-38', () => <RegisterPage params={{ joinCode: 'ABC123' }} />],
     ['S-39', () => <PlayPage params={{ quizSessionId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D' }} />],
   ])('renders %s', (id, Component) => {
-    render(<Component />);
+    render(
+      <QuizAppProviders>
+        <Component />
+      </QuizAppProviders>,
+    );
     expect(screen.getByTestId('screen').dataset.screen).toBe(id);
   });
 

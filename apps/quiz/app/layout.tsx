@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { QuizAppProviders } from '../src/app/quiz-app-providers.js';
 import './globals.css';
 
 export const metadata = { title: 'Eduscope Quiz' };
@@ -7,7 +8,9 @@ export const viewport = { width: 'device-width', initialScale: 1, maximumScale: 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <QuizAppProviders>{children}</QuizAppProviders>
+      </body>
     </html>
   );
 }

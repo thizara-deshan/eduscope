@@ -1,24 +1,90 @@
+/* Eduscope Quiz — ported tokens (frontend-conventions §6, docs/design/screen-inventory.md §8).
+   Custom properties are the system; do NOT convert to Tailwind utilities.
+   Fixed light scheme — no dark mode, no theme toggle, no hover affordances
+   (this is a touch-first mobile screen, portrait 360–430px). */
+
 :root {
   /* screen-inventory §6: text >= 16px so iOS does not zoom on focus. */
   --fs-root: 16px;
-  /* Answer targets are full-width and >= 64px tall. */
+  --fs-md: 16px;
+  --fs-xl: 19px;
+  --fs-3xl: 24px;
+
+  /* Answer targets are full-width and >= 64px tall; other controls >= 44px. */
   --tap-answer: 64px;
   --tap-min: 44px;
   /* Nothing lives in the bottom 24px — browser chrome sits there. */
   --safe-bottom: 24px;
 
+  --sp-1: 4px;  --sp-2: 6px;  --sp-3: 8px;  --sp-4: 10px; --sp-5: 12px;
+  --sp-6: 14px; --sp-7: 16px; --sp-8: 18px; --sp-9: 20px; --sp-10: 24px;
+
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+
   --bg: #eef0f4;
   --surface: #ffffff;
   --text: #1c2430;
+  --text-muted: #5b6675;
+  --border: #d8dee9;
   --accent: #2f6bed;
   --success: #1c9e6a;
   --danger: #c62828;
+  --warning: #d98a12;
 
   font-size: var(--fs-root);
   color-scheme: light;
 }
 
-html, body { margin: 0; background: var(--bg); color: var(--text); }
+*, *::before, *::after { box-sizing: border-box; }
 
-/* Portrait 360–430px is the design target; no hover affordances at all. */
-main { max-width: 430px; margin: 0 auto; padding: 16px 16px calc(16px + var(--safe-bottom)); }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-size: var(--fs-root); }
+
+button, input { font-family: inherit; font-size: var(--fs-root); }
+
+/* Portrait 360–430px is the design target; page scrolling stays available on
+   short phones, but content never overflows horizontally. */
+body { overflow-x: hidden; }
+
+.quiz-shell { display: flex; flex-direction: column; min-height: 100%; }
+
+.quiz-shell__brand {
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-7);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.quiz-shell__connection {
+  padding: var(--sp-3) var(--sp-7);
+  background: var(--warning);
+  color: var(--surface);
+  font-size: var(--fs-md);
+  text-align: center;
+}
+
+.quiz-shell__main {
+  flex: 1;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: var(--sp-7) var(--sp-7) calc(var(--sp-7) + var(--safe-bottom));
+}
+
+/* Every touch target meets the floor; answer cards meet the taller one. */
+:where(button, a[role="button"], [role="tab"], input) { min-height: var(--tap-min); }
+.quiz-answer { min-height: var(--tap-answer); width: 100%; }
+
+:where(button, a, input, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* No information may be carried by motion alone. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

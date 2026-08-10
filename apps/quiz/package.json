@@ -8,6 +8,7 @@
     "start": "next start --port 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "e2e": "playwright test",
     "gate": "playwright test e2e/gate-boot.spec.ts"
   },
   "dependencies": {
