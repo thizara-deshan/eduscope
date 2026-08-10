@@ -1,4 +1,9 @@
-import type { QuizIdentity } from '@eduscope/api-client/quiz';
+export interface QuizIdentity {
+  readonly participantId: string;
+  readonly displayName: string;
+  readonly studentIdNumber: string;
+  readonly quizSessionId: string;
+}
 
 export interface RegisterInput {
   readonly displayName: string;

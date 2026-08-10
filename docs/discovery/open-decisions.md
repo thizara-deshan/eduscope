@@ -33,7 +33,7 @@
 | D-19 | Streaming platform list | Discovery | PM | Phase 2 | YouTube + Facebook + Custom RTMP |
 | D-20 | Home of provisioning powers (ex dev-admin) | Discovery | PM + tech lead | Phase 3 | Deploy-layer config, no UI page |
 | D-21 | Class-roster provenance (quiz/leaderboard) | Discovery | PM + institute | Phase 3 | Quiz-app self-registration |
-| SQO-1 | Institution student-ID validation policy values | S-37…S-41 wireframe gate | PM + institute | Before Wave 7 contract application | No guessed value; CG-1 application waits |
+| SQO-1 | Institution student-ID validation policy values | S-37…S-41 wireframe gate | PM + institute | Before Wave 7 contract application | **Resolved 2026-08-11** — `^[A-Z]{2}[0-9]{7,8}$`, text input, max 10; applied with CG-1 in v0.6.0 |
 
 ---
 
@@ -641,21 +641,16 @@ S-37…S-41 routes while avoiding navigation for every question-state change.
 All five are answered in screen-inventory §10. None is applied in this design
 run; Wave 7 remains blocked until the contract, generated schemas and mock agree.
 
-### 10.3 Genuinely unresolved
+### 10.3 Resolved prerequisite
 
-#### SQO-1 — Institution student-ID validation policy values
+#### SQO-1 — Institution student-ID validation policy values — resolved 2026-08-11
 
-- **Question:** What exact `studentIdPattern`, human hint, input mode and maximum
-  length should the quiz service publish for this institute?
-- **Why it remains open:** PRD INT-4/QZ-3 and Z-11 decide format validation but
-  do not provide the format. The provisional mock's `^[A-Z]{2}\d{8}$` is not a
-  contract and cannot be promoted by a wireframe.
-- **Who decides:** PM with the institute/data owner.
-- **Latest phase without rework:** before CG-1 is applied for Wave 7.
-- **If unresolved:** do not guess a regex or promote the scaffold mock. CG-1 may
-  define the policy shape, but Wave 7 contract application remains blocked until
-  the institute supplies the values. The UI displays the returned hint and does
-  not claim institutional validation.
+- **Resolution:** publish `studentIdPattern: ^[A-Z]{2}[0-9]{7,8}$`, strict
+  uppercase, `studentIdHint: Two uppercase letters followed by 7 or 8 digits`,
+  `inputMode: text`, and `studentIdMaxLength: 10`. `fullNameMaxLength` remains
+  the domain-model bound of 128.
+- **Application:** CG-1 is applied in contract v0.6.0. The provisional scaffold
+  regex was removed rather than promoted.
 
 **D-21 remains open** for the later roster/SSO provenance decision. W-11 settles
 only the V1 surface already required by the PRD: self-registration maps cleanly

@@ -411,31 +411,80 @@ export const zQuizSyncServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
 ]);
 
-// ── §4 note: student-facing events, shared with apps/quiz ──────────────────
+// ── §5 student realtime, shared with apps/quiz (contract v0.6) ────────
+
+export const zStudentQuizOption = z.object({
+  id: zUlid,
+  label: z.string(),
+  text: z.string(),
+}).strict();
+
+export const zStudentQuizQuestionPayload = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('open'),
+    publicationId: zUlid,
+    prompt: z.string(),
+    options: z.array(zStudentQuizOption).min(2).max(4),
+    ownAnswerOptionId: zUlid.nullable(),
+  }).strict(),
+  z.object({
+    state: z.literal('closed'),
+    publicationId: zUlid,
+    prompt: z.string(),
+    options: z.array(zStudentQuizOption).min(2).max(4),
+    ownAnswerOptionId: zUlid.nullable(),
+  }).strict(),
+  z.object({ state: z.literal('none') }).strict(),
+]);
+
+export const zStudentQuizResultPayload = z.object({
+  publicationId: zUlid,
+  question: z.object({
+    prompt: z.string(),
+    options: z.array(zStudentQuizOption).min(2).max(4),
+  }).strict(),
+  selectedOptionId: zUlid.nullable(),
+  isCorrect: z.boolean().nullable(),
+  correctOptionId: zUlid,
+  pointsAwarded: z.number().int().nonnegative(),
+  runningScore: z.number().int().nonnegative(),
+  ownRank: z.number().int().nonnegative().nullable(),
+  rankState: z.enum(['pending', 'current']),
+}).strict();
+
+export const zStudentQuizSessionPayload = z.union([
+  z.object({
+    state: z.literal('open'),
+    finalScore: z.null().optional(),
+    finalRank: z.null().optional(),
+    answeredCount: z.null().optional(),
+  }).strict(),
+  z.discriminatedUnion('participationState', [
+    z.object({
+      state: z.literal('closed'),
+      participationState: z.literal('participated'),
+      finalScore: z.number().int().nonnegative(),
+      finalRank: z.number().int().nonnegative(),
+      answeredCount: z.number().int().positive(),
+    }).strict(),
+    z.object({
+      state: z.literal('closed'),
+      participationState: z.literal('none'),
+      finalScore: z.literal(0),
+      finalRank: z.null(),
+      answeredCount: z.literal(0),
+    }).strict(),
+  ]),
+]);
 
 export const zStudentServerEvent = z.discriminatedUnion('event', [
   z.object({
     event: z.literal('quiz.question'),
-    payload: z.object({
-      publicationId: zUlid,
-      state: z.enum(['open', 'closed', 'none']),
-      prompt: z.string(),
-      options: z.array(
-        z.object({ id: zUlid, label: z.string(), text: z.string() }),
-      ),
-      ownAnswer: zUlid.nullable(),
-    }),
+    payload: zStudentQuizQuestionPayload,
   }),
   z.object({
     event: z.literal('quiz.result'),
-    payload: z.object({
-      publicationId: zUlid,
-      isCorrect: z.boolean().nullable(),
-      correctOptionId: zUlid,
-      pointsAwarded: z.number().int().nonnegative(),
-      runningScore: z.number().int().nonnegative(),
-      ownRank: z.number().int().nonnegative().nullable(),
-    }),
+    payload: zStudentQuizResultPayload,
   }),
   z.object({
     event: z.literal('quiz.participant'),
@@ -443,13 +492,12 @@ export const zStudentServerEvent = z.discriminatedUnion('event', [
   }),
   z.object({
     event: z.literal('quiz.session'),
-    payload: z.object({
-      state: z.enum(['open', 'closed']),
-      finalScore: z.number().int().nonnegative().nullable(),
-      finalRank: z.number().int().nonnegative().nullable(),
-      answeredCount: z.number().int().nonnegative().nullable(),
-    }),
+    payload: zStudentQuizSessionPayload,
   }),
 ]);
 
+export type StudentQuizOption = z.infer<typeof zStudentQuizOption>;
+export type StudentQuizQuestionPayload = z.infer<typeof zStudentQuizQuestionPayload>;
+export type StudentQuizResultPayload = z.infer<typeof zStudentQuizResultPayload>;
+export type StudentQuizSessionPayload = z.infer<typeof zStudentQuizSessionPayload>;
 export type StudentServerEvent = z.infer<typeof zStudentServerEvent>;

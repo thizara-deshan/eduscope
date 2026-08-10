@@ -734,3 +734,55 @@ Callers updated: `rest/auth.ts` (`login`, `changePassword`) and `rest/users.ts`
 is gone from `auth-v0-2.test.ts`, replaced by two regression tests — one for
 cross-client leakage, one for `switchScenario` — both confirmed to fail against
 a shared store.
+
+---
+
+## 0.5.0 → 0.6.0 — 2026-08-11 · Wave 7 (Student quiz app) gate
+
+Carries exactly the five answered Wave 7 rows: **CG-1, CG-22, CG-23, CG-24,
+CG-25**. The main `openapi.yaml` version and the new `quiz-app.yaml` version are
+`0.6.0`. `contracts/events.md` **did change** because CG-22…CG-25 amend the
+student WebSocket contract. No projector/CG-2 or other open gap is included.
+
+Authoritative registration policy supplied for SQO-1 on 2026-08-11:
+`^[A-Z]{2}[0-9]{7,8}$`, strict uppercase, `inputMode=text`, maximum 10
+characters, hint "Two uppercase letters followed by 7 or 8 digits"; full name
+keeps the existing domain maximum of 128.
+
+### Amendment rows
+
+| CG | Decision id | Severity | Exact old → new diff | Frontend obligation | Mock obligation |
+|---|---|---|---|---|---|
+| **CG-1** | **SQ-D-1, SQ-D-2, SQ-D-3, SQ-D-4** | **additive** | **Old:** no student REST contract; `openapi.yaml` listed join/register/answer as an open surface and `quiz-app-client.ts` carried provisional handwritten shapes and `^[A-Z]{2}\d{8}$`. **New:** `contracts/quiz-app.yaml` defines `resolveJoinCode`, `registerParticipant`, `submitAnswer`; the Secure/HttpOnly/SameSite=Lax `eduscope_participant` cookie; confirmed `RegistrationPolicy`; created/rejoined and accepted/already-accepted outcomes; named `quiz.session-not-found`, `quiz.unavailable`, `quiz.session-closed`, `registration.invalid-name`, `registration.invalid-student-id`, `question.closed`, and `answer.invalid-option` problems with field pointers. `openapi.yaml info.version: 0.5.0 → 0.6.0` and its open-item prose now links the contract. | Route anonymous/returning/closed directly; render the returned policy and named problems; use `{fullName,studentIdNumber}` and `{selectedOptionId}`; rely on the cookie rather than browser-readable participant credentials; first answer locks immediately and server outcome wins races. | Validate every response/request with generated quiz schemas; reach case-insensitive resolution, created/rejoined, both invalid fields, closed/unavailable/not-found, accepted/duplicate/invalid/closed and request-reply loss. |
+| **CG-22** | **SQ-D-2, SQ-D-5** | **additive** | **Old:** events.md only said student events used "its own realtime channel"; no URL, auth, backoff, or snapshot boundary/order. **New:** events.md §5 defines `GET /api/student/v1/stream`, participant-cookie auth, 0.5→10 s unlimited reconnect, server→student envelope, and atomic connect sequence `quiz.session → quiz.participant → exactly one quiz.question → applicable quiz.result → live deltas`. | Buffer each connect snapshot and replace student state atomically; never merge into stale question/result state and never queue offline answers. | `connect()` emits and returns the ordered complete snapshot; `student-quiz-reconnect` exposes offline then atomic reconnect through the shared catalog. |
+| **CG-23** | **SQ-D-5** | **breaking** | **Old:** one `quiz.question` object required `publicationId`, `prompt`, `options` for every `state: open\|closed\|none` and called the nullable value `ownAnswer`. **New:** strict discriminated variants: `open\|closed` require publication, prompt, 2–4 options and `ownAnswerOptionId`; `none` permits only `{state:'none'}`. | Branch on `state` before reading question fields; treat `ownAnswerOptionId` as an option id; waiting/reconnect must accept the fieldless `none` variant. | Catalog snapshots expose 2-, 3-, and 4-option variants plus `none`/closed; zod rejects question fields on `none` and option counts outside 2–4. |
+| **CG-24** | **SQ-D-6** | **additive** | **Old:** `quiz.result` carried only `publicationId,isCorrect,correctOptionId,pointsAwarded,runningScore,ownRank`. **New:** adds required `question:{prompt,options[{id,label,text}]}`, `selectedOptionId: Ulid\|null`, and `rankState: pending\|current`; existing fields remain. | Render S-40 entirely from the result; `selectedOptionId=null` means missed; show rank-updating from `rankState=pending`; never depend on S-39 memory. | Catalog reaches correct/current, incorrect/pending and missed/current results after cold connect and validates each complete payload. |
+| **CG-25** | **SQ-D-5; S-41 §7 ruling** | **breaking** | **Old:** one student `quiz.session` object had `state: open\|closed` plus nullable `finalScore`, `finalRank`, `answeredCount`, with no participation discriminator. **New:** strict variants: open permits final fields absent/null and has no participation field; closed/participated requires non-null score/rank and `answeredCount>0`; closed/none requires `finalScore=0, finalRank=null, answeredCount=0`. | Branch on `participationState`; render participated own summary versus gentle never-answered terminal state; do not infer zero from missing data. | `student-quiz-happy` reaches participated terminal data and `student-quiz-closed` reaches the exact zero/none summary; zod rejects contradictory combinations. |
+
+### Generated layer and mock lockstep
+
+- `packages/shared` codegen now runs against both OpenAPI files. Core output was
+  regenerated from `openapi.yaml`; student output lives in
+  `src/schemas/quiz-generated/` and is explicitly re-exported by
+  `quiz-rest.ts` without duplicating the core `Ulid` export.
+- `events.ts` supplies the strict CG-23/CG-25 discriminated unions and the
+  additive self-contained result schema used by `StudentServerEvent`.
+- The provisional quiz mock and its hard-coded regex were removed. The mock
+  validates against generated REST zod plus shared event zod.
+- The existing scenario catalog was extended, never forked, with
+  `student-quiz-happy`, `student-quiz-returning`, `student-quiz-closed`,
+  `student-quiz-reconnect`, and `student-quiz-failures`.
+- The self-registration adapter no longer persists participant identity in
+  `localStorage`; the HttpOnly cookie remains the durable rejoin truth.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Core + quiz OpenAPI generation | pass; main generated layer refreshed and `quiz-generated/{types,zod}.gen.ts` created from `quiz-app.yaml` |
+| TypeScript | pass: `packages/shared`, `packages/api-client`, `apps/quiz` |
+| Shared contract tests | **29 pass** |
+| API client/mock/scenario tests | **288 pass** |
+| Quiz app tests | **10 pass** |
+
+No tag was created.

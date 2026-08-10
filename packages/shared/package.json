@@ -5,7 +5,7 @@
   "type": "module",
   "exports": { ".": "./src/index.ts", "./schemas": "./src/schemas/rest.ts" },
   "scripts": {
-    "codegen": "openapi-ts -f codegen.config.ts",
+    "codegen": "openapi-ts -f codegen.config.ts && openapi-ts -f quiz-codegen.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

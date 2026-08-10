@@ -21,7 +21,23 @@ export type ScenarioName =
   | 'usb-pull'
   | 'wan-loss'
   /** Added for Wave 6 S-36. */
-  | 'capture-fault';
+  | 'capture-fault'
+  | 'student-quiz-happy'
+  | 'student-quiz-returning'
+  | 'student-quiz-closed'
+  | 'student-quiz-reconnect'
+  | 'student-quiz-failures';
+
+/** Wave 7 student REST/WS state selected through the one shared scenario catalog. */
+export interface StudentQuizScenario {
+  readonly resolution: 'open-anonymous' | 'open-returning' | 'closed' | 'not-found' | 'unavailable' | 'unreachable-once';
+  readonly registration: 'created' | 'rejoined' | 'session-closed' | 'unavailable' | 'offline-once';
+  readonly question: 'none' | 'open-2' | 'open-3' | 'open-4' | 'closed';
+  readonly answer: 'accepted' | 'already-accepted' | 'question-closed' | 'invalid-option' | 'reply-lost';
+  readonly result: 'correct-current' | 'incorrect-pending' | 'missed-current' | 'none';
+  readonly summary: 'open' | 'participated' | 'none';
+  readonly reconnect: boolean;
+}
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }
@@ -108,6 +124,8 @@ export interface ScenarioScript {
   readonly wsFlap?: { readonly afterMs: number; readonly downMs: number; readonly repeat: number };
   /** Wave 5 — raw entity events this script schedules with no machine behind them (usb-pull, wan-loss, disk-full's retention removal). */
   readonly emits?: readonly ScheduledEmit[];
+  /** Wave 7: student quiz-service state, consumed by createMockQuizClient. */
+  readonly studentQuiz?: StudentQuizScenario;
 }
 
 /** A raw entity event a script schedules on the world clock (no machine behind it). */

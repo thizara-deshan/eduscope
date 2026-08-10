@@ -45,6 +45,11 @@ describe('scenario engine', () => {
       'usb-pull',
       'wan-loss',
       'capture-fault',
+      'student-quiz-happy',
+      'student-quiz-returning',
+      'student-quiz-closed',
+      'student-quiz-reconnect',
+      'student-quiz-failures',
     ]);
   });
 

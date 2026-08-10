@@ -7,6 +7,7 @@ import {
   zPanelServerEvent,
   zPreviewClientMessage,
   zPreviewServerMessage,
+  zStudentServerEvent,
 } from '../src/schemas/events.js';
 
 const catalog = readFileSync(
@@ -120,5 +121,41 @@ describe('event catalog coverage', () => {
         },
       }),
     ).toThrow();
+  });
+
+  it('CG-23: question none is fieldless and open requires 2-4 options plus option-id answer', () => {
+    expect(zStudentServerEvent.parse({ event: 'quiz.question', payload: { state: 'none' } })).toBeTruthy();
+    expect(() => zStudentServerEvent.parse({
+      event: 'quiz.question', payload: { state: 'none', publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D' },
+    })).toThrow();
+    expect(() => zStudentServerEvent.parse({
+      event: 'quiz.question',
+      payload: {
+        state: 'open', publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D', prompt: 'Q?',
+        options: [{ id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9E', label: 'A', text: 'A' }],
+        ownAnswerOptionId: null,
+      },
+    })).toThrow();
+  });
+
+  it('CG-24/25: result is self-contained and closed-none has exact zero semantics', () => {
+    const option = { id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9E', label: 'A', text: 'A' };
+    const option2 = { id: '01JBQ8ZK3T7WBM5N2Q4XPRVC9F', label: 'B', text: 'B' };
+    expect(zStudentServerEvent.parse({
+      event: 'quiz.result',
+      payload: {
+        publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9D', question: { prompt: 'Q?', options: [option, option2] },
+        selectedOptionId: null, isCorrect: null, correctOptionId: option.id,
+        pointsAwarded: 0, runningScore: 0, ownRank: null, rankState: 'pending',
+      },
+    })).toBeTruthy();
+    expect(zStudentServerEvent.parse({
+      event: 'quiz.session',
+      payload: { state: 'closed', participationState: 'none', finalScore: 0, finalRank: null, answeredCount: 0 },
+    })).toBeTruthy();
+    expect(() => zStudentServerEvent.parse({
+      event: 'quiz.session',
+      payload: { state: 'closed', participationState: 'none', finalScore: 10, finalRank: null, answeredCount: 0 },
+    })).toThrow();
   });
 });

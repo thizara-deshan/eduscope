@@ -1,33 +1,35 @@
-import type { QuizAppClient, QuizIdentity } from '@eduscope/api-client/quiz';
-import type { QuizIdentityProvider, RegisterInput } from './identity-provider.js';
-
-const STORAGE_KEY = 'eduscope.quiz.identity';
+import type { QuizAppClient } from '@eduscope/api-client/quiz';
+import type { QuizIdentity, QuizIdentityProvider, RegisterInput } from './identity-provider.js';
 
 /** V1. Self-registration at first join ([D-21]); no roster, no password. */
 export function createSelfRegistrationProvider(client: QuizAppClient): QuizIdentityProvider {
-  const read = (): QuizIdentity | null => {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as QuizIdentity) : null;
-  };
+  let current: QuizIdentity | null = null;
 
   return {
     kind: 'self-registration',
 
-    async resolve() {
-      return read();
+    async resolve(joinCode) {
+      const resolved = await client.resolveJoinCode(joinCode);
+      return resolved.participantState === 'returning' ? current : null;
     },
 
     async register(joinCode: string, input: RegisterInput) {
-      const identity = await client.register(joinCode, input);
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
-      }
-      return identity;
+      const resolved = await client.resolveJoinCode(joinCode);
+      const registered = await client.registerParticipant(resolved.quizSessionId, {
+        fullName: input.displayName,
+        studentIdNumber: input.studentIdNumber,
+      });
+      current = {
+        participantId: registered.participantId,
+        quizSessionId: registered.quizSessionId,
+        displayName: input.displayName.trim(),
+        studentIdNumber: input.studentIdNumber,
+      };
+      return current;
     },
 
     async signOut() {
-      if (typeof localStorage !== 'undefined') localStorage.removeItem(STORAGE_KEY);
+      current = null;
     },
   };
 }

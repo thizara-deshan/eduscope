@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": ".", "noEmit": true },
-  "include": ["src", "test", "codegen.config.ts"]
+  "include": ["src", "test", "codegen.config.ts", "quiz-codegen.config.ts"]
 }

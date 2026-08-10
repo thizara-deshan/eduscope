@@ -1,6 +1,7 @@
 # Eduscope WS Event Catalog — Contract v0
 
-> Contract **v0.5.0** — the realtime half of [openapi.yaml](openapi.yaml).
+> Contract **v0.6.0** — the realtime half of [openapi.yaml](openapi.yaml) and
+> [quiz-app.yaml](quiz-app.yaml).
 > Successor of state-machines.md §10; that section now defers here (see its
 > catalog note). Payload schemas are the zod definitions in
 > [`packages/shared/src/schemas/events.ts`](../packages/shared/src/schemas/events.ts)
@@ -13,6 +14,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 0.6.0 | 2026-08-11 | §5 defines the participant-cookie-authenticated student WS and atomic connect snapshot (CG-22); student `quiz.question` becomes state-discriminated and names `ownAnswerOptionId` (CG-23); `quiz.result` gains its question snapshot, selected option and rank freshness (CG-24); student `quiz.session` becomes a participation-discriminated terminal summary (CG-25). Wave 7 S-39…S-41 wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.5.0 | 2026-08-09 | §2.18 `UploadJobPayload` gains `failureClass` (CG-20), mirroring the openapi `UploadJob.failureClass` so S-35 can tell an offline stall from a server failure live, not only on a REST snapshot. §1 records the implicit scoped-subscription semantic (CG-3): calling a flow's REST entry marks the AuthSession subscribed to its scoped stream — no WS client→server message. Wave 5 (S-35/S-23) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.4.0 | 2026-08-08 | §2.15 `QuizSessionPayload` gains `syncState` (CG-19), mirroring `QuizSessionProjection.syncState` so the joined-count staleness is knowable live and not only on REST snapshot. Wave 4 (S-20) wireframe-gate answer; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.3.0 | 2026-08-05 | §2.1 `RecordingStatePayload` gains `takeoverAt` + `takeoverByDisplayName` (CG-14). §2.10 `system.alert` emitter list gains R-22 (CG-17). Both Wave 2 (S-06/S-12) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
@@ -61,7 +63,7 @@ Exceptions, scoped to specific connections:
 |---|---|---|
 | `export.job`, `usb.volumes` | the AuthSession that requested the export / has the export flow open | B-38's `io.emit` broadcast bug |
 | `log.entry` | connections that subscribed to the live log view (AD-7 open) | volume |
-| `audio.levels` | panel connections only | telemetry volume (§5 budget) |
+| `audio.levels` | panel connections only | telemetry volume (§6 budget) |
 
 **How a session becomes subscribed (CG-3, v0.5).** Clients send no WS messages,
 so there is no explicit subscribe frame. Instead, **calling a scoped stream's
@@ -138,7 +140,7 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | Direction | core-api (from pipeline-manager) → panel only |
 | Payload | `AudioLevelsPayload` — `roleId`, `rms` 0–1 |
 | Emitter | Live audio path telemetry — **no state machine**; telemetry, never rows (INV-AC-2, INV-G-7) |
-| Frequency | **Throttled to ≤ 10 Hz** while any panel is connected; suppressed entirely when no panel subscribes (§5 budget: the kiosk browser shares the board with the pipelines) |
+| Frequency | **Throttled to ≤ 10 Hz** while any panel is connected; suppressed entirely when no panel subscribes (§6 budget: the kiosk browser shares the board with the pipelines) |
 | Consumers | Mic level meter (LP-9) |
 
 ### 2.7 `audio.control` *(v0 addition)*
@@ -369,14 +371,87 @@ Notes:
   (Z-22) against the pushed `correctOptionId`; a later question edit cannot
   rewrite results (INV-Q-4).
 - Student-facing events (`quiz.question`, `quiz.result`, `quiz.participant`,
-  student `quiz.session`) are emitted by quiz-service to student apps over its
-  own realtime channel; their payload schemas are in `events.ts`
-  (`StudentServerEvent`) so apps/quiz shares the same types. The student REST
-  surface (join, register, answer) is quiz-service-owned — see Open items.
+  student `quiz.session`) are emitted by quiz-service over the student channel
+  defined in §5. Their payload schemas are in `events.ts`
+  (`StudentServerEvent`) so apps/quiz shares the same types. Student REST is
+  quiz-service-owned and defined in [quiz-app.yaml](quiz-app.yaml) (CG-1).
 
 ---
 
-## 5. Frequency budget (panel on the same board — PRD §6)
+## 5. Quiz-service → student realtime contract (CG-22…CG-25)
+
+**Endpoint.** `GET /api/student/v1/stream` (upgrade), hosted by the quiz-service.
+The upgrade is authenticated only by the same `eduscope_participant` Secure,
+HttpOnly, SameSite=Lax cookie defined in [quiz-app.yaml](quiz-app.yaml). A
+participant id or credential is never accepted in a query parameter, frame, or
+browser-readable store (SQ-D-2).
+
+**Direction and envelope.** Server→student only. Commands use REST. Every frame
+uses the shared event envelope:
+
+```jsonc
+{ "event": "quiz.question", "at": "2026-08-11T09:00:00+00:00", "seq": 4, "payload": { /* below */ } }
+```
+
+`seq` is per connection and monotonic. Clients never queue an answer while
+offline. Reconnect uses `T-WS-RECONNECT` (0.5, 1, 2, 4, 8 s, capped at 10 s,
+unlimited).
+
+### 5.1 Atomic full snapshot on every connect (CG-22)
+
+Before any live delta, the quiz-service emits one uninterrupted snapshot in
+this exact order:
+
+1. exactly one student `quiz.session`;
+2. exactly one `quiz.participant` connection state;
+3. exactly one `quiz.question` (`open`, `closed`, or `none`);
+4. the current participant's `quiz.result` when a current own result applies;
+5. only then, live deltas.
+
+The client replaces its entire student quiz state atomically after the snapshot
+is complete; it never merges the new question/result into stale in-memory
+state. A reconnect therefore cannot flash the prior question or retain a result
+that the server did not include (SQ-D-5, INV-AP-1).
+
+### 5.2 `quiz.question` (CG-23 — breaking)
+
+State-discriminated payload:
+
+- `state: open | closed`: `publicationId`, `prompt`, `options` (2–4 entries of
+  `{id,label,text}`), and `ownAnswerOptionId: Ulid | null`;
+- `state: none`: no publication, prompt, options, or own-answer fields.
+
+`ownAnswerOptionId` is the selected **option id**, never an answer-row id.
+
+### 5.3 `quiz.result` (CG-24 — additive)
+
+Own-result payload only: `publicationId`,
+`question:{prompt,options[{id,label,text}]}`, `selectedOptionId: Ulid | null`
+(`null` means missed), `isCorrect: boolean | null`, `correctOptionId`,
+`pointsAwarded`, `runningScore`, `ownRank: integer | null`, and
+`rankState: pending | current`. It contains no other participant identity or
+leaderboard list and is self-contained after cold connect/reload (SQ-D-6).
+
+### 5.4 `quiz.participant`
+
+Payload: `connectionState: online | offline`. It describes only the
+cookie-authenticated participant.
+
+### 5.5 Student `quiz.session` (CG-25 — breaking)
+
+State-discriminated payload:
+
+- `state: open`: participation is absent; final fields are absent or null;
+- `state: closed, participationState: participated`: `finalScore` and
+  `finalRank` are non-null, and `answeredCount > 0`;
+- `state: closed, participationState: none`: `answeredCount: 0`,
+  `finalScore: 0`, `finalRank: null`.
+
+The terminal payload contains only the current participant's summary.
+
+---
+
+## 6. Frequency budget (panel on the same board — PRD §6)
 
 | Class | Events | Steady-state rate |
 |---|---|---|
@@ -389,7 +464,7 @@ No polling anywhere a WS event exists (target-architecture §6).
 
 ---
 
-## 6. Screen ↔ surface cross-check (PRD journeys J-1…J-5)
+## 7. Screen ↔ surface cross-check (PRD journeys J-1…J-5)
 
 Both directions of the rule: every endpoint has a screen; every screen need
 has an endpoint/event.
@@ -426,7 +501,7 @@ has an endpoint/event.
 
 ---
 
-## 7. Open items & contract decisions taken in v0 (review these)
+## 8. Open items & contract decisions taken in v0 (review these)
 
 | # | Item | Decision taken / question |
 |---|---|---|
@@ -435,7 +510,7 @@ has an endpoint/event.
 | C-3 | **AuditLogEntry has no query endpoint.** No PRD screen lists audit entries (AD-7 is LogEntry). State-machines §8 says set dispositions are "visible only in the audit log (AD-7)" — v0 resolves this by requiring every audited action to also write a Session-category `LogEntry` (INV-SA-2 pattern). If a dedicated audit browser is wanted, add `GET /audit` in v0.2. |
 | C-4 | **Channel enable/disable only during an active session** (409 `session.not-active` otherwise); idle-state switches write `enabledByDefault` via `PUT /channels/{id}`. Matches machine 1c scope; flag if the panel should treat idle toggles as commands instead. |
 | C-5 | **Network apply is 202 + row-readback** (`appliedAt`/`lastApplyError`) + `system.alert` on failure — no dedicated `network.apply` event, keeping §10's closed catalog small. |
-| C-6 | **Student-app REST surface** (join, register with name + student ID `[D-21]`, answer submission Z-21/Z-22) is quiz-service-owned and not in this contract; its event payloads are shared via `StudentServerEvent`. Needs its own contract file before apps/quiz Phase-2 work — proposed `contracts/quiz-app.yaml` in v0.2. |
+| C-6 | **Student-app REST surface applied in v0.6 (CG-1).** Join-code resolution, self-registration/rejoin, answer submission, the participant cookie, registration policy, and named problems are quiz-service-owned and defined in `contracts/quiz-app.yaml`. Student realtime payloads and atomic reconnect are §5 here. |
 | C-7 | **Quiz-sync auth scheme** (static bearer vs signed requests) left open under DM-P5; the paths assume `deviceAuth` bearer. |
 | C-8 | **WS auth transport** (`?token=` vs subprotocol) is a Phase-3 hardening pick; both are representable without a contract bump. |
 | C-9 | **`GET /recording/state` + REST snapshot mirrors** exist alongside the WS on-subscribe snapshot so screens can cold-render and the mock adapter is REST-testable. They are read-only mirrors, not second truths (SM-R-1: same single writer). |

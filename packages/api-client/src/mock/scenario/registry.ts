@@ -11,6 +11,10 @@ import { channelFailures } from './scripts/channel-failures.js';
 import { usbPull } from './scripts/usb-pull.js';
 import { wanLoss } from './scripts/wan-loss.js';
 import { captureFault } from './scripts/capture-fault.js';
+import {
+  studentQuizClosed, studentQuizFailures, studentQuizHappy,
+  studentQuizReconnect, studentQuizReturning,
+} from './scripts/student-quiz.js';
 import type { ForcedTransition, ScenarioName, ScenarioScript } from './types.js';
 
 /** The catalog, in overlay display order. Extend the scripts; never fork them. */
@@ -28,6 +32,11 @@ const CATALOG: Record<ScenarioName, ScenarioScript> = {
   'usb-pull': usbPull,
   'wan-loss': wanLoss,
   'capture-fault': captureFault,
+  'student-quiz-happy': studentQuizHappy,
+  'student-quiz-returning': studentQuizReturning,
+  'student-quiz-closed': studentQuizClosed,
+  'student-quiz-reconnect': studentQuizReconnect,
+  'student-quiz-failures': studentQuizFailures,
 };
 
 export function getScenario(name: ScenarioName): ScenarioScript {

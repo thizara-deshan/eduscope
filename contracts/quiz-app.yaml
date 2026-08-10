@@ -1,0 +1,269 @@
+openapi: 3.1.0
+info:
+  title: Eduscope quiz-service — student REST surface
+  version: 0.6.0
+  description: |
+    Student-facing REST contract for Wave 7 (CG-1). The quiz-service owns this
+    surface. Participant identity is carried only by the Secure, HttpOnly,
+    SameSite=Lax `eduscope_participant` cookie; browser-readable participant
+    credentials are not part of any request or response.
+
+    Join codes are resolved case-insensitively and the public resolution route
+    is rate-limited. Registration validates format only and does not consult a
+    roster in v0 (D-21). The authoritative institute policy is
+    `^[A-Z]{2}[0-9]{7,8}$`: two uppercase letters followed by 7 or 8 digits.
+
+servers:
+  - url: /api/student/v1
+    description: Public quiz-service student surface
+
+tags:
+  - name: student-quiz
+    description: Resolve, self-register/rejoin, and submit one locked answer
+
+paths:
+  /join-codes/{joinCode}:
+    get:
+      tags: [student-quiz]
+      operationId: resolveJoinCode
+      summary: Resolve a case-insensitive public join code without creating a participant
+      description: |
+        Public and rate-limited. A valid participant cookie may identify a
+        returning participant; an absent or invalid cookie is anonymous.
+        Resolution never creates a participant (INV-QP-1).
+      security:
+        - {}
+        - participantSession: []
+      x-rate-limited: true
+      parameters:
+        - name: joinCode
+          in: path
+          required: true
+          description: Case-insensitive quiz join code.
+          schema: { type: string, minLength: 1, maxLength: 32 }
+      responses:
+        '200':
+          description: Resolved session and server-owned registration policy.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveJoinCodeResponse' }
+        '404':
+          description: '`quiz.session-not-found`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+        '503':
+          description: '`quiz.unavailable`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+
+  /quiz-sessions/{quizSessionId}/participants:
+    post:
+      tags: [student-quiz]
+      operationId: registerParticipant
+      summary: Idempotently create or rejoin a participant for an open session
+      description: |
+        Unique by `(quizSessionId, studentIdNumber)`. Repeating registration
+        returns the stored participant with `outcome: rejoined` and never
+        creates a duplicate. Format validation only; no roster lookup in v0.
+      security:
+        - {}
+        - participantSession: []
+      parameters:
+        - $ref: '#/components/parameters/QuizSessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterParticipantRequest' }
+      responses:
+        '200':
+          description: Created or rejoined. Sets the participant session cookie.
+          headers:
+            Set-Cookie:
+              description: '`eduscope_participant=<opaque>; Secure; HttpOnly; SameSite=Lax; Path=/api/student/v1`'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegisterParticipantResponse' }
+        '409':
+          description: '`quiz.session-closed`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+        '422':
+          description: '`registration.invalid-name` or `registration.invalid-student-id`, with field pointers.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+        '503':
+          description: '`quiz.unavailable`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+
+  /publications/{publicationId}/answers:
+    post:
+      tags: [student-quiz]
+      operationId: submitAnswer
+      summary: Submit the participant's one locked answer
+      description: |
+        Idempotent for `(participant, publicationId)`. The first accepted
+        option is durable. A duplicate returns `already-accepted` with the
+        stored option and never overwrites it. Server receive time and the
+        publication's authoritative `closedAt` decide the answer/close race.
+      security:
+        - participantSession: []
+      parameters:
+        - $ref: '#/components/parameters/PublicationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitAnswerRequest' }
+      responses:
+        '200':
+          description: Authoritative accepted or already-accepted outcome.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubmitAnswerResponse' }
+        '409':
+          description: '`question.closed`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+        '422':
+          description: '`answer.invalid-option`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+        '503':
+          description: '`quiz.unavailable`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/QuizAppProblem' }
+
+components:
+  securitySchemes:
+    participantSession:
+      type: apiKey
+      in: cookie
+      name: eduscope_participant
+      description: Secure, HttpOnly, SameSite=Lax opaque participant session cookie, shared by registration, REST answers, and the student WS.
+
+  parameters:
+    QuizSessionId:
+      name: quizSessionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    PublicationId:
+      name: publicationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+
+  schemas:
+    Ulid:
+      type: string
+      pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+
+    RegistrationPolicy:
+      type: object
+      additionalProperties: false
+      required: [studentIdPattern, studentIdHint, inputMode, studentIdMaxLength, fullNameMaxLength]
+      properties:
+        studentIdPattern:
+          type: string
+          const: '^[A-Z]{2}[0-9]{7,8}$'
+        studentIdHint:
+          type: string
+          const: Two uppercase letters followed by 7 or 8 digits
+        inputMode:
+          type: string
+          const: text
+        studentIdMaxLength:
+          type: integer
+          const: 10
+        fullNameMaxLength:
+          type: integer
+          const: 128
+
+    ResolveJoinCodeResponse:
+      type: object
+      additionalProperties: false
+      required: [quizSessionId, state, participantState, registrationPolicy]
+      properties:
+        quizSessionId: { $ref: '#/components/schemas/Ulid' }
+        state: { type: string, enum: [open, closed] }
+        participantState: { type: string, enum: [anonymous, returning] }
+        registrationPolicy: { $ref: '#/components/schemas/RegistrationPolicy' }
+
+    RegisterParticipantRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, studentIdNumber]
+      properties:
+        fullName: { type: string, minLength: 1, maxLength: 128 }
+        studentIdNumber:
+          type: string
+          minLength: 9
+          maxLength: 10
+          pattern: '^[A-Z]{2}[0-9]{7,8}$'
+
+    RegisterParticipantResponse:
+      type: object
+      additionalProperties: false
+      required: [quizSessionId, participantId, outcome]
+      properties:
+        quizSessionId: { $ref: '#/components/schemas/Ulid' }
+        participantId: { $ref: '#/components/schemas/Ulid' }
+        outcome: { type: string, enum: [created, rejoined] }
+
+    SubmitAnswerRequest:
+      type: object
+      additionalProperties: false
+      required: [selectedOptionId]
+      properties:
+        selectedOptionId: { $ref: '#/components/schemas/Ulid' }
+
+    SubmitAnswerResponse:
+      type: object
+      additionalProperties: false
+      required: [outcome, selectedOptionId]
+      properties:
+        outcome: { type: string, enum: [accepted, already-accepted] }
+        selectedOptionId: { $ref: '#/components/schemas/Ulid' }
+
+    QuizAppProblemCode:
+      type: string
+      enum:
+        - quiz.session-not-found
+        - quiz.unavailable
+        - quiz.session-closed
+        - registration.invalid-name
+        - registration.invalid-student-id
+        - question.closed
+        - answer.invalid-option
+
+    FieldViolation:
+      type: object
+      additionalProperties: false
+      required: [pointer, message]
+      properties:
+        pointer: { type: string, description: JSON Pointer to the invalid request field, beginning with `/`. }
+        message: { type: string }
+
+    QuizAppProblem:
+      type: object
+      additionalProperties: false
+      required: [status, code, title]
+      properties:
+        status: { type: integer, minimum: 400, maximum: 599 }
+        code: { $ref: '#/components/schemas/QuizAppProblemCode' }
+        title: { type: string }
+        detail: { type: [string, 'null'] }
+        fieldViolations:
+          type: array
+          items: { $ref: '#/components/schemas/FieldViolation' }
