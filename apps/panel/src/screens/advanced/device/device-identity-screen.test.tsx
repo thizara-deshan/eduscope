@@ -61,6 +61,7 @@ describe('DeviceIdentityScreen', () => {
       acknowledgedBy: null, context: null, relatedEntity: null,
     }] }) });
     await waitFor(() => expect(screen.getByTestId('provisioned-chip')).toHaveTextContent('Provisioned'));
+    expect(screen.getByRole('heading', { name: 'Device & Identity' }).closest('.us-adm__pagehead')).not.toBeNull();
     expect(screen.getByText('ENG-A301', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Present')).toBeInTheDocument();
     expect(screen.getByText('Capture card not detected')).toBeInTheDocument();

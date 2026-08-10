@@ -64,6 +64,7 @@ describe('LogsScreen', () => {
       nextCursor: null,
     }) });
     await waitFor(() => expect(screen.getByTestId('log-row-L2')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'System Logs' }).closest('.us-adm__pagehead')).not.toBeNull();
     const rows = screen.getAllByTestId(/log-row-/);
     expect(rows[0]).toHaveAttribute('data-testid', 'log-row-L2');
   });

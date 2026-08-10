@@ -75,6 +75,16 @@ describe('LibraryScreen (S-21)', () => {
     const listRecordings = vi.fn(() => Promise.resolve({ items: [], nextCursor: null }));
     renderLibrary({ viewer: admin, listRecordings });
     await waitFor(() => expect(screen.getByText('No recordings on this device.')).toBeInTheDocument());
+    expect(screen.getByLabelText('Search recordings')).toBeVisible();
+  });
+
+  it('keeps filters visible when an active search returns no rows', async () => {
+    const listRecordings = vi.fn(() => Promise.resolve({ items: [], nextCursor: null }));
+    renderLibrary({ viewer: admin, listRecordings });
+    const search = await screen.findByLabelText('Search recordings');
+    fireEvent.change(search, { target: { value: 'missing' } });
+    await waitFor(() => expect(screen.getByText('No recordings match your search or filters.')).toBeInTheDocument());
+    expect(search).toHaveValue('missing');
   });
 
   it('populated: renders rows with badges', async () => {

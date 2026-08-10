@@ -17,8 +17,13 @@ export function DeviceIdentityScreen(): JSX.Element {
 
   if (loading || !provisioning) {
     return (
-      <section className="us-adm__card us-device__card" data-testid="screen" data-screen="S-36" aria-busy="true">
-        <h1>Device &amp; Identity</h1>
+      <section className="us-device" data-testid="screen" data-screen="S-36" aria-busy="true">
+        <header className="us-adm__pagehead">
+          <div>
+            <h1>Device &amp; Identity</h1>
+            <p className="us-adm__pagecopy">View provisioning, room features, clock status, and device health.</p>
+          </div>
+        </header>
         <div className="us-device__skeleton" data-testid="device-skeleton" />
       </section>
     );
@@ -26,15 +31,18 @@ export function DeviceIdentityScreen(): JSX.Element {
 
   return (
     <div className="us-device" data-testid="screen" data-screen="S-36">
-      <div className="us-device__head">
-        <h1>Device &amp; Identity</h1>
+      <header className="us-adm__pagehead us-device__head">
+        <div>
+          <h1>Device &amp; Identity</h1>
+          <p className="us-adm__pagecopy">View provisioning, room features, clock status, and device health.</p>
+        </div>
         <span
           data-testid="provisioned-chip"
           className={`us-adm__chip ${notProvisioned ? 'us-adm__chip--not-configured' : 'us-adm__chip--configured'}`}
         >
           {notProvisioned ? 'Not provisioned' : 'Provisioned'}
         </span>
-      </div>
+      </header>
 
       {notProvisioned ? (
         <div className="us-device__banner">
@@ -44,14 +52,16 @@ export function DeviceIdentityScreen(): JSX.Element {
         </div>
       ) : null}
 
-      <IdentityCard provisioning={provisioning} missing={missingFields} />
-      <FeatureFlagsPanel provisioning={provisioning} />
-      <TimeClockCard
-        provisioning={provisioning}
-        ntpSynced={health?.ntpSynced}
-        clockOffsetMs={health?.clockOffsetMs}
-      />
-      <div className={wsStale ? 'us-device__live--dimmed' : undefined} aria-live="off">
+      <div className="us-device__grid">
+        <IdentityCard provisioning={provisioning} missing={missingFields} />
+        <FeatureFlagsPanel provisioning={provisioning} />
+        <TimeClockCard
+          provisioning={provisioning}
+          ntpSynced={health?.ntpSynced}
+          clockOffsetMs={health?.clockOffsetMs}
+        />
+      </div>
+      <div className={`us-device__live${wsStale ? ' us-device__live--dimmed' : ''}`} aria-live="off">
         <DeviceHealthCard health={health} isStale={isStale} />
         <AlertList />
       </div>

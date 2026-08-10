@@ -67,40 +67,10 @@ export function LibraryScreen(): JSX.Element {
     );
   };
 
-  if (loading) {
-    return (
-      <main className="us-library" data-testid="screen" data-screen="S-21" aria-label="Recordings">
-        <div className="us-library__header">
-          <h1>Recordings</h1>
-        </div>
-        <ul className="us-reclist" aria-busy="true">
-          {[0, 1, 2].map((i) => (
-            <li key={i} className="us-reclist__item us-reclist__item--skeleton" data-testid="row-skeleton" />
-          ))}
-        </ul>
-      </main>
-    );
-  }
-
-  if (rows.length === 0 && removed.length === 0) {
-    return (
-      <main className="us-library" data-testid="screen" data-screen="S-21" aria-label="Recordings">
-        <div className="us-library__header">
-          <h1>Recordings</h1>
-        </div>
-        <div className="us-library__empty">
-          {isAdmin ? (
-            <p>No recordings on this device.</p>
-          ) : (
-            <>
-              <p>You haven&apos;t recorded anything yet.</p>
-              <p>Recordings appear here after you stop a lecture.</p>
-            </>
-          )}
-        </div>
-      </main>
-    );
-  }
+  const hasActiveFilters = Boolean(
+    filters.q || filters.ownerUserId || filters.state || filters.includeDeleted,
+  );
+  const hasResults = rows.length > 0 || removed.length > 0;
 
   return (
     <main className="us-library" data-testid="screen" data-screen="S-21" aria-label="Recordings">
@@ -116,11 +86,26 @@ export function LibraryScreen(): JSX.Element {
           <>
             <h1>Recordings</h1>
             <LibraryFilters value={filters} isAdmin={isAdmin} onChange={setFilters} />
-            <button type="button" className="us-library__select" onClick={() => setSelectionMode(true)}>Select</button>
+            <button
+              type="button"
+              className="us-library__select"
+              disabled={rows.length === 0}
+              onClick={() => setSelectionMode(true)}
+            >
+              Select
+            </button>
           </>
         )}
       </div>
 
+      {loading ? (
+        <ul className="us-reclist" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <li key={i} className="us-reclist__item us-reclist__item--skeleton" data-testid="row-skeleton" />
+          ))}
+        </ul>
+      ) : (
+        <>
       {removed.length > 0 ? (
         <ul className="us-library__removed" aria-live="polite">
           {removed.map((r) => (
@@ -131,6 +116,20 @@ export function LibraryScreen(): JSX.Element {
         </ul>
       ) : null}
 
+      {!hasResults ? (
+        <div className="us-library__empty" role="status">
+          {hasActiveFilters ? (
+            <p>No recordings match your search or filters.</p>
+          ) : isAdmin ? (
+            <p>No recordings on this device.</p>
+          ) : (
+            <>
+              <p>You haven&apos;t recorded anything yet.</p>
+              <p>Recordings appear here after you stop a lecture.</p>
+            </>
+          )}
+        </div>
+      ) : rows.length > 0 ? (
       <ul className="us-reclist">
         {rows.map((rec) => {
           const job = uploadJobs[rec.id];
@@ -151,6 +150,7 @@ export function LibraryScreen(): JSX.Element {
           );
         })}
       </ul>
+      ) : null}
 
       {hasMore ? (
         <button
@@ -162,6 +162,8 @@ export function LibraryScreen(): JSX.Element {
           {loadingMore ? 'Loading…' : 'Load more'}
         </button>
       ) : null}
+        </>
+      )}
     </main>
   );
 }
