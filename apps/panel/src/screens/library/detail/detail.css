@@ -1,0 +1,126 @@
+.us-detail__streampicker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.us-detail__streamchip {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.us-detail__streamchip--active {
+  background: var(--surface-3, var(--surface-2));
+  border-color: var(--border-strong);
+}
+
+.us-detail__player {
+  background: var(--ink);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.us-detail__player--message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--on-ink);
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+  text-align: center;
+}
+
+.us-detail__player video {
+  width: 100%;
+  display: block;
+}
+
+.us-detail__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.us-detail__play {
+  min-width: 56px;
+  min-height: 56px;
+}
+
+.us-detail__skip,
+.us-detail__mute,
+.us-detail__fullscreen {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+}
+
+.us-detail__scrub {
+  flex: 1 1 auto;
+  height: 24px;
+}
+
+.us-detail__segments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.us-detail__segment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.us-detail__segment-marker--warning {
+  color: var(--warning);
+  font-size: var(--fs-2xs);
+}
+
+.us-detail__segment-marker--danger {
+  color: var(--danger);
+  font-size: var(--fs-2xs);
+}
+
+.us-detail__files ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.us-detail__file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap-row);
+  padding: 0 var(--sp-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.us-detail__download-hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+}
+
+.us-detail__retry {
+  min-height: 56px;
+  padding: 0 var(--sp-8);
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-md);
+}
+
+.us-detail__retry-refused {
+  color: var(--warning);
+  font-size: var(--fs-sm);
+}
