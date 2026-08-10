@@ -47,6 +47,6 @@ describe('useAlerts', () => {
     await waitFor(() => expect(result.current.alerts).toHaveLength(1));
 
     act(() => result.current.acknowledge('A1'));
-    await waitFor(() => expect(result.current.ackError).toBe('Unknown alert: A1'));
+    await waitFor(() => expect(result.current.ackError).toEqual({ id: 'A1', message: 'Unknown alert: A1' }));
   });
 });

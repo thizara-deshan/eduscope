@@ -11,7 +11,8 @@ export interface UseAlerts {
   readonly loading: boolean;
   acknowledge(id: string): void;
   readonly ackPending: string | null;
-  readonly ackError: string | null;
+  /** The alert id a 404/refusal applies to, and its message (U-5). */
+  readonly ackError: { readonly id: string; readonly message: string } | null;
 }
 
 /**
@@ -24,7 +25,7 @@ export function useAlerts({ includeCleared }: { includeCleared: boolean }): UseA
   const client = useClient();
   const queryClient = useQueryClient();
   const [ackPending, setAckPending] = useState<string | null>(null);
-  const [ackError, setAckError] = useState<string | null>(null);
+  const [ackError, setAckError] = useState<{ id: string; message: string } | null>(null);
 
   const query = useQuery({
     queryKey: DEVICE_KEYS.alerts(includeCleared),
@@ -34,14 +35,22 @@ export function useAlerts({ includeCleared }: { includeCleared: boolean }): UseA
 
   const mutation = useMutation({
     mutationFn: (id: string) => client.acknowledgeAlert(id),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       setAckPending(null);
-      void queryClient.invalidateQueries({ queryKey: DEVICE_KEYS.alerts(includeCleared) });
+      // The response IS the truth (a plain synchronous REST call, no echo to
+      // wait on) — write it straight into the cache rather than relying on a
+      // refetch to reflect a seed mutation that already happened server-side.
+      queryClient.setQueryData(
+        DEVICE_KEYS.alerts(includeCleared),
+        (old: { items: SystemAlert[] } | undefined) => old && {
+          items: old.items.map((a) => (a.id === updated.id ? updated : a)),
+        },
+      );
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, id) => {
       setAckPending(null);
       const problem = asProblem(error);
-      setAckError(problem?.title ?? 'Could not acknowledge this alert.');
+      setAckError({ id, message: problem?.title ?? 'Could not acknowledge this alert.' });
     },
   });
 

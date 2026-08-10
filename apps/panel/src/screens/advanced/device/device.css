@@ -1,0 +1,194 @@
+.us-device {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.us-device__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.us-device__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-device__eyebrow {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.us-device__banner {
+  background: var(--warning-soft);
+  border-left: 3px solid var(--warning);
+  padding: var(--sp-4);
+  border-radius: var(--radius-md);
+}
+.us-device__banner p {
+  margin: 0 0 var(--sp-2);
+  color: var(--text);
+}
+.us-device__banner p:last-child {
+  margin-bottom: 0;
+}
+.us-device__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.us-device__label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  min-width: 140px;
+}
+.us-device__value {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.us-device__value--mono {
+  font-family: var(--mono, monospace);
+  font-weight: 400;
+}
+.us-device__value--faint {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.us-device__missing {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+.us-device__copy {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.us-device__feature {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.us-device__feature--warning {
+  color: var(--warning);
+}
+.us-device__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.us-device__dot--on { background: var(--success); }
+.us-device__dot--off { background: var(--text-faint); }
+.us-device__dot--warning { background: var(--warning); }
+.us-device__dot--danger { background: var(--danger); }
+.us-device__dot--faint { background: var(--text-faint); }
+.us-device__healthhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.us-device__note {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  margin: 0;
+}
+.us-device__stale {
+  font-size: var(--fs-2xs);
+  color: var(--warning);
+}
+.us-device__manage-link {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+.us-device__publishers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-3);
+}
+.us-device__publisherrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.us-device__err {
+  color: var(--text-muted);
+}
+.us-device__showcleared {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap-min);
+  font-size: var(--fs-sm);
+}
+.us-device__alertlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-device__alertrow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.us-device__alerthead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.us-device__alertsev {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.us-device__alertsev--critical,
+.us-device__alertsev--error {
+  color: var(--danger);
+}
+.us-device__alertsev--warning {
+  color: var(--warning);
+}
+.us-device__alertsev--info {
+  color: var(--text-muted);
+}
+.us-device__acked {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.us-device__skeleton {
+  height: 120px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.us-device__live--dimmed {
+  opacity: 0.6;
+}
+.us-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
