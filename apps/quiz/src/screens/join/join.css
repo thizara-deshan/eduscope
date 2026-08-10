@@ -1,0 +1,10 @@
+.join-status { margin-top: var(--sp-6); }
+
+.join-status--skeleton {
+  padding: var(--sp-5);
+  border-radius: var(--radius-md);
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.join-status--error p { color: var(--danger); margin: 0 0 var(--sp-4); }

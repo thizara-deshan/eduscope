@@ -22,7 +22,19 @@ export function useStudentStream(client: QuizAppClient | null): void {
     let snapshotting = false;
 
     const off = client.events$.subscribe((event) => {
-      if (!snapshotting) useQuizStore.getState().ingest(event);
+      if (snapshotting) return;
+      useQuizStore.getState().ingest(event);
+      // The in-band offline signal is the ONLY thing that tells us the live
+      // connection dropped — there is no separate `connection$` on
+      // `QuizAppClient`. Treat it as the cue to start the reconnect ladder
+      // immediately, the same way a real dropped socket would.
+      if (event.event === 'quiz.participant' && event.payload.connectionState === 'offline') {
+        if (retryTimer !== null) {
+          clearTimeout(retryTimer);
+          retryTimer = null;
+        }
+        void connectAtomic();
+      }
     });
 
     const scheduleRetry = () => {

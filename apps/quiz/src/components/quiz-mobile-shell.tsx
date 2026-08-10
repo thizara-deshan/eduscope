@@ -4,9 +4,12 @@ import { ConnectionStrip, type ConnectionState } from './connection-strip.js';
 export function QuizMobileShell({
   children,
   connectionState = 'online',
+  screenId,
 }: {
   children: ReactNode;
   connectionState?: ConnectionState;
+  /** Sets `data-testid="screen"` / `data-screen` on the landmark (screen-inventory §6 route-skeleton contract). */
+  screenId?: string;
 }) {
   return (
     <div className="quiz-shell">
@@ -14,7 +17,9 @@ export function QuizMobileShell({
         Eduscope Quiz
       </header>
       <ConnectionStrip state={connectionState} />
-      <main className="quiz-shell__main">{children}</main>
+      <main className="quiz-shell__main" data-testid={screenId ? 'screen' : undefined} data-screen={screenId}>
+        {children}
+      </main>
     </div>
   );
 }
