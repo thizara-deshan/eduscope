@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/auth-context.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { useIsStale, useUploadJobEvents } from '../../store/selectors.js';
 import { DeleteRecordingConfirm } from './delete-recording-confirm.js';
+import { ExportModal } from './export/export-modal.js';
 import { LibraryFilters } from './library-filters.js';
 import { RecordingRow } from './recording-row.js';
 import { SelectionBar } from './selection-bar.js';
@@ -57,6 +58,15 @@ export function LibraryScreen(): JSX.Element {
     );
   };
 
+  const openExport = () => {
+    let overlayId = -1;
+    const ids = [...selected];
+    overlayId = overlays.open(
+      <ExportModal recordingIds={ids} needBytes={selectedBytes} onClose={() => overlays.close(overlayId)} />,
+      { dismissible: true },
+    );
+  };
+
   if (loading) {
     return (
       <main className="us-library" data-testid="screen" data-screen="S-21" aria-label="Recordings">
@@ -100,7 +110,7 @@ export function LibraryScreen(): JSX.Element {
             count={selected.size}
             totalBytes={selectedBytes}
             onCancel={exitSelection}
-            onExport={() => {}}
+            onExport={openExport}
           />
         ) : (
           <>
