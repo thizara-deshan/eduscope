@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { KeyboardHost } from '../keyboard/keyboard-host.js';
+import { KeyboardHost, OSK_OPEN_PX } from '../keyboard/keyboard-host.js';
 import { PasswordField } from './password-field.js';
 
 function Panel({ children }: { children: React.ReactNode }) {
@@ -58,14 +58,16 @@ describe('PasswordField', () => {
     expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
   });
 
-  it('focus opens the on-screen keyboard (--osk-h becomes 380px)', () => {
+  it('focus opens the compact on-screen keyboard', () => {
     render(
       <Panel>
         <Field />
       </Panel>,
     );
     fireEvent.focus(screen.getByLabelText('Password'));
-    expect(screen.getByTestId('us-panel').style.getPropertyValue('--osk-h')).toBe('380px');
+    expect(screen.getByTestId('us-panel').style.getPropertyValue('--osk-h')).toBe(
+      `${OSK_OPEN_PX}px`,
+    );
   });
 
   it('disabled disables the input and the reveal button', () => {
