@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
-export type OskLayout = 'default' | 'numeric';
+export type OskLayout = 'default' | 'numeric' | 'ip';
 
 export interface OskFieldBinding {
   onFocus(): void;

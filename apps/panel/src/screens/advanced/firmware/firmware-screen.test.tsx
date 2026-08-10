@@ -43,6 +43,7 @@ describe('FirmwareScreen', () => {
   it('idle / up to date', async () => {
     build();
     await waitFor(() => expect(screen.getByTestId('firmware-up-to-date')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Firmware Update' }).closest('.us-adm__pagehead')).not.toBeNull();
   });
 
   it('update available: version shown', async () => {

@@ -65,6 +65,7 @@ describe('UserManagementScreen', () => {
   it('populated: local+institute, mustReset and disabled all show', async () => {
     build();
     await waitFor(() => expect(screen.getByTestId('user-row-admin')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'User Management' }).closest('.us-adm__pagehead')).not.toBeNull();
     expect(screen.getByTestId('user-row-a.perera')).toBeInTheDocument();
     expect(screen.getByTestId('user-row-n.silva')).toHaveTextContent('must reset password');
   });
@@ -78,6 +79,7 @@ describe('UserManagementScreen', () => {
     const listUsers = vi.fn(() => Promise.resolve({ items: [admin(), perera(), silva()], nextCursor: null }));
     build({ listUsers });
     await waitFor(() => expect(screen.getByLabelText('Search users')).toBeInTheDocument());
+    expect(screen.getByLabelText('Search users')).toHaveAttribute('data-osk', 'default');
     fireEvent.change(screen.getByLabelText('Search users'), { target: { value: 'perera' } });
     await waitFor(() => expect(listUsers).toHaveBeenCalledWith(expect.objectContaining({ q: 'perera' })));
   });
@@ -105,6 +107,9 @@ describe('UserManagementScreen', () => {
     build({ createUser });
     await waitFor(() => expect(screen.getByTestId('user-row-admin')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Add user' }));
+    expect(screen.getByLabelText('Username')).toHaveAttribute('data-osk', 'default');
+    expect(screen.getByLabelText('Display name')).toHaveAttribute('data-osk', 'default');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('data-osk', 'default');
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'j.new' } });
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'J. New' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw12345' } });
@@ -133,6 +138,8 @@ describe('UserManagementScreen', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     expect(screen.getByLabelText('Display name')).toBeDisabled();
     expect(screen.getByLabelText('Role')).toBeDisabled();
+    expect(screen.getByLabelText('Display name')).toHaveAttribute('data-osk', 'default');
+    expect(screen.getByLabelText('New password')).toHaveAttribute('data-osk', 'default');
   });
 
   it('delete user: pending -> deleted', async () => {

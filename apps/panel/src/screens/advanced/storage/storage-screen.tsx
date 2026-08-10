@@ -16,8 +16,13 @@ export function StorageScreen(): JSX.Element {
 
   if (loading || !overview) {
     return (
-      <section className="us-adm__card" data-testid="screen" data-screen="S-30" aria-busy="true">
-        <h1>Local Storage</h1>
+      <section className="us-storage" data-testid="screen" data-screen="S-30" aria-busy="true">
+        <header className="us-adm__pagehead">
+          <div>
+            <h1>Local Storage</h1>
+            <p className="us-adm__pagecopy">Monitor capacity, retention, and the drives used for recordings.</p>
+          </div>
+        </header>
         <div className="us-device__skeleton" data-testid="storage-skeleton" />
       </section>
     );
@@ -25,8 +30,14 @@ export function StorageScreen(): JSX.Element {
 
   return (
     <div className="us-storage" data-testid="screen" data-screen="S-30">
-      <h1>Local Storage</h1>
-      <section className="us-adm__card us-storage__card" aria-label="Capacity">
+      <header className="us-adm__pagehead">
+        <div>
+          <h1>Local Storage</h1>
+          <p className="us-adm__pagecopy">Monitor capacity, retention, and the drives used for recordings.</p>
+        </div>
+      </header>
+      <div className="us-storage__overview">
+      <section className="us-adm__card us-adm__section us-storage__card" aria-label="Capacity">
         <h2 className="us-device__eyebrow">Capacity</h2>
         <CapacityStats totalBytes={overview.totalBytes} freeBytes={overview.freeBytes} pressure={overview.pressure} />
         {overview.pressure === 'critical' ? (
@@ -34,6 +45,7 @@ export function StorageScreen(): JSX.Element {
         ) : null}
       </section>
       <RetentionPolicyCard policy={overview.policy} />
+      </div>
       <VolumeList
         volumes={overview.volumes}
         formatVolume={formatVolume}

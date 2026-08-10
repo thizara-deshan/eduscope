@@ -1,4 +1,5 @@
 import type { UserRole } from '@eduscope/shared';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 
 interface UserSearchProps {
   readonly q: string;
@@ -14,6 +15,8 @@ const ROLES: readonly { readonly label: string; readonly value: UserRole | undef
 ];
 
 export function UserSearch({ q, onQChange, role, onRoleChange }: UserSearchProps): JSX.Element {
+  const searchBinding = useOskField({ value: q, onChange: onQChange });
+
   return (
     <div className="us-users__search">
       <input
@@ -22,6 +25,7 @@ export function UserSearch({ q, onQChange, role, onRoleChange }: UserSearchProps
         onChange={(e) => onQChange(e.target.value)}
         placeholder="Search name or username"
         aria-label="Search users"
+        {...searchBinding}
       />
       <div className="us-users__rolefilter">
         {ROLES.map((r) => (

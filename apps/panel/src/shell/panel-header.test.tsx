@@ -9,6 +9,7 @@ import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../auth/auth-context.js';
 import { ClientContext } from '../client/client-provider.js';
 import { createQueryClient } from '../query/query-client.js';
+import { useWsStore } from '../store/ws-store.js';
 import '../styles/tokens.css';
 import { PanelHeader } from './panel-header.js';
 
@@ -27,13 +28,22 @@ function makeUser(overrides: Partial<User> = {}): User {
   };
 }
 
-function renderHeader(getProvisioning: (...args: never[]) => Promise<unknown>) {
+function renderHeader(
+  getProvisioning: (...args: never[]) => Promise<unknown>,
+  recordingState?: 'recording' | 'paused' | 'stopping' | 'finalizing',
+) {
   // The REAL query client factory, deliberately — its default retry:1 is what
   // silently swallowed the takeover refusal in production (found live in the
   // browser gate; `useProvisioning`'s own `retry: false` is the fix this
   // guards).
+  useWsStore.getState().reset();
+  if (recordingState) useWsStore.setState({ recording: { state: recordingState } as never });
   const queryClient = createQueryClient();
-  const stub = { getProvisioning } as unknown as EduscopeClient;
+  const stub = {
+    getProvisioning,
+    listAlerts: vi.fn(() => Promise.resolve({ items: [] })),
+    acknowledgeAlert: vi.fn(() => Promise.resolve()),
+  } as unknown as EduscopeClient;
   const router = createMemoryRouter(
     [
       { path: '/', element: createElement(PanelHeader) },
@@ -98,4 +108,17 @@ describe('PanelHeader', () => {
     const header = document.querySelector('.us-header') as HTMLElement;
     expect(getComputedStyle(header).height).toBe('62px');
   });
+
+  it('marks an idle header as not recording', () => {
+    renderHeader(vi.fn(() => new Promise(() => {})));
+    expect(document.querySelector('.us-header')).toHaveAttribute('data-recording-active', 'false');
+  });
+
+  it.each(['recording', 'paused', 'stopping', 'finalizing'] as const)(
+    'offsets the clock during %s recording chrome',
+    (state) => {
+      renderHeader(vi.fn(() => new Promise(() => {})), state);
+      expect(document.querySelector('.us-header')).toHaveAttribute('data-recording-active', 'true');
+    },
+  );
 });

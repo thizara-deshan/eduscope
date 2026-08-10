@@ -53,6 +53,8 @@ describe('StorageScreen', () => {
   it('populated: stats, SMART line, volume list, retention policy in real numbers', async () => {
     build();
     await waitFor(() => expect(screen.getByText(/260 GB free of 500 GB/)).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Local Storage' }).closest('.us-adm__pagehead')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Format…' })).toHaveClass('us-adm__danger');
     expect(screen.getByText('good')).toBeInTheDocument();
     expect(screen.getByText(/past 90 days/)).toBeInTheDocument();
   });
@@ -72,6 +74,8 @@ describe('StorageScreen', () => {
     const registerStorageVolume = vi.fn(() => Promise.resolve(volume({ id: 'V2', uuid: 'b'.repeat(8) })));
     build({ registerStorageVolume });
     await waitFor(() => expect(screen.getByLabelText('Volume UUID')).toBeInTheDocument());
+    expect(screen.getByLabelText('Volume UUID')).toHaveAttribute('data-osk', 'default');
+    expect(screen.getByLabelText('Volume label')).toHaveAttribute('data-osk', 'default');
     fireEvent.change(screen.getByLabelText('Volume UUID'), { target: { value: 'aaaaaaaa-0000-4000-8000-000000000002' } });
     fireEvent.click(screen.getByRole('button', { name: /Register/ }));
     await waitFor(() => expect(registerStorageVolume).toHaveBeenCalled());

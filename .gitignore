@@ -15,3 +15,8 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 .pnpm-store/
+feedback.json
+heatmap.json
+projects/
+docs/superpowers/
+

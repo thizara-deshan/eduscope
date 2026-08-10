@@ -5,31 +5,14 @@ import './keyboard.css';
 import { useKeyboardStore } from './use-keyboard.js';
 
 /** The reserve S-01 §2's height budget is built on. Exported so tests and CSS cannot drift apart. */
-export const OSK_OPEN_PX = 380;
-
-const DEFAULT_LAYOUT = {
-  default: [
-    'q w e r t y u i o p',
-    'a s d f g h j k l',
-    '{shift} z x c v b n m {bksp}',
-    '{space}',
-  ],
-  shift: [
-    'Q W E R T Y U I O P',
-    'A S D F G H J K L',
-    '{shift} Z X C V B N M {bksp}',
-    '{space}',
-  ],
-};
+export const OSK_OPEN_PX = 320;
 
 const NUMERIC_LAYOUT = {
   default: ['1 2 3', '4 5 6', '7 8 9', '{bksp} 0'],
 };
 
-const DISPLAY = {
-  '{bksp}': '⌫',
-  '{space}': 'space',
-  '{shift}': '⇧',
+const IP_LAYOUT = {
+  default: ['1 2 3', '4 5 6', '7 8 9', '. 0 {bksp}'],
 };
 
 /**
@@ -45,6 +28,7 @@ export function KeyboardHost(): JSX.Element {
   const backspace = useKeyboardStore((s) => s.backspace);
   const close = useKeyboardStore((s) => s.close);
   const ref = useRef<HTMLDivElement>(null);
+  const [capsLock, setCapsLock] = useState(false);
   const [shift, setShift] = useState(false);
 
   useEffect(() => {
@@ -57,7 +41,10 @@ export function KeyboardHost(): JSX.Element {
   }, [open]);
 
   useEffect(() => {
-    if (!open) setShift(false);
+    if (!open) {
+      setCapsLock(false);
+      setShift(false);
+    }
   }, [open]);
 
   function handleKeyPress(button: string): void {
@@ -70,11 +57,17 @@ export function KeyboardHost(): JSX.Element {
       return;
     }
     if (button === '{shift}') {
-      setShift((s) => !s);
+      setShift((value) => !value);
       return;
     }
+    if (button === '{lock}') {
+      setCapsLock((value) => !value);
+      setShift(false);
+      return;
+    }
+    if (button.startsWith('{')) return;
     press(button);
-    setShift(false);
+    if (shift) setShift(false);
   }
 
   return (
@@ -104,9 +97,12 @@ export function KeyboardHost(): JSX.Element {
           </div>
           <div className="us-osk__keyboard">
             <Keyboard
-              layoutName={layout === 'numeric' ? 'default' : shift ? 'shift' : 'default'}
-              layout={layout === 'numeric' ? NUMERIC_LAYOUT : DEFAULT_LAYOUT}
-              display={DISPLAY}
+              {...(layout === 'numeric'
+                ? { layout: NUMERIC_LAYOUT }
+                : layout === 'ip'
+                  ? { layout: IP_LAYOUT }
+                  : {})}
+              layoutName={layout === 'default' && capsLock !== shift ? 'shift' : 'default'}
               onKeyPress={handleKeyPress}
               preventMouseDownDefault
               theme="hg-theme-default us-osk__keys"

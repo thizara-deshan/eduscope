@@ -92,6 +92,90 @@
   gap: 16px;
 }
 
+.us-adm__pagehead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  flex: 0 0 auto;
+}
+
+.us-adm__pagehead h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-3xl);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.us-adm__pagecopy {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+.us-adm__section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.us-adm__empty {
+  margin: 0;
+  padding: var(--sp-8);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.us-adm__dangerzone {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: var(--danger-soft);
+}
+
+.us-adm__danger {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-6);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.us-adm__content input:not([type='checkbox']):not([type='radio']),
+.us-adm__content select {
+  min-height: var(--tap-min);
+  padding-inline: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+
+.us-adm__primary:focus-visible,
+.us-adm__secondary:focus-visible,
+.us-adm__danger:focus-visible,
+.us-adm__content input:focus-visible,
+.us-adm__content select:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .us-adm__primary:hover { filter: brightness(0.94); }
+  .us-adm__secondary:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .us-adm__danger:hover { filter: brightness(0.9); }
+}
+
 /* S-26/S-27 cards */
 .us-adm__card {
   background: var(--surface);

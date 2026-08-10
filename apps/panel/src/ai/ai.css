@@ -433,7 +433,7 @@
 
 .us-qmodal__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: var(--sp-8) var(--sp-9);
   border-bottom: 1px solid var(--border);
@@ -441,8 +441,16 @@
 
 .us-qmodal__head h2 {
   margin: 0;
-  font-size: var(--fs-lg);
+  font-size: 21px;
   font-weight: 700;
+  line-height: 1.3;
+}
+
+.us-qmodal__head p {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .us-qmodal__close {
@@ -496,6 +504,7 @@
   gap: var(--sp-6);
   padding: var(--sp-7) var(--sp-9);
   border-top: 1px solid var(--border);
+  background: var(--surface-2);
 }
 
 .us-qmodal__addbtn,
@@ -507,7 +516,7 @@
   background: var(--surface-2);
   color: var(--text);
   font-weight: 600;
-  font-size: var(--fs-sm);
+  font-size: 15px;
 }
 
 .us-qmodal__regenbtn:disabled,
@@ -518,33 +527,32 @@
 /* ── S-14 question card ─────────────────────────────────────────────────── */
 
 .us-qcard {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--surface);
 }
 
 .us-qcard__head {
   width: 100%;
-  min-height: var(--tap-row);
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-5);
-  padding: 0 var(--sp-7);
+  padding: var(--sp-4) var(--sp-7);
   border: none;
   background: var(--surface-2);
   color: var(--text);
   text-align: left;
-  font-size: var(--fs-sm);
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.45;
 }
 
 .us-qcard__prompt {
   flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .us-qcard__custom {
@@ -563,7 +571,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
-  padding: var(--sp-7);
+  padding: var(--sp-7) var(--sp-8);
 }
 
 .us-qcard__optionlist,
@@ -577,17 +585,24 @@
 }
 
 .us-qcard__optionlist li {
-  padding: var(--sp-3) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .us-qcard__option--correct {
   background: var(--success-soft) !important;
   color: var(--success) !important;
   font-weight: 600;
+}
+
+.us-qcard__option--correct::before {
+  content: '✓ Correct · ';
+  font-weight: 800;
 }
 
 .us-qcard__optionbtn {
@@ -598,7 +613,8 @@
   background: var(--surface-2);
   color: var(--text);
   text-align: left;
-  font-size: var(--fs-sm);
+  font-size: 16px;
+  line-height: 1.45;
 }
 
 .us-qcard__optionbtn[aria-pressed="true"] {
@@ -613,7 +629,7 @@
   padding: var(--sp-4) var(--sp-5);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  font-size: var(--fs-sm);
+  font-size: 16px;
 }
 
 .us-qcard__actions,
@@ -630,7 +646,7 @@
   border: 1px solid var(--border-strong);
   background: var(--surface-2);
   color: var(--text);
-  font-size: var(--fs-xs);
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -845,7 +861,7 @@
   background: transparent;
   color: var(--text-muted);
   font-weight: 600;
-  font-size: var(--fs-sm);
+  font-size: 15px;
   padding: var(--sp-4) var(--sp-5);
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -876,16 +892,23 @@
 }
 
 .us-insightswrap--collapsed {
-  flex: 0 0 auto;
-  max-height: 62px;
+  flex: 0 0 var(--tap-row);
+  min-height: var(--tap-row);
+  max-height: var(--tap-row);
+  padding: var(--sp-1);
+  gap: 0;
   overflow: hidden;
-  /* The meeting-layout accordion (W3-D-6) can push total sidebar content
-   * past the scrollport — sticky keeps the tab header reachable rather than
-   * letting it scroll out of view and read as "gone" on a kiosk touch UI
-   * with no visible scrollbar affordance. */
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
+}
+
+.us-insightswrap--collapsed .us-tabs {
+  width: 100%;
+}
+
+.us-insightswrap--collapsed .us-tab {
+  min-width: 0;
+  flex: 1 1 50%;
+  justify-content: center;
+  padding-inline: var(--sp-3);
 }
 
 .us-insightswrap__body {
@@ -931,9 +954,9 @@
 /* ── S-16 previous-question card ("pqcard") ────────────────────────────────── */
 
 .us-pqcard {
-  padding: var(--sp-5);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  padding: var(--sp-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
   background: var(--surface-2);
 }
 
@@ -945,8 +968,9 @@
 }
 
 .us-pqcard__prompt {
-  font-size: var(--fs-sm);
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.45;
 }
 
 .us-pqcard__badge {
@@ -963,20 +987,28 @@
 .us-pqcard__correct {
   margin: var(--sp-3) 0 0;
   color: var(--success);
-  font-size: var(--fs-xs);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.us-pqcard__correct::before {
+  content: 'Correct answer: ';
+  font-weight: 700;
 }
 
 .us-pqcard__closed,
 .us-pqcard__reveal {
   margin: var(--sp-3) 0 0;
   color: var(--text-faint);
-  font-size: var(--fs-2xs);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .us-pqcard__failed {
   margin: var(--sp-3) 0 0;
   color: var(--warning);
-  font-size: var(--fs-2xs);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .us-pqcard__badges {
@@ -993,7 +1025,7 @@
   border: 1px solid var(--border);
   background: var(--surface-3);
   color: var(--text-muted);
-  font-size: var(--fs-2xs);
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1013,7 +1045,7 @@
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
-  font-size: var(--fs-2xs);
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1048,13 +1080,30 @@
   gap: var(--sp-3);
 }
 
+.us-lb__columns {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 48px 50px 58px 40px;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-2);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.us-lb__columns span:not(:nth-child(2)) {
+  text-align: center;
+}
+
 .us-lb__row {
   width: 100%;
   display: grid;
-  grid-template-columns: 28px 1fr auto auto auto auto;
+  grid-template-columns: 34px minmax(0, 1fr) 48px 50px 58px 40px;
   align-items: center;
-  gap: var(--sp-4);
-  min-height: var(--tap-row);
+  gap: var(--sp-3);
+  min-height: 60px;
   padding: 0 var(--sp-4);
   border: none;
   border-radius: var(--radius-sm);
@@ -1065,6 +1114,7 @@
 }
 
 .us-lb__rank {
+  font-size: 16px;
   font-weight: 700;
   text-align: center;
 }
@@ -1073,23 +1123,28 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .us-lb__fraction {
   color: var(--text-muted);
-  font-size: var(--fs-xs);
+  font-size: 14px;
+  text-align: center;
 }
 
 .us-lb__statvalue {
-  font-size: var(--fs-lg);
+  font-size: 17px;
   font-weight: 800;
   color: var(--accent);
+  text-align: center;
 }
 
 .us-lb__accuracy,
 .us-lb__time {
   color: var(--text-faint);
-  font-size: var(--fs-2xs);
+  font-size: 14px;
+  text-align: center;
 }
 
 /* ── S-18 response names dialog (light — mounted via OverlayHost) ─────────── */

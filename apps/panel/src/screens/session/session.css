@@ -22,7 +22,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /* S-05's explicit dense envelope: 738px below the header - 154px Sources
@@ -330,6 +330,12 @@
 .us-chcard--failed {
   border-color: var(--danger);
 }
+
+.us-chcard--open {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
 .us-chcard__head {
   display: flex;
   align-items: center;
@@ -410,40 +416,6 @@
 }
 
 /* Shared toggle switch primitive */
-.us-toggle {
-  position: relative;
-  width: 54px;
-  height: 32px;
-  min-height: var(--tap-min);
-  border-radius: var(--radius-pill);
-  border: none;
-  background: var(--border-strong);
-  flex: 0 0 auto;
-}
-.us-toggle--on {
-  background: var(--success);
-}
-.us-toggle--failed {
-  background: var(--danger);
-}
-.us-toggle:disabled {
-  opacity: 0.6;
-}
-.us-toggle__knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.18s;
-}
-.us-toggle--on .us-toggle__knob {
-  transform: translateX(22px);
-}
-
 /* Inline collapsible meeting-view layout accordion */
 .us-mlayout {
   max-height: 0;
@@ -455,6 +427,13 @@
   max-height: 320px;
   opacity: 1;
   margin-top: var(--sp-5);
+  overflow-y: auto;
+}
+
+.us-chcard--open .us-mlayout--open {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 @media (prefers-reduced-motion: reduce) {

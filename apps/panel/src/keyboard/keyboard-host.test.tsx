@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyboardHost, OSK_OPEN_PX } from './keyboard-host.js';
-import { useKeyboardStore, useOskField } from './use-keyboard.js';
+import { useKeyboardStore, useOskField, type OskLayout } from './use-keyboard.js';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +18,7 @@ function TextField({
   layout = 'default',
   onCommit,
 }: {
-  layout?: 'default' | 'numeric';
+  layout?: OskLayout;
   onCommit?: (count: number) => void;
 }) {
   const [value, setValue] = useState('');
@@ -61,7 +61,7 @@ describe('KeyboardHost', () => {
     expect(screen.queryByTestId('keyboard-host')?.querySelector('.us-osk__keyboard')).toBeNull();
   });
 
-  it('opens on focus and --osk-h reads 380px', () => {
+  it('opens on focus with a compact height', () => {
     render(
       <Panel>
         <TextField />
@@ -69,6 +69,7 @@ describe('KeyboardHost', () => {
     );
     fireEvent.focus(screen.getByLabelText('field'));
     expect(oskHeight()).toBe(`${OSK_OPEN_PX}px`);
+    expect(OSK_OPEN_PX).toBeLessThan(380);
   });
 
   it('the close key closes it and restores 0px; the close button is >=44px and has an aria-label', () => {
@@ -108,6 +109,59 @@ describe('KeyboardHost', () => {
     fireEvent.focus(field);
     await pressKey('7');
     expect(field.value).toBe('7');
+    expect(document.querySelector('[data-skbtn="q"]')).toBeNull();
+  });
+
+  it('the default keyboard uses the library layout with standard special keys', () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    fireEvent.focus(screen.getByLabelText('field'));
+    expect(document.querySelector('[data-skbtn="q"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="{tab}"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="{lock}"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="-"]')).not.toBeNull();
+    expect(document.querySelector('[data-skbtn="="]')).not.toBeNull();
+  });
+
+  it('lets the library caps lock control uppercase input', async () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    const field = screen.getByLabelText('field') as HTMLInputElement;
+    fireEvent.focus(field);
+    await pressKey('{lock}');
+    await pressKey('Q');
+    expect(field.value).toBe('Q');
+  });
+
+  it('keeps the styling hooks for the light keyboard treatment', () => {
+    render(
+      <Panel>
+        <TextField />
+      </Panel>,
+    );
+    fireEvent.focus(screen.getByLabelText('field'));
+    expect(document.querySelector('.us-osk')).not.toBeNull();
+    expect(document.querySelector('.us-osk__keys .hg-button')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Close keyboard' }).className).toContain('us-osk__close');
+  });
+
+  it('an IP field includes digits and a dot without letter keys', async () => {
+    render(
+      <Panel>
+        <TextField layout="ip" />
+      </Panel>,
+    );
+    const field = screen.getByLabelText('field') as HTMLInputElement;
+    fireEvent.focus(field);
+    await pressKey('1');
+    await pressKey('.');
+    expect(field.value).toBe('1.');
     expect(document.querySelector('[data-skbtn="q"]')).toBeNull();
   });
 

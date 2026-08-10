@@ -43,6 +43,7 @@ describe('<UploadQueueScreen/> (S-35)', () => {
   it('populated: renders job rows', async () => {
     renderScreen(vi.fn(() => Promise.resolve({ items: [job({})], nextCursor: null })));
     await waitFor(() => expect(screen.getByText('Lecture 1')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Upload Queue' }).closest('.us-adm__pagehead')).not.toBeNull();
   });
 
   it('state filter chip re-issues the query', async () => {

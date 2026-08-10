@@ -1,4 +1,5 @@
 import { LayoutPresetPicker } from '../../channels/layout-preset-picker.js';
+import { ToggleSwitch } from '../../controls/toggle-switch.js';
 import { useRecordingState } from '../../store/selectors.js';
 import { useMeetingChannel } from './use-meeting-channel.js';
 import './session.css';
@@ -81,17 +82,13 @@ export function MeetingChannelCard({ expanded, onExpandedChange }: MeetingChanne
           </button>
         )}
 
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isOn}
-          aria-label="Live Meeting"
+        <ToggleSwitch
+          checked={isOn}
+          label="Live Meeting"
           disabled={switchDisabled}
-          onClick={handleToggle}
-          className={`us-toggle${isOn ? ' us-toggle--on' : ''}${isFailed ? ' us-toggle--failed' : ''}`}
-        >
-          <span className="us-toggle__knob" />
-        </button>
+          failed={isFailed}
+          onChange={handleToggle}
+        />
       </div>
 
       {recordingState === 'paused' && isOn && (

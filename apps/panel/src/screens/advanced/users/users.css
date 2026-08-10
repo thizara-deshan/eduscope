@@ -1,13 +1,20 @@
 .us-users {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-6);
 }
 .us-users__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-4);
+}
+.us-users__directory {
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  overflow-x: auto;
 }
 .us-users__headactions {
   display: flex;
@@ -26,7 +33,8 @@
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  min-width: 220px;
+  min-width: 280px;
+  flex: 1 1 320px;
 }
 .us-users__rolefilter {
   display: flex;
@@ -46,21 +54,27 @@
 .us-users__table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 860px;
 }
 .us-users__table th {
   text-align: left;
   font-size: var(--fs-2xs);
   text-transform: uppercase;
   color: var(--text-muted);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--surface-2);
 }
 .us-users__row {
   min-height: 56px;
 }
 .us-users__row td {
-  padding: var(--sp-3);
+  padding: var(--sp-4);
   border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
 }
+.us-users__row:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 .us-users__actions {
   display: flex;
   gap: var(--sp-2);

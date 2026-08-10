@@ -14,7 +14,8 @@ export function FirmwareLifecycle({ firmware, onCheck, onApply, checking, applyi
   const { state, availableVersion, currentVersion, signatureVerified, lastError, rollbackVersion } = firmware;
 
   return (
-    <section className="us-adm__card us-firmware__card" aria-label="Firmware">
+    <section className="us-adm__card us-adm__section us-firmware__card" aria-label="Firmware">
+      <h2 className="us-adm__cardtitle">Update status</h2>
       <div className="us-device__field">
         <span className="us-device__label">Current version</span>
         <span className="us-device__value">{currentVersion}</span>

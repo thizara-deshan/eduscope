@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { UserCreate, UserRole } from '@eduscope/shared';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 
 interface AddUserDialogProps {
   readonly onSubmit: (body: UserCreate) => void;
@@ -13,6 +14,9 @@ export function AddUserDialog({ onSubmit, onCancel, pending, error }: AddUserDia
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<UserRole>('lecturer');
   const [password, setPassword] = useState('');
+  const usernameBinding = useOskField({ value: username, onChange: setUsername });
+  const displayNameBinding = useOskField({ value: displayName, onChange: setDisplayName });
+  const passwordBinding = useOskField({ value: password, onChange: setPassword });
 
   const valid = username.trim() !== '' && displayName.trim() !== '' && password.trim() !== '';
 
@@ -22,11 +26,11 @@ export function AddUserDialog({ onSubmit, onCancel, pending, error }: AddUserDia
         <h2>Add user</h2>
         <label className="us-device__field">
           <span className="us-device__label">Username</span>
-          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} aria-label="Username" />
+          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} aria-label="Username" {...usernameBinding} />
         </label>
         <label className="us-device__field">
           <span className="us-device__label">Display name</span>
-          <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} aria-label="Display name" />
+          <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} aria-label="Display name" {...displayNameBinding} />
         </label>
         <label className="us-device__field">
           <span className="us-device__label">Role</span>
@@ -37,7 +41,7 @@ export function AddUserDialog({ onSubmit, onCancel, pending, error }: AddUserDia
         </label>
         <label className="us-device__field">
           <span className="us-device__label">Password</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" {...passwordBinding} />
         </label>
         {error ? <p className="us-device__missing">{error}</p> : null}
         <footer className="us-dangerconfirm__footer">

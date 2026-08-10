@@ -19,8 +19,14 @@ export function UploadQueueScreen(): JSX.Element {
   const { loading, jobs, hasMore, loadMore } = useUploadJobs({ state });
 
   return (
-    <section className="us-adm__card us-uploads" data-testid="screen" data-screen="S-35">
-      <h1>Upload Queue</h1>
+    <div className="us-uploads" data-testid="screen" data-screen="S-35">
+      <header className="us-adm__pagehead">
+        <div>
+          <h1>Upload Queue</h1>
+          <p className="us-adm__pagecopy">Track recording uploads and retry jobs that need attention.</p>
+        </div>
+      </header>
+      <section className="us-adm__section us-uploads__section" aria-label="Upload jobs">
       <div className="us-uploads__filter">
         {STATE_OPTIONS.map((opt) => (
           <button
@@ -39,7 +45,7 @@ export function UploadQueueScreen(): JSX.Element {
           {[0, 1, 2].map((i) => <li key={i} className="us-uploadrow us-uploadrow--skeleton" data-testid="upload-row-skeleton" />)}
         </ul>
       ) : jobs.length === 0 ? (
-        <p className="us-uploads__empty">Everything has been uploaded.</p>
+        <p className="us-adm__empty us-uploads__empty">Everything has been uploaded.</p>
       ) : (
         <ul className="us-uploads__list">
           {jobs.map((job) => <UploadJobRow key={job.id} job={job} />)}
@@ -49,6 +55,7 @@ export function UploadQueueScreen(): JSX.Element {
       {hasMore ? (
         <button type="button" className="us-uploads__load-more" onClick={loadMore}>Load more</button>
       ) : null}
-    </section>
+      </section>
+    </div>
   );
 }

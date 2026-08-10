@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../styles/tokens.css';
 import { DangerConfirm, type DangerConfirmProps } from './danger-confirm.js';
@@ -73,5 +73,19 @@ describe('DangerConfirm', () => {
     const dialog = screen.getByRole('alertdialog');
     const focusable = dialog.querySelectorAll('button:not([disabled]), a[href]');
     expect(focusable.item(focusable.length - 1)).toBe(screen.getByRole('button', { name: 'Take over' }));
+  });
+
+  it('cancels on Escape when not pending', () => {
+    const onCancel = vi.fn();
+    render(<DangerConfirm {...props({ onCancel })} />);
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cancel on Escape while pending', () => {
+    const onCancel = vi.fn();
+    render(<DangerConfirm {...props({ onCancel, state: 'pending' })} />);
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

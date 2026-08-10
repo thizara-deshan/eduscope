@@ -75,24 +75,29 @@ export function UserManagementScreen(): JSX.Element {
 
   return (
     <div className="us-users" data-testid="screen" data-screen="S-32">
-      <div className="us-users__head">
-        <h1>User Management</h1>
+      <header className="us-adm__pagehead us-users__head">
+        <div>
+          <h1>User Management</h1>
+          <p className="us-adm__pagecopy">Manage lecturer and administrator access on this device.</p>
+        </div>
         <div className="us-users__headactions">
           <button type="button" className="us-adm__secondary" disabled={stale} onClick={openBulkImport}>Bulk Import</button>
           <button type="button" className="us-adm__primary" disabled={stale} onClick={() => setAdding(true)}>Add user</button>
         </div>
-      </div>
+      </header>
+      <section className="us-adm__section us-users__directory" aria-label="User directory">
       <UserSearch q={q} onQChange={setQ} role={role} onRoleChange={setRole} />
       {loading ? (
         <div className="us-device__skeleton" data-testid="users-skeleton" />
       ) : users.length === 0 ? (
-        <p className="us-adm__note">No users match your search.</p>
+        <p className="us-adm__empty">No users match your search.</p>
       ) : (
         <>
           <UserTable users={users} onEdit={setEditing} onDelete={setDeleting} />
           {hasMore ? <button type="button" className="us-adm__secondary" onClick={loadMore}>Load more</button> : null}
         </>
       )}
+      </section>
 
       {adding ? (
         <AddUserDialog onSubmit={handleAdd} onCancel={() => setAdding(false)} pending={addPending} error={addError} />

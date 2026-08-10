@@ -47,6 +47,11 @@ export function DangerConfirm({
   const pending = state === 'pending';
 
   const trapFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      if (!pending) onCancel();
+      return;
+    }
     if (event.key !== 'Tab') return;
     const focusable = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(

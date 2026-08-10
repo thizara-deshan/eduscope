@@ -10,8 +10,13 @@ export function FirmwareScreen(): JSX.Element {
 
   if (loading || !firmware) {
     return (
-      <section className="us-adm__card" data-testid="screen" data-screen="S-31" aria-busy="true">
-        <h1>Firmware Update</h1>
+      <section className="us-firmware" data-testid="screen" data-screen="S-31" aria-busy="true">
+        <header className="us-adm__pagehead">
+          <div>
+            <h1>Firmware Update</h1>
+            <p className="us-adm__pagecopy">Check the installed version and safely apply verified device updates.</p>
+          </div>
+        </header>
         <div className="us-device__skeleton" data-testid="firmware-skeleton" />
       </section>
     );
@@ -22,7 +27,12 @@ export function FirmwareScreen(): JSX.Element {
 
   return (
     <div className="us-firmware" data-testid="screen" data-screen="S-31">
-      <h1>Firmware Update</h1>
+      <header className="us-adm__pagehead">
+        <div>
+          <h1>Firmware Update</h1>
+          <p className="us-adm__pagecopy">Check the installed version and safely apply verified device updates.</p>
+        </div>
+      </header>
       <FirmwareLifecycle
         firmware={firmware}
         onCheck={check}

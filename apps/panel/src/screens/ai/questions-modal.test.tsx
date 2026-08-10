@@ -53,6 +53,14 @@ describe('QuestionsModal', () => {
     useWsStore.setState({ recording: recording() as never });
   });
 
+  it('labels the dialog from its visible heading and description', () => {
+    renderModal();
+    const dialog = screen.getByRole('dialog', { name: 'Questions' });
+    const heading = screen.getByRole('heading', { name: 'Questions' });
+    expect(dialog).toHaveAttribute('aria-labelledby', heading.id);
+    expect(dialog).toHaveAccessibleDescription('Review, edit, or send a question to students.');
+  });
+
   it('empty: no drafts', async () => {
     renderModal();
     expect(await screen.findByTestId('questions-modal-empty')).toHaveTextContent('No questions right now');

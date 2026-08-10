@@ -57,6 +57,7 @@ describe('InsightsColumn', () => {
   it('collapsed: tabs stay visible even though the body is hidden', () => {
     renderColumn(true);
     expect(screen.getByRole('tab', { name: 'Previous Questions' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Leaderboard' })).toBeVisible();
     expect(screen.getByTestId('insights-column')).toHaveClass('us-insightswrap--collapsed');
     expect(screen.queryByTestId('previous-questions-tab')).toBeNull();
   });
