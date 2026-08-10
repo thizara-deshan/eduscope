@@ -7,6 +7,7 @@ import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError } from '@eduscope/api-client';
 import type { SystemAlert } from '@eduscope/shared';
 import { ClientContext } from '../../../client/client-provider.js';
+import { useWsStore } from '../../../store/ws-store.js';
 import { useAlerts } from './use-alerts.js';
 
 const alert = (overrides: Partial<SystemAlert> = {}): SystemAlert => ({
@@ -36,6 +37,24 @@ describe('useAlerts', () => {
     await waitFor(() => expect(result.current.ackPending).toBeNull());
     expect(acknowledgeAlert).toHaveBeenCalledWith('A1');
     expect(result.current.alerts).toHaveLength(1);
+  });
+
+  it('a stale live replay of the unacknowledged row does not clobber a completed acknowledge', async () => {
+    useWsStore.getState().reset();
+    const listAlerts = vi.fn(() => Promise.resolve({ items: [alert()] }));
+    const acknowledgeAlert = vi.fn(() => Promise.resolve(alert({ acknowledgedBy: 'admin' })));
+    const { result } = build({ listAlerts, acknowledgeAlert });
+    await waitFor(() => expect(result.current.alerts).toHaveLength(1));
+
+    act(() => result.current.acknowledge('A1'));
+    await waitFor(() => expect(result.current.alerts[0]?.acknowledgedBy).toBe('admin'));
+
+    // `acknowledgeAlert` has no `system.alert` echo — a replay of the ORIGINAL
+    // seeded row (e.g. from events$'s snapshot-on-subscribe) must not undo it.
+    act(() => useWsStore.getState().ingest({
+      event: 'system.alert', at: '2026-08-10T09:00:00+00:00', seq: 1, payload: alert(),
+    } as never));
+    expect(result.current.alerts[0]?.acknowledgedBy).toBe('admin');
   });
 
   it('maps a rejected acknowledgeAlert (404) to ackError', async () => {

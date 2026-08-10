@@ -32,6 +32,11 @@ export function useAlerts({ includeCleared }: { includeCleared: boolean }): UseA
     queryFn: () => client.listAlerts({ includeCleared }),
   });
   const live = useAlertsList();
+  // `acknowledgeAlert` has no `system.alert` echo (see the mutation below), so
+  // a live replay of the ORIGINAL (unacknowledged) row would otherwise
+  // clobber a just-completed acknowledge on every re-render — this override
+  // wins until the alert itself clears.
+  const [ackOverrides, setAckOverrides] = useState<Record<string, SystemAlert>>({});
 
   const mutation = useMutation({
     mutationFn: (id: string) => client.acknowledgeAlert(id),
@@ -46,6 +51,7 @@ export function useAlerts({ includeCleared }: { includeCleared: boolean }): UseA
           items: old.items.map((a) => (a.id === updated.id ? updated : a)),
         },
       );
+      setAckOverrides((o) => ({ ...o, [updated.id]: updated }));
     },
     onError: (error: unknown, id) => {
       setAckPending(null);
@@ -61,14 +67,23 @@ export function useAlerts({ includeCleared }: { includeCleared: boolean }): UseA
   };
 
   // REST snapshot is the base; a live system.alert (e.g. a fresh raise/re-raise)
-  // overlays by id — INV-SA-1 re-raises still merge into the same row.
+  // overlays by id — INV-SA-1 re-raises still merge into the same row. A local
+  // acknowledge override applies LAST: a re-raise (new raisedAt) clears it
+  // naturally since the live row's identity has moved on, but a stale replay
+  // of the same unacknowledged row can't undo an acknowledge that already landed.
   const alerts = useMemo(() => {
     const byId = new Map((query.data?.items ?? []).map((a) => [a.id, a] as const));
     for (const a of live) {
       if (includeCleared || a.clearedAt === null) byId.set(a.id, a);
     }
+    for (const [id, override] of Object.entries(ackOverrides)) {
+      const current = byId.get(id);
+      if (current && current.raisedAt === override.raisedAt && current.clearedAt === null) {
+        byId.set(id, override);
+      }
+    }
     return [...byId.values()];
-  }, [query.data, live, includeCleared]);
+  }, [query.data, live, includeCleared, ackOverrides]);
 
   return { alerts, loading: query.isLoading, acknowledge, ackPending, ackError };
 }
