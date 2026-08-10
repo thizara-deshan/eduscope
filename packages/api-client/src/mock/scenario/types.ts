@@ -26,7 +26,13 @@ export type ScenarioName =
   | 'student-quiz-returning'
   | 'student-quiz-closed'
   | 'student-quiz-reconnect'
-  | 'student-quiz-failures';
+  | 'student-quiz-failures'
+  /** Added for Wave 7's S-38 closed-race gate. */
+  | 'student-quiz-registration-closed'
+  /** Added for Wave 7's S-39 late-refusal gate. */
+  | 'student-quiz-late-answer'
+  /** Added for Wave 7's S-41 direct-session stale-link gate. */
+  | 'student-quiz-session-not-found';
 
 /** Wave 7 student REST/WS state selected through the one shared scenario catalog. */
 export interface StudentQuizScenario {
@@ -37,7 +43,27 @@ export interface StudentQuizScenario {
   readonly result: 'correct-current' | 'incorrect-pending' | 'missed-current' | 'none';
   readonly summary: 'open' | 'participated' | 'none';
   readonly reconnect: boolean;
+  /** When 'session-not-found', `connect()` rejects instead of returning a snapshot. */
+  readonly connectOutcome?: 'ok' | 'session-not-found';
+  /** Demo-visible REST delay, overridable so tests can run under fake timers. */
+  readonly restDelayMs?: Partial<Record<'resolveJoinCode' | 'registerParticipant' | 'submitAnswer', number>>;
 }
+
+/** Wave 7 dev-only mock transitions (frontend-conventions §4) — never a contract event on their own. */
+export type StudentQuizTransitionId =
+  | 'student.connection.offline'
+  | 'student.connection.restore'
+  | 'student.question.none'
+  | 'student.question.open-2'
+  | 'student.question.open-3'
+  | 'student.question.open-4'
+  | 'student.question.close-missed'
+  | 'student.result.correct-current'
+  | 'student.result.incorrect-pending'
+  | 'student.result.rank-current'
+  | 'student.session.prepare-close-participated'
+  | 'student.session.close-participated'
+  | 'student.session.close-none';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }

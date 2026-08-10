@@ -50,6 +50,9 @@ describe('scenario engine', () => {
       'student-quiz-closed',
       'student-quiz-reconnect',
       'student-quiz-failures',
+      'student-quiz-registration-closed',
+      'student-quiz-late-answer',
+      'student-quiz-session-not-found',
     ]);
   });
 

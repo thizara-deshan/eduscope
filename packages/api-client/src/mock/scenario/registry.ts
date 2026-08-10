@@ -13,7 +13,8 @@ import { wanLoss } from './scripts/wan-loss.js';
 import { captureFault } from './scripts/capture-fault.js';
 import {
   studentQuizClosed, studentQuizFailures, studentQuizHappy,
-  studentQuizReconnect, studentQuizReturning,
+  studentQuizLateAnswer, studentQuizReconnect, studentQuizRegistrationClosed,
+  studentQuizReturning, studentQuizSessionNotFound,
 } from './scripts/student-quiz.js';
 import type { ForcedTransition, ScenarioName, ScenarioScript } from './types.js';
 
@@ -37,6 +38,9 @@ const CATALOG: Record<ScenarioName, ScenarioScript> = {
   'student-quiz-closed': studentQuizClosed,
   'student-quiz-reconnect': studentQuizReconnect,
   'student-quiz-failures': studentQuizFailures,
+  'student-quiz-registration-closed': studentQuizRegistrationClosed,
+  'student-quiz-late-answer': studentQuizLateAnswer,
+  'student-quiz-session-not-found': studentQuizSessionNotFound,
 };
 
 export function getScenario(name: ScenarioName): ScenarioScript {

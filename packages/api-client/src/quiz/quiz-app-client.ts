@@ -16,7 +16,7 @@ import {
 } from '@eduscope/shared';
 import { TransportError } from '../errors.js';
 import { getScenario } from '../mock/scenario/registry.js';
-import type { ScenarioName, StudentQuizScenario } from '../mock/scenario/types.js';
+import type { ScenarioName, StudentQuizScenario, StudentQuizTransitionId } from '../mock/scenario/types.js';
 import { createEmitter, type EventStream } from '../stream.js';
 
 export interface QuizAppClient {
@@ -31,6 +31,11 @@ export interface QuizAppClient {
   connect(): Promise<readonly StudentServerEvent[]>;
   readonly events$: EventStream<StudentServerEvent>;
   dispose(): void;
+}
+
+/** Wave 7 dev-only mock seam (frontend-conventions §4) — never reaches `QuizAppClient`. */
+export interface MockQuizAppClient extends QuizAppClient {
+  forceStudentTransition(id: StudentQuizTransitionId): void;
 }
 
 export class QuizAppProblemError extends Error {
@@ -57,8 +62,8 @@ const DEFAULT_STUDENT_SCENARIO: StudentQuizScenario = {
   registration: 'created',
   question: 'open-4',
   answer: 'accepted',
-  result: 'correct-current',
-  summary: 'participated',
+  result: 'none',
+  summary: 'open',
   reconnect: false,
 };
 
@@ -69,6 +74,10 @@ const REGISTRATION_POLICY = {
   studentIdMaxLength: 10,
   fullNameMaxLength: 128,
 } as const;
+
+type QuestionState = 'none' | 'open-2' | 'open-3' | 'open-4' | 'closed';
+type ResultState = { kind: 'correct' | 'incorrect' | 'missed'; rankState: 'pending' | 'current' } | null;
+type SummaryState = 'open' | 'participated' | 'none';
 
 function problem(
   status: number,
@@ -92,18 +101,37 @@ function options(count: number) {
   }));
 }
 
+function optionCountFor(question: QuestionState): number {
+  return question === 'open-2' ? 2 : question === 'open-3' ? 3 : 4;
+}
+
+function delay(ms: number | undefined): Promise<void> {
+  if (!ms) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Contract-backed Wave 7 mock. Every REST response and event is parsed by generated/shared zod. */
 export function createMockQuizClient(
   scenario: ScenarioName = 'student-quiz-happy',
-): QuizAppClient {
+): MockQuizAppClient {
   const script = getScenario(scenario);
   const state = script.studentQuiz ?? DEFAULT_STUDENT_SCENARIO;
   const emitter = createEmitter<StudentServerEvent>();
+
   let registered = state.resolution === 'open-returning';
   let storedOptionId: string | null = state.answer === 'already-accepted' ? OPTION_IDS[1] : null;
   let replyLossSpent = false;
   let registrationOfflineSpent = false;
   let resolutionOfflineSpent = false;
+  let connection: 'online' | 'offline' = 'online';
+
+  let questionState: QuestionState = state.question;
+  let lastOptionCount = optionCountFor(state.question === 'none' || state.question === 'closed' ? 'open-4' : state.question);
+  let resultState: ResultState =
+    state.result === 'correct-current' ? { kind: 'correct', rankState: 'current' } :
+    state.result === 'incorrect-pending' ? { kind: 'incorrect', rankState: 'pending' } :
+    state.result === 'missed-current' ? { kind: 'missed', rankState: 'current' } : null;
+  let summaryState: SummaryState = state.summary;
 
   const emit = (event: StudentServerEvent): StudentServerEvent => {
     const parsed = zStudentServerEvent.parse(event);
@@ -112,14 +140,14 @@ export function createMockQuizClient(
   };
 
   const questionEvent = (): StudentServerEvent => {
-    if (state.question === 'none') {
+    if (questionState === 'none') {
       return { event: 'quiz.question', payload: { state: 'none' } };
     }
-    const count = state.question === 'open-2' ? 2 : state.question === 'open-3' ? 3 : 4;
+    const count = optionCountFor(questionState);
     return {
       event: 'quiz.question',
       payload: {
-        state: state.question === 'closed' ? 'closed' : 'open',
+        state: questionState === 'closed' ? 'closed' : 'open',
         publicationId: PUBLICATION_ID,
         prompt: 'Which planet is known as the Red Planet?',
         options: options(count),
@@ -129,31 +157,32 @@ export function createMockQuizClient(
   };
 
   const resultEvent = (): StudentServerEvent | null => {
-    if (state.result === 'none') return null;
-    const missed = state.result === 'missed-current';
-    const correct = state.result === 'correct-current';
+    if (resultState === null) return null;
+    const { kind, rankState } = resultState;
+    const missed = kind === 'missed';
+    const correct = kind === 'correct';
     return {
       event: 'quiz.result',
       payload: {
         publicationId: PUBLICATION_ID,
         question: {
           prompt: 'Which planet is known as the Red Planet?',
-          options: options(state.question === 'open-2' ? 2 : state.question === 'open-3' ? 3 : 4),
+          options: options(lastOptionCount),
         },
         selectedOptionId: missed ? null : correct ? OPTION_IDS[3] : OPTION_IDS[1],
         isCorrect: missed ? null : correct,
         correctOptionId: OPTION_IDS[3],
         pointsAwarded: correct ? 10 : 0,
         runningScore: correct ? 30 : 20,
-        ownRank: state.result === 'incorrect-pending' ? null : 3,
-        rankState: state.result === 'incorrect-pending' ? 'pending' : 'current',
+        ownRank: rankState === 'pending' ? null : 3,
+        rankState,
       },
     };
   };
 
   const sessionEvent = (): StudentServerEvent => {
-    if (state.summary === 'open') return { event: 'quiz.session', payload: { state: 'open' } };
-    if (state.summary === 'none') {
+    if (summaryState === 'open') return { event: 'quiz.session', payload: { state: 'open' } };
+    if (summaryState === 'none') {
       return {
         event: 'quiz.session',
         payload: {
@@ -175,6 +204,8 @@ export function createMockQuizClient(
     scenario,
 
     async resolveJoinCode(joinCode) {
+      await delay(state.restDelayMs?.resolveJoinCode);
+      if (connection === 'offline') throw new TransportError('resolveJoinCode');
       if (joinCode.toUpperCase() === 'UNAVAILABLE' || state.resolution === 'unavailable') {
         throw problem(503, 'quiz.unavailable', 'Quiz service unavailable');
       }
@@ -194,6 +225,8 @@ export function createMockQuizClient(
     },
 
     async registerParticipant(quizSessionId, input) {
+      await delay(state.restDelayMs?.registerParticipant);
+      if (connection === 'offline') throw new TransportError('registerParticipant');
       if (input.fullName.trim().length === 0) {
         throw problem(422, 'registration.invalid-name', 'Enter your real name', '/fullName');
       }
@@ -231,6 +264,8 @@ export function createMockQuizClient(
     },
 
     async submitAnswer(publicationId, input) {
+      await delay(state.restDelayMs?.submitAnswer);
+      if (connection === 'offline') throw new TransportError('submitAnswer');
       const parsed = zSubmitAnswerRequest.safeParse(input);
       if (!parsed.success || !OPTION_IDS.includes(input.selectedOptionId as (typeof OPTION_IDS)[number])) {
         throw problem(422, 'answer.invalid-option', 'That option is not valid', '/selectedOptionId');
@@ -256,6 +291,10 @@ export function createMockQuizClient(
     },
 
     async connect() {
+      if (connection === 'offline') throw new TransportError('connect');
+      if (state.connectOutcome === 'session-not-found') {
+        throw problem(404, 'quiz.session-not-found', 'Quiz session not found');
+      }
       if (state.reconnect) {
         emit({ event: 'quiz.participant', payload: { connectionState: 'offline' } });
       }
@@ -270,5 +309,63 @@ export function createMockQuizClient(
 
     events$: { subscribe: emitter.subscribe },
     dispose() {},
+
+    forceStudentTransition(id) {
+      switch (id) {
+        case 'student.connection.offline':
+          connection = 'offline';
+          emit({ event: 'quiz.participant', payload: { connectionState: 'offline' } });
+          return;
+        case 'student.connection.restore':
+          connection = 'online';
+          return;
+        case 'student.question.none':
+          questionState = 'none';
+          resultState = null;
+          emit(questionEvent());
+          return;
+        case 'student.question.open-2':
+        case 'student.question.open-3':
+        case 'student.question.open-4': {
+          questionState = id === 'student.question.open-2' ? 'open-2' : id === 'student.question.open-3' ? 'open-3' : 'open-4';
+          lastOptionCount = optionCountFor(questionState);
+          storedOptionId = null;
+          resultState = null;
+          emit(questionEvent());
+          return;
+        }
+        case 'student.question.close-missed': {
+          questionState = 'closed';
+          emit(questionEvent());
+          resultState = { kind: 'missed', rankState: 'current' };
+          const event = resultEvent();
+          if (event) emit(event);
+          return;
+        }
+        case 'student.result.correct-current':
+          resultState = { kind: 'correct', rankState: 'current' };
+          emit(resultEvent()!);
+          return;
+        case 'student.result.incorrect-pending':
+          resultState = { kind: 'incorrect', rankState: 'pending' };
+          emit(resultEvent()!);
+          return;
+        case 'student.result.rank-current':
+          if (resultState) resultState = { ...resultState, rankState: 'current' };
+          emit(resultEvent()!);
+          return;
+        case 'student.session.prepare-close-participated':
+          summaryState = 'participated';
+          return;
+        case 'student.session.close-participated':
+          summaryState = 'participated';
+          emit(sessionEvent());
+          return;
+        case 'student.session.close-none':
+          summaryState = 'none';
+          emit(sessionEvent());
+          return;
+      }
+    },
   };
 }
