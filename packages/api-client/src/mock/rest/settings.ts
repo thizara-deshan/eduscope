@@ -1,5 +1,5 @@
 import {
-  zCommandAccepted, zEncodingProfile, zGetEncoderSettingsResponse, zNetworkConfig,
+  zCommandAccepted, zEncodingProfile, zGetEncoderSettingsResponse, zNetworkConfig, zSystemAlert,
   zStreamTarget,
   type CommandAccepted, type EncoderCapabilities, type EncodingProfile,
   type EncodingProfileUpdate, type NetworkConfig, type NetworkConfigUpdate,
@@ -27,17 +27,27 @@ export function createSettingsOperations(ctx: RestContext) {
       if (refusal) throw new ProblemError(refusal);
       const row = seed.networkConfigs.find((c) => c.id === networkConfigId);
       if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown network config: ${networkConfigId}` });
-      Object.assign(row, {
-        ...(body.kind !== undefined ? { kind: body.kind } : {}),
-        ...(body.vlanId !== undefined ? { vlanId: body.vlanId } : {}),
-        ...(body.addressMode !== undefined ? { addressMode: body.addressMode } : {}),
-        ...(body.ipv4Address !== undefined ? { ipv4Address: body.ipv4Address } : {}),
-        ...(body.prefixLength !== undefined ? { prefixLength: body.prefixLength } : {}),
-        ...(body.gateway !== undefined ? { gateway: body.gateway } : {}),
-        ...(body.dnsServers !== undefined ? { dnsServers: body.dnsServers } : {}),
-        appliedAt: nowIsoZ(world.clock),
-        lastApplyError: null,
-      });
+      if (ctx.worldSeed.networkApplyFails) {
+        row.lastApplyError = 'Interface did not come back up; previous config kept.';
+        world.emit('system.alert', validated(zSystemAlert, {
+          id: nextUlid(world), code: 'network.apply-failed', severity: 'error',
+          category: 'System', title: 'Network apply failed', detail: row.lastApplyError,
+          raisedAt: nowIsoZ(world.clock), clearedAt: null, clearedReason: null,
+          acknowledgedBy: null, context: null, relatedEntity: null,
+        }));
+      } else {
+        Object.assign(row, {
+          ...(body.kind !== undefined ? { kind: body.kind } : {}),
+          ...(body.vlanId !== undefined ? { vlanId: body.vlanId } : {}),
+          ...(body.addressMode !== undefined ? { addressMode: body.addressMode } : {}),
+          ...(body.ipv4Address !== undefined ? { ipv4Address: body.ipv4Address } : {}),
+          ...(body.prefixLength !== undefined ? { prefixLength: body.prefixLength } : {}),
+          ...(body.gateway !== undefined ? { gateway: body.gateway } : {}),
+          ...(body.dnsServers !== undefined ? { dnsServers: body.dnsServers } : {}),
+          appliedAt: nowIsoZ(world.clock),
+          lastApplyError: null,
+        });
+      }
       return validated(zCommandAccepted, {
         commandId: nextUlid(world),
         acceptedAt: nowIsoZ(world.clock),

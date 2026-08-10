@@ -8,6 +8,7 @@ import {
 } from '@eduscope/shared';
 import { ProblemError } from '../../errors.js';
 import { BOUND_SOURCE_ROLES, isRecordingNonTerminal } from '../machines/index.js';
+import { sourceTransitionId } from '../machines/health.js';
 import type { Transition } from '../machines/types.js';
 import { RESOLVE_BY_SEC } from '../commands.js';
 import { validated, nowIsoZ } from '../seed/index.js';
@@ -55,6 +56,13 @@ export function createSourcesOperations(ctx: RestContext) {
         ...(body.transport !== undefined ? { transport: body.transport } : {}),
         updatedAt: nowIsoZ(world.clock),
       });
+      // Editing a bound camera address re-probes its role (HL-09): the tile goes
+      // unknown, then resolves online shortly after (S-28 camera-rebind state).
+      const binding = seed.sourceBindings.find((b) => b.physicalInputId === inputId && b.enabled);
+      if (binding && BOUND_SOURCE_ROLES.includes(binding.roleId)) {
+        world.apply(sourceTransitionId(binding.roleId, 'HL-08')); // any → unknown
+        world.clock.setTimeout(() => world.apply(sourceTransitionId(binding.roleId, 'HL-02')), 1_200); // → online
+      }
       return validated(zPhysicalInput, row);
     },
 
