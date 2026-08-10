@@ -1,0 +1,51 @@
+/* Invisible but real: 44px floor, absolute inside the shell, never fixed. */
+.quiz-devhotspot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  opacity: 0;
+  background: transparent;
+  border: 0;
+  z-index: 900;
+}
+
+.quiz-devoverlay {
+  position: fixed;
+  inset: var(--sp-7);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-7);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.quiz-devoverlay__head { display: flex; align-items: center; gap: var(--sp-5); }
+.quiz-devoverlay__list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+
+.quiz-devoverlay__option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-height: var(--tap-min);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.quiz-devoverlay__name { font-weight: 600; }
+.quiz-devoverlay__desc { color: var(--text-muted); font-size: var(--fs-md); }
+
+.quiz-devoverlay__transitions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  overflow-y: auto;
+}
+
+.quiz-devoverlay__transitions button { min-height: var(--tap-min); }
