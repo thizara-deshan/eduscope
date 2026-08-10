@@ -46,25 +46,35 @@ export function LeaderboardTab() {
       {lb.entries.length === 0 ? (
         <p className="us-empty" data-testid="leaderboard-empty">No answers yet</p>
       ) : (
-        <ol className="us-lb__list" aria-label="Leaderboard ranking">
-          {lb.entries.map((entry) => (
-            <li key={entry.studentIdNumber}>
-              <button
-                type="button"
-                className="us-lb__row"
-                data-testid={`leaderboard-row-${entry.studentIdNumber}`}
-                onClick={() => openStudent(entry.studentIdNumber)}
-              >
-                <span className="us-lb__rank">{medalFor(entry.rank) ?? entry.rank}</span>
-                <span className="us-lb__name">{entry.displayName}</span>
-                <span className="us-lb__fraction">{entry.correct}/{entry.answered}</span>
-                <span className="us-lb__statvalue">{entry.points}</span>
-                <span className="us-lb__accuracy">{Math.round(entry.accuracy * 100)}%</span>
-                <span className="us-lb__time">{Math.round(entry.avgResponseMs / 1000)}s</span>
-              </button>
-            </li>
-          ))}
-        </ol>
+        <>
+          <div className="us-lb__columns" aria-hidden="true">
+            <span>Rank</span>
+            <span>Lecturer</span>
+            <span>Correct</span>
+            <span>Points</span>
+            <span>Accuracy</span>
+            <span>Time</span>
+          </div>
+          <ol className="us-lb__list" aria-label="Leaderboard ranking">
+            {lb.entries.map((entry) => (
+              <li key={entry.studentIdNumber}>
+                <button
+                  type="button"
+                  className="us-lb__row"
+                  data-testid={`leaderboard-row-${entry.studentIdNumber}`}
+                  onClick={() => openStudent(entry.studentIdNumber)}
+                >
+                  <span className="us-lb__rank">{medalFor(entry.rank) ?? entry.rank}</span>
+                  <span className="us-lb__name">{entry.displayName}</span>
+                  <span className="us-lb__fraction">{entry.correct}/{entry.answered}</span>
+                  <span className="us-lb__statvalue">{entry.points}</span>
+                  <span className="us-lb__accuracy">{Math.round(entry.accuracy * 100)}%</span>
+                  <span className="us-lb__time">{Math.round(entry.avgResponseMs / 1000)}s</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </>
       )}
     </div>
   );

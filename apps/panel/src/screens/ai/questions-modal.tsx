@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
 import { useQuestions } from '../../ai/use-questions.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { AddQuestionDialog } from './add-question-dialog.js';
@@ -15,6 +15,8 @@ export function QuestionsModal({ onClose }: { readonly onClose: () => void }) {
   const overlays = useOverlays();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   const openAddQuestion = () => {
     const id = overlays.open(<AddQuestionDialog onClose={() => overlays.close(id)} />);
@@ -51,13 +53,17 @@ export function QuestionsModal({ onClose }: { readonly onClose: () => void }) {
         className="us-modal__panel us-qmodal"
         role="dialog"
         aria-modal="true"
-        aria-label="Questions"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         data-testid="questions-modal"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={trapFocus}
       >
         <header className="us-qmodal__head">
-          <h2>Questions</h2>
+          <div>
+            <h2 id={titleId}>Questions</h2>
+            <p id={descriptionId}>Review, edit, or send a question to students.</p>
+          </div>
           <button ref={closeRef} type="button" className="us-qmodal__close" aria-label="Close" onClick={onClose}>
             ✕
           </button>
