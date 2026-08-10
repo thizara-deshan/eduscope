@@ -1,4 +1,6 @@
 import { useAuth } from '../auth/auth-context.js';
+import { useRecordingState } from '../store/selectors.js';
+import { NotificationCenter } from './notification-center.js';
 import { PanelClock } from './panel-clock.js';
 import { UserMenu } from './user-menu.js';
 import { useProvisioning } from './use-provisioning.js';
@@ -8,9 +10,12 @@ import './shell.css';
 export function PanelHeader(): JSX.Element {
   const { user } = useAuth();
   const { hallDisplayName } = useProvisioning();
+  const recordingState = useRecordingState();
+  const recordingActive = recordingState === 'recording' || recordingState === 'paused'
+    || recordingState === 'stopping' || recordingState === 'finalizing';
 
   return (
-    <header className="us-header">
+    <header className="us-header" data-recording-active={recordingActive}>
       <div className="us-header__brand">
         <span className="us-header__logo">Eduscope</span>
         {hallDisplayName && (
@@ -21,6 +26,7 @@ export function PanelHeader(): JSX.Element {
         )}
       </div>
       <PanelClock />
+      <NotificationCenter />
       {user && <UserMenu displayName={user.displayName} />}
     </header>
   );

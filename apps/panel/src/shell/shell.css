@@ -10,12 +10,7 @@
   padding: 0 var(--sp-8);
   background: var(--ink);
   color: var(--on-ink);
-  /* Above .us-alertlane (z-index 40): a descendant's z-index (the user menu
-     popup, 1000) is scoped to its NEAREST positioned ancestor's own stacking
-     context, so raising the header's own value is what actually lets the
-     popup paint over the alert lane rather than under it (found live —
-     "Change password" was unclickable behind a seeded alert banner). Still
-     below .us-recnotch (55), which must stay on top of everything. */
+  /* Header popovers stay above page content and below recording chrome. */
   z-index: 45;
 }
 
@@ -54,6 +49,10 @@
   gap: var(--sp-4);
 }
 
+.us-header[data-recording-active='true'] .us-clock {
+  top: calc(50% + var(--sp-3));
+}
+
 .us-clock__time {
   font-size: var(--fs-xl);
   font-weight: 700;
@@ -70,7 +69,7 @@
 
 .us-usermenu {
   position: relative;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .us-usermenu__trigger {
@@ -211,67 +210,154 @@
   font-weight: 600;
 }
 
-/* ---------- Alert banner host (screen-inventory §2 S-03) ---------- */
+/* ---------- Header notification center ---------- */
 
-.us-alertlane {
-  position: absolute;
-  top: var(--header-h);
-  left: 0;
-  right: 0;
-  height: var(--tap-row);
-  z-index: 40;
-  pointer-events: none;
+.us-notifications {
+  position: relative;
+  margin-left: auto;
 }
 
-.us-alertlane:has(.us-alertbanner) {
-  pointer-events: auto;
-}
-
-.us-alertbanner {
-  height: 100%;
-  display: flex;
+.us-notifications__trigger {
+  position: relative;
+  display: inline-flex;
+  width: var(--tap-min);
+  height: var(--tap-min);
   align-items: center;
-  gap: var(--sp-5);
-  padding: 0 var(--sp-7);
-}
-
-.us-alertbanner--info {
-  background: var(--info-soft);
-  color: var(--info);
-}
-
-.us-alertbanner--warning {
+  justify-content: center;
+  border: 1px solid var(--ink-border);
+  border-radius: var(--radius-circle);
   background: transparent;
-  color: var(--warning);
+  color: var(--on-ink);
+  font-size: 19px;
 }
 
-.us-alertbanner--error {
-  background: var(--danger-soft);
-  color: var(--danger);
+.us-notifications__count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.us-alertbanner__text {
-  flex: 1;
+.us-notifications__panel {
+  position: absolute;
+  top: calc(100% + var(--sp-3));
+  right: 0;
+  z-index: 1000;
+  width: min(430px, calc(100vw - var(--sp-8) * 2));
+  max-height: min(560px, calc(100vh - var(--header-h) - var(--sp-8)));
   display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  font-size: var(--fs-sm);
+  flex-direction: column;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
 }
 
-.us-alertbanner__count {
-  font-size: var(--fs-xs);
+.us-notifications__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.us-notifications__head h2,
+.us-notifications__head p {
+  margin: 0;
+}
+
+.us-notifications__head h2 {
+  font-size: 19px;
+}
+
+.us-notifications__head p {
+  margin-top: var(--sp-1);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.us-notifications__head button {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.us-notifications__list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.us-notifications__card {
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--info);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.us-notifications__card--warning { border-left-color: var(--warning); }
+.us-notifications__card--error,
+.us-notifications__card--critical { border-left-color: var(--danger); }
+
+.us-notifications__cardhead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.us-notifications__severity {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.us-notifications__card p {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.us-notifications__card button {
+  min-height: var(--tap-min);
+  margin-top: var(--sp-4);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
   font-weight: 700;
 }
 
-.us-alertbanner__ack {
-  min-width: var(--tap-min);
-  min-height: var(--tap-min);
-  border: none;
-  background: transparent;
-  color: inherit;
+.us-notifications__empty {
+  margin: 0;
+  padding: var(--sp-8);
+  color: var(--text-muted);
+  text-align: center;
 }
 
 /* ---------- Still-streaming-while-paused (SM-Q-4) ---------- */

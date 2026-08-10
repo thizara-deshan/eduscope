@@ -1,7 +1,6 @@
 import { Outlet, useLocation } from 'react-router';
 import { KeyboardHost } from '../keyboard/keyboard-host.js';
 import { OverlayHost, OverlayProvider } from '../overlays/overlay-host.js';
-import { AlertBanners } from '../shell/alert-banners.js';
 import { OfflineMarker } from '../shell/offline-marker.js';
 import { PanelHeader } from '../shell/panel-header.js';
 import { RecordingChrome } from '../shell/recording-chrome.js';
@@ -28,7 +27,6 @@ export function PanelShell() {
     <OverlayProvider>
       {showAuthenticatedChrome && <PanelHeader />}
       <RecordingChrome />
-      {showAuthenticatedChrome && <AlertBanners />}
       {showAuthenticatedChrome && <StreamingWhilePaused />}
       {showAuthenticatedChrome && <OfflineMarker />}
       <Outlet />

@@ -28,6 +28,8 @@ function renderAt(path: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const stub = {
     getProvisioning: vi.fn(() => new Promise(() => {})),
+    listAlerts: vi.fn(() => Promise.resolve({ items: [] })),
+    acknowledgeAlert: vi.fn(() => Promise.resolve()),
   } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   const wrapper = ({ children }: { children: ReactNode }) =>
@@ -46,6 +48,7 @@ describe('PanelShell — header visibility (S-01 §12, S-02 §12)', () => {
   it('renders no header at /login', () => {
     renderAt('/login');
     expect(document.querySelector('.us-header')).toBeNull();
+    expect(document.querySelector('.us-notifications')).toBeNull();
   });
 
   it('renders no header at /login/reset', () => {
@@ -56,5 +59,7 @@ describe('PanelShell — header visibility (S-01 §12, S-02 §12)', () => {
   it.each(['/', '/advanced/library', '/advanced'])('renders a header at %s', (path) => {
     renderAt(path);
     expect(document.querySelector('.us-header')).not.toBeNull();
+    expect(document.querySelector('.us-notifications')).not.toBeNull();
+    expect(document.querySelector('.us-alertlane')).toBeNull();
   });
 });
