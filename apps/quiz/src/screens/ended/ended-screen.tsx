@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { QuizAppProblem, StudentQuizSessionPayload } from '@eduscope/shared';
 import { QuizMobileShell } from '../../components/quiz-mobile-shell.js';
 import type { ConnectionState } from '../../components/connection-strip.js';
@@ -19,27 +19,19 @@ export function EndedScreen({
   session,
   connectProblem,
   connectionState,
+  justReconnected = false,
 }: {
   session: ClosedSession | null;
   connectProblem: QuizAppProblem | null;
   connectionState: ConnectionState;
+  /** True when this snapshot followed a live disruption while offline (offline-close race). */
+  justReconnected?: boolean;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const wasDisrupted = useRef(false);
-  const [announceReconnected, setAnnounceReconnected] = useState(false);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (connectionState !== 'online') {
-      wasDisrupted.current = true;
-    } else if (wasDisrupted.current) {
-      wasDisrupted.current = false;
-      setAnnounceReconnected(true);
-    }
-  }, [connectionState]);
 
   const staleLink = connectProblem?.code === 'quiz.session-not-found';
   const heading = staleLink ? 'This quiz link is no longer valid' : 'Quiz ended';
@@ -49,7 +41,7 @@ export function EndedScreen({
       <h1 ref={headingRef} tabIndex={-1}>
         {heading}
       </h1>
-      {announceReconnected && (
+      {justReconnected && (
         <p role="status" aria-live="polite">
           Reconnected.
         </p>

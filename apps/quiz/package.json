@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
-    "gate": "playwright test e2e/gate-boot.spec.ts"
+    "gate": "playwright test"
   },
   "dependencies": {
     "@eduscope/api-client": "workspace:*",

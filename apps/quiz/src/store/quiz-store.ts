@@ -17,6 +17,8 @@ interface QuizStoreState {
   readonly reconnecting: boolean;
   readonly connectProblem: QuizAppProblem | null;
   readonly snapshotReceived: boolean;
+  /** One-shot: true when the snapshot that just landed followed a live disruption (S-41's "Reconnected" announcement). */
+  readonly justReconnected: boolean;
 
   /** Atomic reconnect/cold-connect replacement — never merges into stale state. */
   replaceSnapshot(events: readonly StudentServerEvent[]): void;
@@ -24,6 +26,7 @@ interface QuizStoreState {
   ingest(event: StudentServerEvent): void;
   setReconnecting(): void;
   setConnectProblem(problem: QuizAppProblem): void;
+  acknowledgeReconnect(): void;
   reset(): void;
 }
 
@@ -35,6 +38,7 @@ const EMPTY = {
   reconnecting: false,
   connectProblem: null,
   snapshotReceived: false,
+  justReconnected: false,
 };
 
 interface Snapshot {
@@ -84,6 +88,7 @@ export const useQuizStore = create<QuizStoreState>((set, get) => ({
 
   replaceSnapshot(events) {
     const snapshot = parseSnapshot(events);
+    const followedDisruption = get().reconnecting;
     set({
       session: snapshot.session,
       connection: snapshot.connection,
@@ -92,6 +97,7 @@ export const useQuizStore = create<QuizStoreState>((set, get) => ({
       reconnecting: false,
       connectProblem: null,
       snapshotReceived: true,
+      justReconnected: followedDisruption,
     });
   },
 
@@ -124,6 +130,10 @@ export const useQuizStore = create<QuizStoreState>((set, get) => ({
 
   setConnectProblem(problem) {
     set({ connectProblem: problem, reconnecting: false });
+  },
+
+  acknowledgeReconnect() {
+    set({ justReconnected: false });
   },
 
   reset() {

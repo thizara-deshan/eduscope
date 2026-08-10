@@ -23,13 +23,20 @@ export function QuizSessionScreen() {
   const question = useQuizStore((s) => s.question);
   const result = useQuizStore((s) => s.result);
   const connectProblem = useQuizStore((s) => s.connectProblem);
+  const justReconnected = useQuizStore((s) => s.justReconnected);
 
-  if (connectProblem?.code === 'quiz.session-not-found' || session?.state === 'closed') {
+  const ended = connectProblem?.code === 'quiz.session-not-found' || session?.state === 'closed';
+
+  if (ended) {
+    // Not acknowledged here: S-41 is terminal, so the "Reconnected" notice
+    // simply stays up for the rest of this render — there is no later state
+    // it could incorrectly bleed into.
     return (
       <EndedScreen
         session={session?.state === 'closed' ? session : null}
         connectProblem={connectProblem}
         connectionState={connectionState}
+        justReconnected={justReconnected}
       />
     );
   }

@@ -36,12 +36,14 @@ describe('S-41 Session ended', () => {
   });
 
   it('offline close reconnect: announces "Reconnected" once the participated summary lands', () => {
-    const { rerender } = render(<EndedScreen session={null} connectProblem={null} connectionState="offline" />);
-    expect(screen.queryByText(/reconnected/i)).not.toBeInTheDocument();
-
-    rerender(<EndedScreen session={PARTICIPATED} connectProblem={null} connectionState="online" />);
+    render(<EndedScreen session={PARTICIPATED} connectProblem={null} connectionState="online" justReconnected />);
     expect(screen.getByText('Reconnected.')).toBeInTheDocument();
     expect(screen.getByText('30')).toBeInTheDocument();
+  });
+
+  it('does not announce "Reconnected" on an ordinary (non-disrupted) load', () => {
+    render(<EndedScreen session={PARTICIPATED} connectProblem={null} connectionState="online" />);
+    expect(screen.queryByText(/reconnected/i)).not.toBeInTheDocument();
   });
 
   it('direct session-not-found: renders stale-link copy only, no fabricated summary', () => {
