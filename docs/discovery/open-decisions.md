@@ -33,6 +33,7 @@
 | D-19 | Streaming platform list | Discovery | PM | Phase 2 | YouTube + Facebook + Custom RTMP |
 | D-20 | Home of provisioning powers (ex dev-admin) | Discovery | PM + tech lead | Phase 3 | Deploy-layer config, no UI page |
 | D-21 | Class-roster provenance (quiz/leaderboard) | Discovery | PM + institute | Phase 3 | Quiz-app self-registration |
+| SQO-1 | Institution student-ID validation policy values | S-37…S-41 wireframe gate | PM + institute | Before Wave 7 contract application | No guessed value; CG-1 application waits |
 
 ---
 
@@ -597,3 +598,74 @@ stands, and the `--danger` critical vocabulary is inherited from S-06 §3.
 
 **W-10 is closed**, leaving **W-11** (S-37…S-41 student quiz app) and **W-12** (S-42
 projector overlay) as the remaining open wireframe rows.
+
+---
+
+## 10. Decided at the S-37…S-41 wireframe gate (2026-08-10)
+
+The W-11 gate covers the complete student mobile loop: join, self-registration,
+answer, own result and terminal summary. The five owner documents are
+[S-37](../design/screens/S-37-design.md),
+[S-38](../design/screens/S-38-design.md),
+[S-39](../design/screens/S-39-design.md),
+[S-40](../design/screens/S-40-design.md) and
+[S-41](../design/screens/S-41-design.md).
+
+### 10.1 Approach and outcomes
+
+Three approaches were considered: a single giant SPA surface, a multi-step
+wizard with success pages, and a shared mobile shell with route-level gates plus
+in-place realtime states. The third is adopted: it preserves the explicit
+S-37…S-41 routes while avoiding navigation for every question-state change.
+
+| ID | Outcome | Rationale |
+|---|---|---|
+| **SQ-D-1** | Valid QR resolution routes automatically: anonymous → S-38, returning → S-39; no welcome/continue page | QZ-2 says the QR goes straight to the active session. An extra confirmation adds a tap without adding a decision |
+| **SQ-D-2** | Returning-participant recognition uses a Secure, HttpOnly, SameSite=Lax participant session cookie; no participant credential is stored in browser-readable storage | INV-QP-1 needs durable rejoin identity, while INV-SI-2 makes a spoofable local participant id inappropriate. REST and WS use one session truth |
+| **SQ-D-3** | Registration remains exactly two fields and one action; the server supplies the student-ID policy/hint | Z-11 requires format validation, but the institute format is not contract data. A policy object keeps the UI honest without hardcoding the scaffold mock's regex |
+| **SQ-D-4** | First tap immediately locks the option; no confirmation dialog and no offline queue | INT-3 makes the tap final, and J-3 is a live peer-paced flow. A dialog doubles taps; a queue could submit after close and falsely imply acceptance |
+| **SQ-D-5** | Reconnect is an atomic full student snapshot before live deltas | The student state is small and cross-zone links are flaky. Full replacement prevents stale-question flashes and mirrors the existing replace-not-edit recovery principle (INV-AP-1) |
+| **SQ-D-6** | Result events are self-contained; S-40 never relies on S-39's in-memory question | S-40 must survive reload/reconnect and reveal answer text. IDs alone cannot render that screen |
+| **SQ-D-7** | No new token or mobile-only palette | The existing light palette, semantic colors, spacing, type and radii cover all five screens; quiz text simply observes the existing ≥16 px floor |
+
+### 10.2 Contract rulings
+
+| CG | Ruling | Kind | Owner |
+|---|---|---|---|
+| **CG-1** | Add `contracts/quiz-app.yaml`: resolve, register/rejoin, answer, secure participant session and named problems | additive | S-37 §8, S-38 §7, S-39 §8 |
+| **CG-22** | Define participant-authenticated student WS and atomic reconnect snapshot ordering | additive | S-39 §8 |
+| **CG-23** | Replace impossible `quiz.question` shape with `open/closed/none` variants; name own answer as an option id | breaking | S-39 §8 |
+| **CG-24** | Add question snapshot, selected option and rank freshness to `quiz.result` | additive | S-40 §7 |
+| **CG-25** | Make closed `quiz.session` summaries participation-discriminated with constrained final fields | breaking | S-41 §7 |
+
+All five are answered in screen-inventory §10. None is applied in this design
+run; Wave 7 remains blocked until the contract, generated schemas and mock agree.
+
+### 10.3 Genuinely unresolved
+
+#### SQO-1 — Institution student-ID validation policy values
+
+- **Question:** What exact `studentIdPattern`, human hint, input mode and maximum
+  length should the quiz service publish for this institute?
+- **Why it remains open:** PRD INT-4/QZ-3 and Z-11 decide format validation but
+  do not provide the format. The provisional mock's `^[A-Z]{2}\d{8}$` is not a
+  contract and cannot be promoted by a wireframe.
+- **Who decides:** PM with the institute/data owner.
+- **Latest phase without rework:** before CG-1 is applied for Wave 7.
+- **If unresolved:** do not guess a regex or promote the scaffold mock. CG-1 may
+  define the policy shape, but Wave 7 contract application remains blocked until
+  the institute supplies the values. The UI displays the returned hint and does
+  not claim institutional validation.
+
+**D-21 remains open** for the later roster/SSO provenance decision. W-11 settles
+only the V1 surface already required by the PRD: self-registration maps cleanly
+onto the same student IDs, and no screen assumes a roster exists.
+
+### 10.4 Also closed by these wireframes
+
+- **W-11 is closed**, leaving W-12 (S-42 projector overlay) as the only open
+  screen-wireframe row.
+- The behavioral inventory has no student quiz `B-*`; the suite is net-new and
+  preserves the PRD/domain/state-machine invariants rather than porting legacy UI.
+- Student privacy is structural: no response or component accepts a class list
+  or another student's identity/result; S-40/S-41 receive own summaries only.

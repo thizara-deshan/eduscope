@@ -1478,12 +1478,12 @@ given the data at all (INV-QZ-3, INV-LB-3).
 
 ## 6. Student Quiz app  (`apps/quiz`, mobile web)
 
-> **All five screens are blocked on a contract that does not exist yet** —
+> **All five screens are blocked on contract work that does not exist yet** —
 > events.md open item **C-6**: the student-facing REST surface (join, register,
 > answer) is quiz-service-owned and has no contract file. The **event** payloads
-> exist (`StudentServerEvent` in `packages/shared/src/schemas/events.ts`), so the
-> UI can be designed and mocked, but the request half must land before
-> integration. See [§10 CG-1](#10-contract-gaps).
+> exist (`StudentServerEvent` in `packages/shared/src/schemas/events.ts`) but the
+> W-11 designs found event/resync gaps too. The UI can be designed and mocked,
+> but CG-1/CG-22…CG-25 must land before integration. See [§10](#10-contract-gaps).
 
 **App-wide touch rules** (in addition to §0.4): portrait 360–430 px; answer
 targets ≥ 64 px tall and full-width; nothing in the bottom 24 px (browser
@@ -1827,7 +1827,7 @@ before the wireframe is approved (revamp-guide prompt 07 "Done when").
 | W-8 | **S-24** Delete recording confirm | Parity §2c delete row | — | ✅ **closed** 2026-08-09 | [S-24-design.md](screens/S-24-design.md) |
 | W-9 | **S-35** Upload queue | Parity §5.1 item 2 | G-3 demo | ✅ **closed** 2026-08-09 | [S-35-design.md](screens/S-35-design.md) |
 | W-10 | **S-36** Device & Identity | Parity §5.1 items 8, 9, 11 | J-5 | ✅ **closed** 2026-08-10 | [S-36-design.md](screens/S-36-design.md) |
-| W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); also blocked on CG-1 | J-3 | open — Wave 7 | — |
+| W-11 | **S-37…S-41** Student quiz app (5 screens) | Whole app is new (A-16); contract work CG-1/CG-22…CG-25 remains | J-3 | ✅ **closed** 2026-08-10 | [S-37](screens/S-37-design.md) · [S-38](screens/S-38-design.md) · [S-39](screens/S-39-design.md) · [S-40](screens/S-40-design.md) · [S-41](screens/S-41-design.md) |
 | W-12 | **S-42** Projector overlay | New (A-11/A-22); a legibility problem, not a UI problem; also blocked on CG-2 | J-2 | open — Wave 8 | — |
 | W-13 | **S-01** Login — *redesign* | Removing the prototype's role picker leaves a hole in the card layout | Wave 1 | ✅ **closed** 2026-08-04 | [S-01-design.md](screens/S-01-design.md) |
 | W-14 | **S-05** Dashboard — *`ai disabled` layout* | With the AI flag off (INT-10 — the go-live default) the main column is empty; what replaces it is undesigned | Wave 2 | ✅ **closed** 2026-08-05 | [S-05-ai-disabled-design.md](screens/S-05-ai-disabled-design.md) |
@@ -1891,7 +1891,7 @@ needs once it is drawn. Expect every future Route B run to add rows here.
 
 | # | Gap | Blocked screens | Severity | Smallest fix | Status | Resolved by |
 |---|---|---|---|---|---|---|
-| **CG-1** | **The student-facing REST surface does not exist.** events.md open item C-6: join, register (name + student ID, `[D-21]`), and answer submission (Z-21/Z-22) are quiz-service-owned and have no contract file. Only the *event* payloads exist (`StudentServerEvent`) | S-37, S-38, S-39, S-40, S-41 | **Blocking** for `apps/quiz` | The proposed `contracts/quiz-app.yaml` in v0.2 | open — **Wave 7 hard-block**; needs the quiz-service design (Phase 3) and `[D-21]` | — |
+| **CG-1** | **The student-facing REST surface does not exist.** Resolve join code, register/rejoin and submit answer have no contract; participant-session authentication and named problems are also absent | S-37, S-38, S-39 | **Blocking** for `apps/quiz` | Add `contracts/quiz-app.yaml` with the three operations, registration policy, secure participant cookie and named problems | ✅ **answered** — Wave 7 remains blocked until applied | [S-37-design.md](screens/S-37-design.md) §8 · [S-38-design.md](screens/S-38-design.md) §7 · [S-39-design.md](screens/S-39-design.md) §8 |
 | **CG-2** | **The projector overlay has no data path to the question body.** `quiz.publication` carries `publicationId` + `questionId` only (`QuizPublicationPayload`); the prompt, options and correct option live behind `GET /ai/publications`, a bearer-authenticated panel route. The projector consumer is an internal pipeline-manager surface with no user token | S-42 | **Blocking** for the projector | Either extend `QuizPublicationPayload` with the rendered question payload, or define an internal projector read route in the core-api ↔ pipeline-manager API (Phase 3) | open — **Wave 8 hard-block**; needs prompts 10/11 | — |
 | **CG-3** | **No way for a client to declare a scoped subscription.** events.md §1 scopes `log.entry` to "connections that subscribed to the live log view" and `usb.volumes` to "sessions with the export flow open" — but the same section states clients send **no** WS messages. There is no defined mechanism | S-34 (live tail), S-23 (hotplug) | Medium — screens work by polling, which §5 forbids | State that `GET /logs` and `GET /exports/targets` mark the calling `AuthSession` as subscribed for a TTL, or add a subscribe REST call | ✅ **applied v0.5.0** | [S-23-design.md](screens/S-23-design.md) §8 |
 | **CG-4** | **Roster sync (PF-8) has no admin-visible status.** `User.source` distinguishes institute accounts, but nothing exposes last-run time, counts, or failures. Parity §5.1 item 11 flags exactly this ("its admin visibility/config has no design") | S-32, S-36 | Low — Auth/System `LogEntry`s are a workable stopgap via S-34 | `GET /settings/roster-sync` returning last run + outcome, or accept logs-only and say so | open — Wave 6; **not answerable in-house**, coupled to `[D-02b]` (institute owns it) | — |
@@ -1912,9 +1912,15 @@ needs once it is drawn. Expect every future Route B run to add rows here.
 | **CG-19** | **`quiz.session` cannot say the joined count is stale.** `QuizSessionProjection` (REST) carries `syncState` as a **required** field, but the WS `quiz.session` payload (events.md §2.15) omits it. Machine 4d staleness is emitted on `quiz.publication`/`quiz.responses` (the Insights panel's concern), not on the joined count — so a device whose `sync.participants` stream has gone quiet keeps broadcasting the last `joinedCount` **as current**, the exact "display stale as live" failure QZ-7 / INV-AP-2 forbid | S-20 | Medium — without it, S-20's `stale` state is unreachable over the live socket; the chip silently shows stale counts as current on a degraded sync link | Add `syncState` to `QuizSessionPayload`, mirroring the REST schema (additive; one field, already modelled and named; the emitter already holds the value) | ✅ **applied v0.4.0** | [S-20-design.md](screens/S-20-design.md) §9 |
 | **CG-20** | **`UploadJob` cannot distinguish an offline stall from a server failure.** §4.4 classifies upload failures — *connectivity* (no route/DNS/TLS) does **not** consume attempts (retries at the 6 h cap indefinitely, `upload.offline` after 24 h); *server* (5xx/reset/stall) does and dead-letters at the cap. But `UploadJob`/`UploadJobPayload` expose only `state`/`attempt`/`nextAttemptAt`/`lastError`, so both are `state=failed` with nothing saying which — and parsing `lastError` for the class is forbidden (INV-RF-1) | S-35 | Medium — S-35's `offline` row-state is unreachable; the queue must render "failed 8 times" for a device that is merely offline, the exact §4.4 lie the state exists to prevent | Add `failureClass ∈ {connectivity, server, permanent} \| null` to `UploadJob` + `UploadJobPayload` (additive; the emitter already computes it — it decides whether `attempt` increments) | ✅ **applied v0.5.0** | [S-35-design.md](screens/S-35-design.md) §9 |
 | **CG-21** | **`createExport` cannot name an insufficient-space refusal.** `Problem.code` (a closed enum) carries `export.invalid-target`/`volume.unavailable` but nothing for a target that lacks room; a space refusal is indistinguishable from any other `validation.invalid`, so U-5 cannot render a specific, actionable reason for the listing→copy race | S-23 | Low — the client pre-checks space in the picker; this covers the race where a drive fills after listing and keeps the server authoritative | Add `export.insufficient-space` to the `Problem.code` enum (additive; one value alongside `export.invalid-target`) | ✅ **applied v0.5.0** | [S-23-design.md](screens/S-23-design.md) §8 |
+| **CG-22** | **The student realtime channel has event names but no transport/auth/resync contract.** There is no declared student WS URL, participant authentication, reconnect behavior or atomic snapshot ordering | S-39, S-40, S-41 | **Blocking** — reconnect can flash or retain stale question/result state | Define participant-cookie-authenticated student WS plus an atomic full snapshot on every connect before live deltas | ✅ **answered** | [S-39-design.md](screens/S-39-design.md) §8 |
+| **CG-23** | **`quiz.question{state:none}` is impossible in the current schema.** `publicationId`, prompt and options remain required for every state, and `ownAnswer` does not say whether it is an answer id or option id | S-39 | **Blocking** for waiting and reconnect | Replace with state-discriminated `open/closed/none` variants and name `ownAnswerOptionId` | ✅ **answered** | [S-39-design.md](screens/S-39-design.md) §8 |
+| **CG-24** | **`quiz.result` is not self-contained.** It lacks prompt/options, the student's selected option and rank freshness, so S-40 cannot reveal answer text or distinguish `rank updating` after cold load/reconnect | S-40 | **Blocking** for the complete result states | Add question snapshot, `selectedOptionId` and `rankState` to the own-result payload | ✅ **answered** | [S-40-design.md](screens/S-40-design.md) §7 |
+| **CG-25** | **Closed `quiz.session` final fields are all nullable with no participation discriminator.** A valid zero/never-answered summary is indistinguishable from incomplete data | S-41 | **Blocking** for a trustworthy terminal summary | Make the payload state-discriminated; closed carries `participationState` and constrained final fields | ✅ **answered** | [S-41-design.md](screens/S-41-design.md) §7 |
 
-Gaps **CG-1** and **CG-2** are the only two that hard-block a build wave *by
-missing an entire surface*. **CG-10…CG-13 blocked Wave 1** and are now
+Gaps **CG-1** and **CG-2** are the two that hard-block a build wave *by
+missing an entire surface*. **CG-1 is now answered**, together with the
+student-event gaps **CG-22…CG-25**, but Wave 7 remains blocked until those
+answers are applied to contracts and generated schemas. **CG-10…CG-13 blocked Wave 1** and are now
 `applied v0.2.0` — contract, zod layer and mock adapter all carry them
 ([contract-amendments.md](contract-amendments.md), 2026-08-04), so Wave 1's
 plan run is unblocked. **CG-14…CG-17 were answered at the W-2/W-3 gate
@@ -1950,7 +1956,7 @@ contract makes the gate unpassable by construction.
 | `v0.4` | CG-19 | **before Wave 4's plan run** |
 | `v0.5` | CG-3, CG-5, CG-7, CG-20, CG-21 | before Wave 5's plan run |
 | *(tbd)* | CG-4, CG-8 | before Wave 6's plan run |
-| *(tbd)* | CG-1 — a whole `contracts/quiz-app.yaml` | before Wave 7 |
+| *(tbd)* | CG-1, CG-22, CG-23, CG-24, CG-25 | before Wave 7 |
 | **`v1.0`** | **Everything, reconciled** — prompt 12 drift review | Phase 3, once, both owners sign off |
 
 Waves 3 and 4 need no contract change at all.
@@ -1972,7 +1978,7 @@ states."*
 | **4 — AI & insights** | S-13, S-14, S-15, S-16, S-17, S-18, S-19, S-20 | Wave 3 | J-2 happy **and** `llm-timeout` + `quiz-network-loss` demo |
 | **5 — Library & queue** | S-21, S-22, S-23, S-24, S-35 | Wave 2 (independent of 3/4) | INT-1's biggest gap closed; upload badge vocabulary shared |
 | **6 — Admin system** | S-28, S-29, S-30, S-31, S-32, S-33, S-34, S-36 | Wave 3 | J-5 provisioning demo, including its failure path |
-| **7 — Student quiz app** | S-37, S-38, S-39, S-40, S-41 | **CG-1 closed**; runs as a parallel workstream from Wave 4 | J-3 happy + late-answer + reconnect demo |
+| **7 — Student quiz app** | S-37, S-38, S-39, S-40, S-41 | **CG-1/CG-22…CG-25 applied**; runs as a parallel workstream from Wave 4 | J-3 happy + late-answer + reconnect demo |
 | **8 — Real transports** | S-10 real WebRTC, S-42 projector | **CG-2 closed**; Phase 4 hardware | Preview < 1 s on target hardware (INT-8) |
 
 **Critical path:** Wave 0 → 1 → 2 → 3 → 4. Waves 5 and 6 fork after Wave 2/3 and
