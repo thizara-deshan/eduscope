@@ -27,6 +27,12 @@ export function createStorageOperations(ctx: RestContext) {
       requireAdmin(ctx);
       const refusal = engine.onCommand('registerStorageVolume');
       if (refusal) throw new ProblemError(refusal);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.uuid)) {
+        throw new ProblemError({ status: 422, code: 'validation.invalid', title: 'Not a valid volume uuid' });
+      }
+      if (seed.storage.volumes.some((v) => v.uuid === body.uuid)) {
+        throw new ProblemError({ status: 409, code: 'conflict', title: `Volume ${body.uuid} is already registered` });
+      }
       const volume = validated(zStorageVolume, {
         id: nextUlid(world),
         uuid: body.uuid,

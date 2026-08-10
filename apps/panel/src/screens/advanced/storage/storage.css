@@ -1,0 +1,42 @@
+.us-storage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.us-storage__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-storage__volumelist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-storage__volumerow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.us-storage__formatbody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-storage__confirmlabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.us-storage__confirmlabel input {
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
