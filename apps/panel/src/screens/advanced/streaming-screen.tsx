@@ -3,6 +3,7 @@ import type { StreamTarget, Ulid } from '@eduscope/shared';
 import { useAuth } from '../../auth/auth-context.js';
 import { LayoutPresetPicker } from '../../channels/layout-preset-picker.js';
 import { LayoutPreview } from '../../channels/layout-preview.js';
+import { ToggleSwitch } from '../../controls/toggle-switch.js';
 import { useChannelConfig } from '../../channels/use-channel-config.js';
 import { DangerConfirm } from '../../danger/danger-confirm.js';
 import { useOverlays } from '../../overlays/overlay-host.js';
@@ -102,17 +103,13 @@ export function StreamingScreen(): JSX.Element {
               {streaming.mode === 'live' ? stateWord(status?.state, status?.reason) : (streaming.checked ? 'Will start streaming with the next recording.' : 'Off.')}
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={streaming.checked}
-            aria-label={streaming.toggleLabel}
+          <ToggleSwitch
+            checked={streaming.checked}
+            label={streaming.toggleLabel}
             disabled={streaming.toggleDisabled}
-            onClick={streaming.toggle}
-            className={`us-toggle${streaming.checked ? ' us-toggle--on' : ''}${isFailed ? ' us-toggle--failed' : ''}`}
-          >
-            <span className="us-toggle__knob" />
-          </button>
+            failed={isFailed}
+            onChange={streaming.toggle}
+          />
         </div>
         <p className="us-adm__note">{streaming.toggleLabel}</p>
 

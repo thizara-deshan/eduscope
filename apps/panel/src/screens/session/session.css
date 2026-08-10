@@ -410,40 +410,6 @@
 }
 
 /* Shared toggle switch primitive */
-.us-toggle {
-  position: relative;
-  width: 54px;
-  height: 32px;
-  min-height: var(--tap-min);
-  border-radius: var(--radius-pill);
-  border: none;
-  background: var(--border-strong);
-  flex: 0 0 auto;
-}
-.us-toggle--on {
-  background: var(--success);
-}
-.us-toggle--failed {
-  background: var(--danger);
-}
-.us-toggle:disabled {
-  opacity: 0.6;
-}
-.us-toggle__knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.18s;
-}
-.us-toggle--on .us-toggle__knob {
-  transform: translateX(22px);
-}
-
 /* Inline collapsible meeting-view layout accordion */
 .us-mlayout {
   max-height: 0;

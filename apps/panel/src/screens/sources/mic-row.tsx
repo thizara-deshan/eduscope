@@ -1,4 +1,5 @@
 import { useAudioControl } from '../../audio/use-audio-control.js';
+import { ToggleSwitch } from '../../controls/toggle-switch.js';
 import { LevelMeter } from './level-meter.js';
 import './sources.css';
 
@@ -46,18 +47,14 @@ export function MicRow(): JSX.Element {
           onClick={() => audio.setGain(Math.min(100, (gain ?? 0) + 5))}
         >+</button>
       </div>
-      <button
-        type="button"
-        role="switch"
-        className="us-micswitch"
-        aria-label="Lecturer Mic"
-        aria-checked={control ? !control.muted : undefined}
-        aria-describedby="us-mic-state"
+      <ToggleSwitch
+        checked={control ? !control.muted : undefined}
+        label="Lecturer Mic"
+        describedBy="us-mic-state"
         disabled={disabled}
-        onClick={() => audio.setMuted(!(control?.muted ?? false))}
-      >
-        <span className="us-micswitch__knob" aria-hidden="true" />
-      </button>
+        failed={state === 'apply-failed'}
+        onChange={(checked) => audio.setMuted(!checked)}
+      />
     </section>
   );
 }

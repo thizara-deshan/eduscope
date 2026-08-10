@@ -1,3 +1,5 @@
+import { useOskField } from '../../../keyboard/use-keyboard.js';
+
 interface IpInputProps {
   readonly label: string;
   readonly value: string;
@@ -13,7 +15,7 @@ function IpOctetInput({
 }: {
   readonly label: string;
   readonly value: string;
-  readonly disabled?: boolean;
+  readonly disabled: boolean | undefined;
   readonly onChange: (next: string) => void;
 }): JSX.Element {
   const binding = useOskField({ value, onChange, layout: 'ip' });
@@ -61,4 +63,3 @@ export function IpInput({ label, value, onChange, disabled }: IpInputProps): JSX
     </div>
   );
 }
-import { useOskField } from '../../../keyboard/use-keyboard.js';
