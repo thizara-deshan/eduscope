@@ -23,6 +23,7 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
     getSourcesStatus: vi.fn(() => new Promise(() => {})),
     listStreamTargets: vi.fn(() => new Promise(() => {})),
     listRecordings: vi.fn(() => new Promise(() => {})),
+    getRecording: vi.fn(() => new Promise(() => {})),
   } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   return render(
@@ -65,6 +66,7 @@ describe('panel router (screen-inventory §1.1)', () => {
   it.each([
     ['/', 'S-04'],
     ['/library', 'S-21'],
+    ['/library/R1', 'S-22'],
   ])('renders %s as screen %s', (path, screenId) => {
     renderAt(path);
     expect(screen.getByTestId('screen').dataset.screen).toBe(screenId);

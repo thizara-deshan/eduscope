@@ -8,6 +8,7 @@ import { AdvancedShell } from '../screens/advanced/advanced-shell.js';
 import { AdvancedIndex } from '../screens/advanced/advanced-index.js';
 import { LocalCaptureScreen } from '../screens/advanced/local-capture-screen.js';
 import { StreamingScreen } from '../screens/advanced/streaming-screen.js';
+import { RecordingDetailScreen } from '../screens/library/detail/recording-detail-screen.js';
 import { LibraryScreen } from '../screens/library/library-screen.js';
 import { PanelShell } from './panel-shell.js';
 import { RouteError } from './route-error.js';
@@ -19,6 +20,7 @@ const SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-02': () => <ResetScreen />,
   'S-04': () => <DashboardScreen />,
   'S-21': () => <LibraryScreen />,
+  'S-22': () => <RecordingDetailScreen />,
 };
 
 interface RouteSpec {
