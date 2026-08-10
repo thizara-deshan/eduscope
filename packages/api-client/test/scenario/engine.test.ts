@@ -44,6 +44,7 @@ describe('scenario engine', () => {
       'channel-failures',
       'usb-pull',
       'wan-loss',
+      'capture-fault',
     ]);
   });
 

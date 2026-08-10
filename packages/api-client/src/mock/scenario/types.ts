@@ -1,4 +1,4 @@
-import type { PanelEventName, PanelOperationId, Problem } from '@eduscope/shared';
+import type { PanelEventName, PanelOperationId, Problem, SmartStatus } from '@eduscope/shared';
 import type { TransitionId } from '../machines/types.js';
 import type { Seed } from '../seed/index.js';
 
@@ -19,7 +19,9 @@ export type ScenarioName =
   | 'channel-failures'
   /** Added for Wave 5's S-23 (usb-pull) and S-35 (wan-loss). */
   | 'usb-pull'
-  | 'wan-loss';
+  | 'wan-loss'
+  /** Added for Wave 6 S-36. */
+  | 'capture-fault';
 
 export type ForcedTrigger =
   | { readonly command: PanelOperationId }
@@ -69,6 +71,18 @@ export interface WorldSeed {
   readonly recordingsPresent: boolean;
   /** Wave 5 — how a live export terminates (S-23 `usb-pull` uses 'drive-removed'). */
   readonly exportOutcome: 'complete' | 'drive-removed' | 'failed';
+  /** Wave 6 S-36 — when false, hallCode + expectedStorageVolumeUuid are null (not-provisioned). */
+  readonly provisioned: boolean;
+  /** Wave 6 S-36 — when false, ntpSynced=false, clockOffsetMs large, and a clock system.alert is raised. */
+  readonly clockSynced: boolean;
+  /** Wave 6 S-30/S-36 — SMART status for the device health + recordings volume. */
+  readonly diskHealth: SmartStatus;
+  /** Wave 6 S-28 — updateNetworkConfig readback carries lastApplyError + raises an alert; prior config stays. */
+  readonly networkApplyFails: boolean;
+  /** Wave 6 S-31 — which terminal the firmware check/apply lifecycle drives to. */
+  readonly firmwareOutcome: 'up-to-date' | 'update-available' | 'signature-fail' | 'apply-fail' | 'rolled-back';
+  /** Wave 6 S-33 — importUsers returns a rejected batch with row-level reasons, writing nothing. */
+  readonly userImportRejects: boolean;
 }
 
 /** A transition the script drives on its own schedule, with no command behind it. */

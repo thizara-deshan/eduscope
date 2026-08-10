@@ -96,6 +96,12 @@ export function createMockClient(
       streamTargetsConfigured: true,
       recordingsPresent: true,
       exportOutcome: 'complete',
+      provisioned: true,
+      clockSynced: true,
+      diskHealth: 'good',
+      networkApplyFails: false,
+      firmwareOutcome: 'update-available',
+      userImportRejects: false,
       ...script.seed,
       ...seedOverride,
     };

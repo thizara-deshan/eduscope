@@ -49,6 +49,12 @@ function build() {
       streamTargetsConfigured: true,
       recordingsPresent: true,
       exportOutcome: 'complete',
+      provisioned: true,
+      clockSynced: true,
+      diskHealth: 'good',
+      networkApplyFails: false,
+      firmwareOutcome: 'update-available',
+      userImportRejects: false,
     },
     credentials: createCredentialStore(),
   }) as unknown as EduscopeClient;

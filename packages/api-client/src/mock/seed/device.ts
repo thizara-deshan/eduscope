@@ -39,6 +39,9 @@ const RETENTION_POLICY: RetentionPolicy = {
 export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
   const aiEnabled = overrides.aiEnabled ?? true;
   const quizAvailable = overrides.quizAvailable ?? true;
+  const provisioned = overrides.provisioned ?? true;
+  const clockSynced = overrides.clockSynced ?? true;
+  const diskHealth = overrides.diskHealth ?? 'good';
 
   // hallCode/hallDisplayName/titlePattern are all non-empty so G-PROVISIONED
   // passes; llmEndpoint is non-null unless the seed override turns AI off
@@ -52,7 +55,7 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
     titlePattern: '{hallDisplayName} — {date}',
     timezone: 'Asia/Colombo',
     ntpServers: ['0.lk.pool.ntp.org', '1.lk.pool.ntp.org'],
-    expectedStorageVolumeUuid: 'a1b2c3d4-0000-4000-8000-000000000001',
+    expectedStorageVolumeUuid: provisioned ? 'a1b2c3d4-0000-4000-8000-000000000001' : null,
     featureFlags: {
       recordingEnabled: true,
       aiQuizEnabled: aiEnabled,
@@ -70,11 +73,15 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
     storageTotalBytes: 500_000_000_000,
     storageFreeBytes: 260_000_000_000,
     storagePressure: overrides.storagePressure ?? 'ok',
-    diskHealth: 'good',
+    diskHealth,
     captureCardState: 'present',
-    publisherStates: {},
-    ntpSynced: true,
-    clockOffsetMs: 12,
+    publisherStates: {
+      presentation: { status: 'running', lastErrorCode: null, since: SEED_EPOCH },
+      'lecturer-cam': { status: 'running', lastErrorCode: null, since: SEED_EPOCH },
+      'mic-lecturer': { status: 'exited', lastErrorCode: 'alsa_xrun', since: SEED_EPOCH },
+    },
+    ntpSynced: clockSynced,
+    clockOffsetMs: clockSynced ? 12 : 4200,
     lastBootAt: SEED_EPOCH,
     cpuLoad1m: 0.42,
     tempC: 51.5,
@@ -109,6 +116,20 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
       context: null,
       relatedEntity: { type: 'SourceRole', id: 'students-cam' },
     },
+    ...(clockSynced ? [] : [{
+      id: seedId('alert'),
+      code: 'clock.unsynced',
+      severity: 'warning' as const,
+      category: 'System' as const,
+      title: 'Clock is not synced',
+      detail: 'Generated titles and retention may be off until NTP recovers.',
+      raisedAt: SEED_EPOCH,
+      clearedAt: null,
+      clearedReason: null,
+      acknowledgedBy: null,
+      context: null,
+      relatedEntity: null,
+    }]),
   ].map((row) => validated(zSystemAlert, row));
 
   const volume: StorageVolume = validated(zStorageVolume, {
@@ -120,7 +141,7 @@ export function createDeviceSeed(overrides: Partial<WorldSeed>): DeviceSeed {
     filesystem: 'ext4',
     capacityBytes: 500_000_000_000,
     freeBytes: 260_000_000_000,
-    smartStatus: 'good',
+    smartStatus: diskHealth,
     role: 'recordings',
     state: 'mounted',
     registeredAt: SEED_EPOCH,

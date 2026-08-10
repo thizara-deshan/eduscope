@@ -224,6 +224,72 @@ export function ScenarioOverlay() {
               />
               Export fails mid-copy (drive removed)
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.provisioned}
+                onChange={(e) => rebuild(active, { ...seed, provisioned: !e.target.checked })}
+                aria-label="Device not provisioned"
+              />
+              Device not provisioned
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={!client.worldSeed.clockSynced}
+                onChange={(e) => rebuild(active, { ...seed, clockSynced: !e.target.checked })}
+                aria-label="Clock not synced"
+              />
+              Clock not synced
+            </label>
+            {(['good', 'warning', 'failing', 'unknown'] as const).map((disk) => {
+              const label = `Disk health: ${disk}`;
+              return (
+                <label key={disk}>
+                  <input
+                    type="radio"
+                    name="world-disk-health"
+                    checked={client.worldSeed.diskHealth === disk}
+                    onChange={() => rebuild(active, { ...seed, diskHealth: disk })}
+                    aria-label={label}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+            <label>
+              <input
+                type="checkbox"
+                checked={client.worldSeed.networkApplyFails}
+                onChange={(e) => rebuild(active, { ...seed, networkApplyFails: e.target.checked })}
+                aria-label="Network apply fails"
+              />
+              Network apply fails
+            </label>
+            {(['up-to-date', 'update-available', 'signature-fail', 'apply-fail', 'rolled-back'] as const).map((outcome) => {
+              const label = `Firmware outcome: ${outcome}`;
+              return (
+                <label key={outcome}>
+                  <input
+                    type="radio"
+                    name="world-firmware-outcome"
+                    checked={client.worldSeed.firmwareOutcome === outcome}
+                    onChange={() => rebuild(active, { ...seed, firmwareOutcome: outcome })}
+                    aria-label={label}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+            <label>
+              <input
+                type="checkbox"
+                checked={client.worldSeed.userImportRejects}
+                onChange={(e) => rebuild(active, { ...seed, userImportRejects: e.target.checked })}
+                aria-label="Bulk import rejects"
+              />
+              Bulk import rejects
+            </label>
           </fieldset>
           <div className="us-devoverlay__transport">
             <button

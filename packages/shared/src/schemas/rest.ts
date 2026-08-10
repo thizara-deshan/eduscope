@@ -46,3 +46,12 @@ export const zLogEntry = generated.zLogEntry.extend({
 export const zSystemAlert = generated.zSystemAlert.extend({
   context: zOpenObject.nullable(),
 });
+
+// DeviceHealth.publisherStates declares `additionalProperties: { $ref: PublisherState }`
+// (a typed open map, openapi.yaml — Keyed by SourceRoleId, INV-G-8) but the
+// generator rendered it as bare `z.object({})`, which strips every row on
+// parse — the same generator gap zOpenObject exists for above, just for a
+// typed rather than untyped map. Override here (never in generated/zod.gen.ts).
+export const zDeviceHealth = generated.zDeviceHealth.extend({
+  publisherStates: z.record(z.string(), generated.zPublisherState),
+});

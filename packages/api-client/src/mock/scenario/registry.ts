@@ -10,6 +10,7 @@ import { poweroffNotHalted } from './scripts/poweroff-not-halted.js';
 import { channelFailures } from './scripts/channel-failures.js';
 import { usbPull } from './scripts/usb-pull.js';
 import { wanLoss } from './scripts/wan-loss.js';
+import { captureFault } from './scripts/capture-fault.js';
 import type { ForcedTransition, ScenarioName, ScenarioScript } from './types.js';
 
 /** The catalog, in overlay display order. Extend the scripts; never fork them. */
@@ -26,6 +27,7 @@ const CATALOG: Record<ScenarioName, ScenarioScript> = {
   'channel-failures': channelFailures,
   'usb-pull': usbPull,
   'wan-loss': wanLoss,
+  'capture-fault': captureFault,
 };
 
 export function getScenario(name: ScenarioName): ScenarioScript {
