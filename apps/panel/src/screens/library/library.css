@@ -117,6 +117,31 @@
   padding: var(--sp-2) var(--sp-3);
 }
 
+.us-reclist__menuwrap {
+  position: relative;
+}
+
+.us-reclist__menupopup {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.2));
+  min-width: 140px;
+}
+
+.us-reclist__menupopup button {
+  display: block;
+  width: 100%;
+  min-height: var(--tap-min);
+  text-align: left;
+  padding: 0 var(--sp-4);
+  color: var(--danger);
+}
+
 .us-libfilters {
   display: flex;
   align-items: center;

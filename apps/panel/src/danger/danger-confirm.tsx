@@ -16,6 +16,8 @@ export interface DangerConfirmProps {
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
   readonly cancelLabel?: string;
+  /** U-2: disable the destructive action while disconnected — a tap must not queue and fire on reconnect. Cancel/label are unaffected. */
+  readonly confirmDisabled?: boolean;
 }
 
 export function DangerConfirm({
@@ -29,6 +31,7 @@ export function DangerConfirm({
   onCancel,
   onConfirm,
   cancelLabel = 'Cancel',
+  confirmDisabled = false,
 }: DangerConfirmProps): JSX.Element | null {
   const titleId = useId();
   const bodyId = useId();
@@ -97,7 +100,7 @@ export function DangerConfirm({
           {state === 'refused' ? remedy : (
             <DangerButton
               variant="solid"
-              disabled={pending}
+              disabled={pending || confirmDisabled}
               onClick={onConfirm}
             >
               {pending ? pendingLabel : confirmLabel}

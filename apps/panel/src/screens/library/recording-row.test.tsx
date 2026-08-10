@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { Recording } from '@eduscope/shared';
 import { RecordingRow } from './recording-row.js';
 
@@ -86,5 +86,26 @@ describe('<RecordingRow/> (S-21 §2.1/§8)', () => {
     screen.getByRole('button', { name: /^Data Structures/ }).click();
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('shows Delete in ⋯ only when onDelete is supplied (admin)', () => {
+    const { unmount } = render(
+      <ul>
+        <RecordingRow rec={rec({})} showOwner={false} selectable={false} selected={false} onOpen={noop} onPlay={noop} onToggle={noop} onMenu={noop} />
+      </ul>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    unmount();
+
+    const onDelete = vi.fn();
+    render(
+      <ul>
+        <RecordingRow rec={rec({})} showOwner={false} selectable={false} selected={false} onOpen={noop} onPlay={noop} onToggle={noop} onMenu={noop} onDelete={onDelete} />
+      </ul>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });

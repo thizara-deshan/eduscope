@@ -8,6 +8,7 @@ import { ProblemError } from '@eduscope/api-client';
 import type { RecordingDetail, User } from '@eduscope/shared';
 import { AuthProvider } from '../../../auth/auth-context.js';
 import { ClientContext } from '../../../client/client-provider.js';
+import { OverlayProvider } from '../../../overlays/overlay-host.js';
 import { useWsStore } from '../../../store/ws-store.js';
 import { RecordingDetailScreen } from './recording-detail-screen.js';
 
@@ -57,7 +58,7 @@ function renderDetail({
     QueryClientProvider, { client: queryClient },
     createElement(ClientContext.Provider, { value: client },
       createElement(AuthProvider, { initialUser: viewer, children: createElement(
-        MemoryRouter, { initialEntries: ['/library/R1'] }, children,
+        MemoryRouter, { initialEntries: ['/library/R1'] }, createElement(OverlayProvider, null, children),
       ) })),
   );
   return render(

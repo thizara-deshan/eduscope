@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../auth/auth-context.js';
+import { useOverlays } from '../../overlays/overlay-host.js';
 import { useIsStale, useUploadJobEvents } from '../../store/selectors.js';
+import { DeleteRecordingConfirm } from './delete-recording-confirm.js';
 import { LibraryFilters } from './library-filters.js';
 import { RecordingRow } from './recording-row.js';
 import { SelectionBar } from './selection-bar.js';
@@ -23,6 +25,7 @@ export function LibraryScreen(): JSX.Element {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
   const navigate = useNavigate();
+  const overlays = useOverlays();
   const stale = useIsStale();
   const [filters, setFilters] = useState<LibraryFiltersValue>({});
   const [selectionMode, setSelectionMode] = useState(false);
@@ -45,6 +48,14 @@ export function LibraryScreen(): JSX.Element {
 
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const selectedBytes = selectedRows.reduce((sum, r) => sum + (r.totalBytes ?? 0), 0);
+
+  const openDelete = (rec: (typeof rows)[number]) => {
+    let overlayId = -1;
+    overlayId = overlays.open(
+      <DeleteRecordingConfirm rec={rec} onDone={() => overlays.close(overlayId)} />,
+      { dismissible: false },
+    );
+  };
 
   if (loading) {
     return (
@@ -125,6 +136,7 @@ export function LibraryScreen(): JSX.Element {
               onPlay={() => navigate(`/library/${rec.id}`)}
               onToggle={() => toggleSelected(rec.id)}
               onMenu={() => {}}
+              onDelete={isAdmin ? () => openDelete(rec) : undefined}
             />
           );
         })}

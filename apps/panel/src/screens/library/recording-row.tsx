@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Recording } from '@eduscope/shared';
 import { RecordingBadge } from './recording-badge.js';
 import { recordingBadge, type RecordingBadgeLive } from './use-recording-badge.js';
@@ -26,6 +27,7 @@ export function RecordingRow({
   onPlay,
   onToggle,
   onMenu,
+  onDelete,
 }: {
   readonly rec: Recording;
   readonly live?: RecordingBadgeLive | undefined;
@@ -36,7 +38,10 @@ export function RecordingRow({
   readonly onPlay: () => void;
   readonly onToggle: () => void;
   readonly onMenu: () => void;
+  /** Admin only (U-6): absent for a lecturer, not merely disabled. */
+  readonly onDelete?: (() => void) | undefined;
 }): JSX.Element {
+  const [menuOpen, setMenuOpen] = useState(false);
   const isTombstone = rec.state === 'deleted';
   const duration = rec.durationMs !== null ? formatDuration(rec.durationMs) : '—';
   const badge = recordingBadge(rec, live);
@@ -83,9 +88,30 @@ export function RecordingRow({
           ▷ Play
         </button>
       ) : null}
-      <button type="button" className="us-reclist__menu" aria-label={`More actions for ${rec.title}`} onClick={onMenu}>
-        ⋯
-      </button>
+      <div className="us-reclist__menuwrap">
+        <button
+          type="button"
+          className="us-reclist__menu"
+          aria-label={`More actions for ${rec.title}`}
+          aria-expanded={menuOpen}
+          onClick={() => { setMenuOpen((v) => !v); onMenu(); }}
+        >
+          ⋯
+        </button>
+        {menuOpen ? (
+          <div className="us-reclist__menupopup" role="menu">
+            {onDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setMenuOpen(false); onDelete(); }}
+              >
+                Delete
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </li>
   );
 }

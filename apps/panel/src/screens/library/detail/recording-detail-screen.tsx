@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
+import { useAuth } from '../../../auth/auth-context.js';
+import { useOverlays } from '../../../overlays/overlay-host.js';
+import { DeleteRecordingConfirm } from '../delete-recording-confirm.js';
 import { formatBytes, formatDateTime, formatDuration } from '../format.js';
 import { RecordingBadge } from '../recording-badge.js';
 import { FileList } from './file-list.js';
@@ -20,6 +23,9 @@ export function RecordingDetailScreen(): JSX.Element {
   const { recordingId } = useParams<{ recordingId: string }>();
   const { status, detail } = useRecordingDetail(recordingId ?? '');
   const [streamKey, setStreamKey] = useState<string | null>(null);
+  const { role } = useAuth();
+  const overlays = useOverlays();
+  const navigate = useNavigate();
 
   if (status === 'loading') {
     return (
@@ -81,6 +87,27 @@ export function RecordingDetailScreen(): JSX.Element {
       <div className="us-detail__header">
         <h1>{rec.title}</h1>
         <RecordingBadge rec={rec} />
+        {role === 'admin' ? (
+          <button
+            type="button"
+            className="us-detail__delete"
+            onClick={() => {
+              let overlayId = -1;
+              overlayId = overlays.open(
+                <DeleteRecordingConfirm
+                  rec={rec}
+                  onDone={() => {
+                    overlays.close(overlayId);
+                    navigate('/library');
+                  }}
+                />,
+                { dismissible: false },
+              );
+            }}
+          >
+            Delete
+          </button>
+        ) : null}
       </div>
       <p className="us-detail__meta">{meta}</p>
 
