@@ -15,6 +15,9 @@ export async function openScenarioOverlay(page: Page) {
 export async function chooseScenario(page: Page, scenario: string) {
   await openScenarioOverlay(page);
   await page.getByRole('radio', { name: new RegExp(`^${scenario}$`) }).check();
+  // Wait for the switched client's own reconnect to land before closing —
+  // otherwise the very next action can still race the outgoing client.
+  await expect(page.getByTestId('quiz-active-scenario')).toHaveText(scenario);
   await page.getByRole('button', { name: 'Close scenarios' }).click();
 }
 

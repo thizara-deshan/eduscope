@@ -53,11 +53,11 @@ export const studentQuizFailures: ScenarioScript = {
 
 export const studentQuizRegistrationClosed: ScenarioScript = {
   name: 'student-quiz-registration-closed',
-  description: 'Wave 7 S-38 race: the code resolves open/anonymous, but registration itself refuses with a closed session.',
+  description: 'Wave 7 S-38 race: the code still resolves open/anonymous, but the session closed a moment earlier — registration refuses, and /s/{id} already shows the closed S-41 terminal.',
   forced: [],
   studentQuiz: {
     resolution: 'open-anonymous', registration: 'session-closed', question: 'none',
-    answer: 'accepted', result: 'none', summary: 'open', reconnect: false,
+    answer: 'accepted', result: 'none', summary: 'none', reconnect: false,
   },
 };
 
