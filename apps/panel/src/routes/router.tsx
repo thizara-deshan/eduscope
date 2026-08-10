@@ -8,6 +8,7 @@ import { AdvancedShell } from '../screens/advanced/advanced-shell.js';
 import { AdvancedIndex } from '../screens/advanced/advanced-index.js';
 import { LocalCaptureScreen } from '../screens/advanced/local-capture-screen.js';
 import { StreamingScreen } from '../screens/advanced/streaming-screen.js';
+import { UploadQueueScreen } from '../screens/advanced/uploads/upload-queue-screen.js';
 import { RecordingDetailScreen } from '../screens/library/detail/recording-detail-screen.js';
 import { LibraryScreen } from '../screens/library/library-screen.js';
 import { PanelShell } from './panel-shell.js';
@@ -70,6 +71,7 @@ const ADVANCED_SHARED_CHILDREN: readonly AdvancedChildSpec[] = [
 const ADVANCED_SCREEN_ELEMENTS: Partial<Record<string, () => JSX.Element>> = {
   'S-26': () => <LocalCaptureScreen />,
   'S-27': () => <StreamingScreen />,
+  'S-35': () => <UploadQueueScreen />,
 };
 
 /** Admin-only Advanced children: a role mismatch lands back in the lecturer's own shell (U-6), not `/`. */
@@ -90,16 +92,19 @@ const advancedChildRoutes: RouteObject[] = [
     const Real = ADVANCED_SCREEN_ELEMENTS[screen];
     return { path, element: Real ? <Real /> : <ScreenPlaceholder id={screen} title={title} /> };
   }),
-  ...ADVANCED_ADMIN_CHILDREN.map(({ path, screen, title }) => ({
-    path,
-    element: (
-      // RequireRole's `role` prop is a UserRole, not an ARIA role attribute.
-      // eslint-disable-next-line jsx-a11y/aria-role
-      <RequireRole role="admin" redirectTo="/advanced/local-capture">
-        <ScreenPlaceholder id={screen} title={title} />
-      </RequireRole>
-    ),
-  })),
+  ...ADVANCED_ADMIN_CHILDREN.map(({ path, screen, title }) => {
+    const Real = ADVANCED_SCREEN_ELEMENTS[screen];
+    return {
+      path,
+      element: (
+        // RequireRole's `role` prop is a UserRole, not an ARIA role attribute.
+        // eslint-disable-next-line jsx-a11y/aria-role
+        <RequireRole role="admin" redirectTo="/advanced/local-capture">
+          {Real ? <Real /> : <ScreenPlaceholder id={screen} title={title} />}
+        </RequireRole>
+      ),
+    };
+  }),
 ];
 
 /**

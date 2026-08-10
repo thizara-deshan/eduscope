@@ -24,6 +24,7 @@ function renderAt(path: string, role: 'lecturer' | 'admin' = 'lecturer') {
     listStreamTargets: vi.fn(() => new Promise(() => {})),
     listRecordings: vi.fn(() => new Promise(() => {})),
     getRecording: vi.fn(() => new Promise(() => {})),
+    listUploadJobs: vi.fn(() => new Promise(() => {})),
   } as unknown as EduscopeClient;
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   return render(
@@ -81,6 +82,11 @@ describe('panel router (screen-inventory §1.1)', () => {
   it('renders an admin route for an admin', () => {
     renderAt('/advanced/users', 'admin');
     expect(screen.getByTestId('screen').dataset.screen).toBe('S-32');
+  });
+
+  it('renders the real S-35 Upload Queue screen at /advanced/uploads for an admin', () => {
+    renderAt('/advanced/uploads', 'admin');
+    expect(screen.getByTestId('screen').dataset.screen).toBe('S-35');
   });
 
   it('U-6: a lecturer hitting an admin-only Advanced route lands in their own shell, never a 403', () => {
