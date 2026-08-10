@@ -22,10 +22,13 @@ export interface RecordingBadgeLive {
   readonly nextAttemptAt?: string | null | undefined;
 }
 
+/** The only fields the derivation reads — lets S-35's upload-job rows (which have no full Recording) reuse it verbatim. */
+export type RecordingBadgeInput = Pick<Recording, 'state' | 'mergeState' | 'uploadState' | 'retentionDeleteAfter'>;
+
 const RETENTION_KEPT_SECONDARY = "Kept — never uploaded (won't auto-delete)";
 
 export function recordingBadge(
-  rec: Recording,
+  rec: RecordingBadgeInput,
   live?: RecordingBadgeLive,
   now?: number,
 ): RecordingBadge {
@@ -35,7 +38,7 @@ export function recordingBadge(
   return kept ? { ...base, secondary: RETENTION_KEPT_SECONDARY } : base;
 }
 
-function baseBadge(rec: Recording, live?: RecordingBadgeLive): RecordingBadge {
+function baseBadge(rec: RecordingBadgeInput, live?: RecordingBadgeLive): RecordingBadge {
   // #8 — still capturing: no job exists yet, the row is live.
   if (rec.state === 'capturing') {
     return { label: 'Recording', tone: 'record', glyph: '●' };
