@@ -1,0 +1,25 @@
+.us-firmware {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.us-firmware__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.us-firmware__unmissable {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-left: 3px solid var(--warning);
+  padding: var(--sp-4);
+  border-radius: var(--radius-md);
+}
+[data-testid='firmware-failed'],
+[data-testid='firmware-signature-failed'] {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-left-color: var(--danger);
+}
