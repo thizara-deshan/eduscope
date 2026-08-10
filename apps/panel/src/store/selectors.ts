@@ -1,5 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
-import type { SourceRoleId } from '@eduscope/shared';
+import type { SourceRoleId, SystemAlert } from '@eduscope/shared';
 import { useWsStore, type WsState } from './ws-store.js';
 
 /**
@@ -57,3 +57,13 @@ export const useSourceStatus = (roleId: string) =>
   useWsStore((s) => s.sources[roleId as keyof WsState['sources']]);
 export const useChannelStatus = (channelId: string) =>
   useWsStore((s) => s.channels[channelId as keyof WsState['channels']]);
+
+/** S-30/S-36: the live device.health snapshot + when it last arrived (C-3 staleness). */
+export const useDeviceHealth = () =>
+  useWsShallow((s) => ({ health: s.deviceHealth, healthAt: s.deviceHealthAt }));
+/** S-36: uncleared alerts as a stable array (the store prunes cleared rows on ingest). */
+export const useAlertsList = (): SystemAlert[] => useWsShallow((s) => Object.values(s.alerts));
+/** S-31: latest firmware.state. */
+export const useFirmwareState = () => useWsStore((s) => s.firmware);
+/** S-34: live log tail. */
+export const useLogTail = () => useWsShallow((s) => s.logTail);

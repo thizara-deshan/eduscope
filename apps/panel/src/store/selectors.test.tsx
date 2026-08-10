@@ -3,7 +3,8 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
 import {
-  useAiSet, useAlert, useAudioControlRow, useExpectedShutdown, useLastSegment,
+  useAiSet, useAlert, useAlertsList, useAudioControlRow, useDeviceHealth, useExpectedShutdown,
+  useFirmwareState, useLastSegment, useLogTail,
   usePublicationsList, useQuestionEvents, useQuizSession, useRecordingState, useUploadJobEvents,
   useWsShallow,
 } from './selectors.js';
@@ -208,5 +209,45 @@ describe('wave 4 store slices', () => {
     act(() => useWsStore.getState().ingest(envelope('system.alert', payload, 0)));
     const { result } = renderHook(() => useAlert(payload.id));
     expect(result.current).toEqual(payload);
+  });
+});
+
+describe('wave 6 store slices', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('useAlertsList returns [] initially and the ingested alert after a system.alert envelope', () => {
+    const { result } = renderHook(() => useAlertsList());
+    expect(result.current).toEqual([]);
+    const payload = {
+      id: 'A1', code: 'source.offline', severity: 'error', category: 'System',
+      title: 'source.offline', detail: null, raisedAt: '2026-07-30T09:00:00Z', clearedAt: null,
+      clearedReason: null, acknowledgedBy: null, context: null, relatedEntity: null,
+    };
+    act(() => useWsStore.getState().ingest(envelope('system.alert', payload, 0)));
+    expect(result.current).toEqual([payload]);
+  });
+
+  it('useDeviceHealth returns { health: null, healthAt: null } initially', () => {
+    const { result } = renderHook(() => useDeviceHealth());
+    expect(result.current).toEqual({ health: null, healthAt: null });
+    act(() => useWsStore.getState().ingest(envelope('device.health', { ntpSynced: true }, 0)));
+    expect(result.current.health).toEqual({ ntpSynced: true });
+    expect(result.current.healthAt).not.toBeNull();
+  });
+
+  it('useFirmwareState returns the latest firmware.state', () => {
+    const { result } = renderHook(() => useFirmwareState());
+    expect(result.current).toBeNull();
+    act(() => useWsStore.getState().ingest(envelope('firmware.state', { state: 'downloading' }, 0)));
+    expect(result.current).toEqual({ state: 'downloading' });
+  });
+
+  it('useLogTail returns the live tail', () => {
+    const { result } = renderHook(() => useLogTail());
+    expect(result.current).toEqual([]);
+    act(() => useWsStore.getState().ingest(envelope('log.entry', { id: 'L1', message: 'm' }, 0)));
+    expect(result.current).toEqual([{ id: 'L1', message: 'm' }]);
   });
 });

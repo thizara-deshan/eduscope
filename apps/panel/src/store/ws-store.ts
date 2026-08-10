@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from '@eduscope/api-client';
 import type {
   AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, ChannelStatePayload,
-  DeviceHealthPayload, EventEnvelope, ExportJobPayload, QuizPublicationPayload, QuizResponsesPayload,
+  DeviceHealthPayload, EventEnvelope, ExportJobPayload, FirmwareUpdate, LogEntry,
+  QuizPublicationPayload, QuizResponsesPayload,
   QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload,
   SourceRoleId, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UploadJobPayload,
   UploadPartPayload, UsbVolumesPayload,
@@ -45,6 +46,12 @@ export interface WsState {
   exportJobs: Record<string, ExportJobPayload>;
   /** S-23: the latest session-scoped usb.volumes list (CG-3). */
   usbVolumes: UsbVolumesPayload | null;
+  /** S-31: latest firmware.state full read view. */
+  firmware: FirmwareUpdate | null;
+  /** S-34: bounded live-tail ring (newest last, max 200). */
+  logTail: LogEntry[];
+  /** S-36 C-3: wall-clock of the last device.health, for T-HEALTH-STALE staleness. */
+  deviceHealthAt: number | null;
 
   connection: ConnectionStatus | null;
   /** events.md §1: a gap forces a full snapshot re-request, never a patch. */
@@ -64,6 +71,7 @@ const EMPTY = {
   sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
+  firmware: null, logTail: [], deviceHealthAt: null,
   connection: null, needsResync: false, stale: false,
 } satisfies Omit<
   WsState,
@@ -119,7 +127,14 @@ export const useWsStore = create<WsState>((set, get) => ({
         case 'channel.state':
           return { channels: { ...get().channels, [envelope.payload.channelId]: envelope.payload } };
         case 'storage.status': return { storage: envelope.payload };
-        case 'device.health': return { deviceHealth: envelope.payload };
+        case 'device.health':
+          return { deviceHealth: envelope.payload, deviceHealthAt: Date.now() };
+        case 'firmware.state': return { firmware: envelope.payload };
+        case 'log.entry': {
+          const next = [...get().logTail, envelope.payload];
+          if (next.length > 200) next.splice(0, next.length - 200);
+          return { logTail: next };
+        }
         case 'ai.countdown': return { aiCountdown: envelope.payload };
         case 'ai.set': return { aiSet: envelope.payload };
         // Keeps `discarded` rows in the map (not pruned) — a consumer merging

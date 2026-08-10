@@ -117,4 +117,33 @@ describe('ws store', () => {
     useWsStore.getState().ingest(envelope('usb.volumes', { volumes: [] }, 3));
     expect(useWsStore.getState().usbVolumes?.volumes).toEqual([]);
   });
+
+  it('ingests firmware.state as the latest full read view', () => {
+    useWsStore.getState().ingest(envelope('firmware.state', {
+      id: 'F1', currentVersion: '2026.1.3', availableVersion: '2026.2.0',
+      state: 'downloading', signatureVerified: true, rollbackVersion: '2026.1.2',
+      startedAt: null, finishedAt: null, lastError: null,
+    }, 0));
+    expect(useWsStore.getState().firmware?.state).toBe('downloading');
+  });
+
+  it('appends log.entry to a bounded tail (max 200, newest last)', () => {
+    for (let i = 0; i < 205; i += 1) {
+      useWsStore.getState().ingest(envelope('log.entry', {
+        id: `L${i}`, at: '2026-08-10T09:00:00.000Z', level: 'INFO', category: 'System',
+        service: 'core-api', message: `m${i}`, sessionId: null, userId: null, context: null,
+      }, i + 1));
+    }
+    const tail = useWsStore.getState().logTail;
+    expect(tail).toHaveLength(200);
+    expect(tail[tail.length - 1]?.id).toBe('L204');
+  });
+
+  it('records deviceHealthAt when device.health arrives', () => {
+    useWsStore.getState().ingest(envelope('device.health', {
+      captureCardState: 'present', publisherStates: {}, ntpSynced: true,
+      clockOffsetMs: 0, diskHealth: 'good', lastBootAt: '2026-08-10T06:00:00.000Z',
+    }, 300));
+    expect(useWsStore.getState().deviceHealthAt).not.toBeNull();
+  });
 });
