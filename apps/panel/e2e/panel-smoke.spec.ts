@@ -76,6 +76,15 @@ test.describe('panel scaffold smoke', () => {
         }).observe(el, { attributes: true, attributeFilter: ['data-recording-state'] });
       });
 
+      // start-fails demonstrates both refusal classes: the FIRST Start is
+      // refused outright (Class A, no session, state stays idle); the SECOND
+      // creates a session whose consumer never confirms, so R-06 drives
+      // starting -> error. Drive both to reach the error the gate asserts on.
+      await page.getByTestId('e2e-start-recording').click();
+      await expect(page.locator('[data-recording-state]')).toHaveAttribute(
+        'data-recording-state',
+        'idle',
+      );
       await page.getByTestId('e2e-start-recording').click();
       await expect(page.locator('[data-recording-state]')).toHaveAttribute(
         'data-recording-state',

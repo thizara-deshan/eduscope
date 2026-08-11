@@ -5,7 +5,6 @@ import type { EduscopeClient } from '@eduscope/api-client';
 import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
-import { OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { TimerCard } from '../transport/timer-card.js';
@@ -63,10 +62,7 @@ describe('LockCard', () => {
     const wrapper = ({ children }: { children: ReactNode }) => createElement(
       ClientContext.Provider,
       { value: client },
-      createElement(AuthProvider, {
-        initialUser: me,
-        children: createElement(OverlayProvider, { children }),
-      }),
+      createElement(AuthProvider, { initialUser: me, children }),
     );
     render(<><LockCard {...baseProps} /><TimerCard /></>, { wrapper });
     expect(screen.getByTestId('lock-elapsed').textContent)

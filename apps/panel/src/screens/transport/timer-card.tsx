@@ -1,13 +1,11 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { RecordingStatePayload } from '@eduscope/shared';
 import { useAuth } from '../../auth/auth-context.js';
 import { useTicker } from '../../hooks/use-ticker.js';
-import { useOverlays } from '../../overlays/overlay-host.js';
 import {
   useIsStale, useLastSegment, useRecordingSession, useRecordingState,
 } from '../../store/selectors.js';
 import { useTransport } from './use-transport.js';
-import { StopRecordingConfirm } from './stop-recording-confirm.js';
 import './transport.css';
 
 export function elapsedMs(
@@ -35,11 +33,8 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
   const stale = useIsStale();
   const auth = useAuth();
   const transport = useTransport();
-  const overlays = useOverlays();
   const now = useTicker(1_000);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const stopButtonRef = useRef<HTMLButtonElement>(null);
-  const stopOverlayOpenRef = useRef(false);
 
   const starting = recordingState === 'starting' && session?.startedAt === null;
   const saving = recordingState === 'stopping' || recordingState === 'finalizing';
@@ -52,31 +47,6 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
   const digits = starting
     ? 'Starting…'
     : formatElapsed(session ? elapsedMs(session, now) : 0);
-
-  const requestStop = () => {
-    if (stopOverlayOpenRef.current) return;
-    stopOverlayOpenRef.current = true;
-    let overlayId = -1;
-
-    const close = (restoreFocus: boolean) => {
-      overlays.close(overlayId);
-      stopOverlayOpenRef.current = false;
-      if (restoreFocus) queueMicrotask(() => stopButtonRef.current?.focus());
-    };
-
-    overlayId = overlays.open(
-      <StopRecordingConfirm
-        disabled={!transport.canCommand || !commandableState || transport.pending !== null}
-        onCancel={() => close(true)}
-        onConfirm={() => {
-          if (!stopOverlayOpenRef.current) return;
-          close(false);
-          transport.run('stop');
-        }}
-      />,
-      { dismissible: true },
-    );
-  };
 
   return (
     <section
@@ -125,11 +95,10 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
                 : paused ? 'Resume' : 'Pause'}
           </button>
           <button
-            ref={stopButtonRef}
             type="button"
             className="us-timercard__stop"
             disabled={!transport.canCommand || !commandableState || transport.pending === 'stop'}
-            onClick={requestStop}
+            onClick={() => transport.run('stop')}
           >
             {transport.pending === 'stop' ? 'Stopping…' : 'Stop'}
           </button>

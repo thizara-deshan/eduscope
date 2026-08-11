@@ -239,7 +239,8 @@ test.describe('Wave-3 exit condition', () => {
     await expect(page.getByTestId('streaming-state-word')).toHaveText('Off', { timeout: 3_000 });
     await expect(page.locator('[data-testid="recording-frame"]')).toBeVisible();
 
-    // 7. Confirm admin sees 10 categories, lecturer sees only the two output pages.
-    await expect(page.getByRole('navigation', { name: 'Administration categories' }).getByRole('button')).toHaveCount(2);
+    // 7. Confirm the lecturer sees only their three pages (the two output pages
+    //    plus the Recording Library relocated into Advanced by S-21).
+    await expect(page.getByRole('navigation', { name: 'Administration categories' }).getByRole('button')).toHaveCount(3);
   });
 });

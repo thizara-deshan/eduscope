@@ -5,7 +5,6 @@ import type { EduscopeClient } from '@eduscope/api-client';
 import type { User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
-import { OverlayHost, OverlayProvider } from '../../overlays/overlay-host.js';
 import { useWsStore } from '../../store/ws-store.js';
 import '../../styles/tokens.css';
 import { elapsedMs, TimerCard } from './timer-card.js';
@@ -38,11 +37,7 @@ function renderTimer(
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     ClientContext.Provider, { value: client },
-    createElement(AuthProvider, {
-      initialUser: me,
-      children: createElement(OverlayProvider, null,
-        createElement('div', null, children, createElement(OverlayHost))),
-    }),
+    createElement(AuthProvider, { initialUser: me, children }),
   );
   return { ...render(<TimerCard defaultCollapsed={defaultCollapsed} />, { wrapper }), client };
 }
@@ -90,30 +85,14 @@ describe('TimerCard', () => {
   it('renders stop pending and locks the other transport', () => {
     renderTimer();
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop Recording' }));
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled();
   });
 
-  it('asks before stopping and Cancel sends no command', async () => {
-    const { client } = renderTimer();
-    const stop = screen.getByRole('button', { name: 'Stop' });
-    fireEvent.click(stop);
-    expect(screen.getByRole('alertdialog', { name: 'Stop recording?' })).toHaveTextContent(
-      'Are you sure you want to stop recording?',
-    );
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      await Promise.resolve();
-    });
-    expect(client.stopRecording).not.toHaveBeenCalled();
-    expect(stop).toHaveFocus();
-  });
-
-  it('confirmation sends the stop command once', () => {
+  it('sends the stop command on a single tap, with no confirm dialog', () => {
     const { client } = renderTimer();
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop Recording' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(client.stopRecording).toHaveBeenCalledTimes(1);
   });
 

@@ -76,6 +76,11 @@ test.describe('S-03 Panel shell, chrome & alert host', () => {
     });
 
     await openScenarioOverlay(page);
+    // start-fails refuses the FIRST Start outright (Class A, no session, no
+    // chrome); the SECOND creates a session that fails to `error` (Class B,
+    // R-06). Only the second attempt raises the red-frame-free error chrome.
+    await page.getByTestId('e2e-start-recording').click();
+    await expect(page.locator('[data-recording-state]')).toHaveAttribute('data-recording-state', 'idle');
     await page.getByTestId('e2e-start-recording').click();
     await expect(page.getByTestId('recording-error')).toBeVisible({ timeout: 6_000 });
     const errorText = await page.getByTestId('recording-error').textContent();
@@ -101,27 +106,34 @@ test.describe('S-03 Panel shell, chrome & alert host', () => {
     await expect(page.getByTestId('recording-frame')).toBeVisible();
   });
 
-  test('disk-full: a storage.critical banner renders, rendered verbatim from the payload', async ({ page }) => {
+  test('disk-full: the storage.critical alert surfaces in the notification center, verbatim from the payload', async ({ page }) => {
     await signIn(page);
     await switchScenario(page, 'disk-full');
+
+    // The disk-full world raises a storage.critical alert. It surfaces in the
+    // notification center (verbatim from the payload), not a standalone banner.
+    await page.getByRole('button', { name: /^Notifications,/ }).click();
+    await expect(page.getByRole('dialog', { name: 'Notifications' })).toContainText('storage.critical');
+    await page.getByRole('button', { name: 'Close notifications' }).click();
+
+    // Recording under disk-full must never proceed (R-02, no session row created).
     await openScenarioOverlay(page);
     await page.getByTestId('e2e-start-recording').click();
-
-    await expect(page.getByTestId('alert-banner')).toContainText('storage.critical');
-    // Recording under disk-full must never proceed (R-02, no session row created).
     await expect(page.getByTestId('recording-frame')).toHaveCount(0);
   });
 
-  test('layout invariance: the Outlet box is unchanged with and without a banner', async ({ page }) => {
+  test('layout invariance: opening and acknowledging notifications never reflows the Outlet', async ({ page }) => {
     await signIn(page);
-    await expect(page.getByTestId('alert-banner')).toBeVisible();
-    const withBanner = await page.getByTestId('screen').boundingBox();
+    // happy seeds one alert. Alerts live in the notification center — a dropdown
+    // that must never reflow the main screen (the old banner-vs-no-banner
+    // invariance, now guaranteed by construction).
+    const before = await page.getByTestId('screen').boundingBox();
 
-    await page.getByRole('button', { name: /Acknowledge/ }).click();
-    await expect(page.getByTestId('alert-banner')).toHaveCount(0);
-    const withoutBanner = await page.getByTestId('screen').boundingBox();
+    await page.getByRole('button', { name: /^Notifications,/ }).click();
+    expect(await page.getByTestId('screen').boundingBox()).toEqual(before);
 
-    expect(withoutBanner).toEqual(withBanner);
+    await page.getByRole('button', { name: /^Acknowledge/ }).click();
+    expect(await page.getByTestId('screen').boundingBox()).toEqual(before);
   });
 
   test('no header at /login and /login/reset; header present at /', async ({ page }) => {

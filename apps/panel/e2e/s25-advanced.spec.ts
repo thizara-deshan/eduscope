@@ -29,12 +29,12 @@ async function dismissAlerts(page: Page) {
 }
 
 test.describe('S-25 Advanced shell', () => {
-  test('admin primary journey: 10 nav rows, chooses Streaming, aria-current moves, Back returns to /', async ({ page }) => {
+  test('admin primary journey: 11 nav rows, chooses Streaming, aria-current moves, Back returns to /', async ({ page }) => {
     await signInAdmin(page);
     await goAdvanced(page);
     await dismissAlerts(page);
     const nav = page.getByRole('navigation', { name: 'Administration categories' });
-    await expect(nav.getByRole('button')).toHaveCount(10);
+    await expect(nav.getByRole('button')).toHaveCount(11);
 
     await nav.getByRole('button', { name: 'Streaming Configuration' }).click();
     await expect(nav.getByRole('button', { name: 'Streaming Configuration' })).toHaveAttribute('aria-current', 'page');
@@ -44,13 +44,14 @@ test.describe('S-25 Advanced shell', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('lecturer sees only Local Capture and Streaming', async ({ page }) => {
+  test('lecturer sees only Local Capture, Streaming and Recording Library', async ({ page }) => {
     await signInLecturer(page);
     await goAdvanced(page);
     const nav = page.getByRole('navigation', { name: 'Administration categories' });
-    await expect(nav.getByRole('button')).toHaveCount(2);
+    await expect(nav.getByRole('button')).toHaveCount(3);
     await expect(nav.getByRole('button', { name: 'Local Capture Layout' })).toBeVisible();
     await expect(nav.getByRole('button', { name: 'Streaming Configuration' })).toBeVisible();
+    await expect(nav.getByRole('button', { name: 'Recording Library' })).toBeVisible();
   });
 
   test('U-6: a lecturer deep-links to an admin-only route and lands in their own shell, never a 403', async ({ page }) => {

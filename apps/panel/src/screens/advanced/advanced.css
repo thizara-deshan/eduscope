@@ -68,7 +68,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: var(--tap-row);
+  /* The admin list is 11 rows (S-21 relocated the Recording Library in here);
+     at the full --tap-row (56px) they overflow the fixed 680px kiosk sidebar
+     and the last category is clipped. 50px keeps every row a comfortable touch
+     target (>=48px) while the whole list fits without scrolling. */
+  min-height: 50px;
   padding: 8px 12px;
   border-radius: 10px;
   border: none;

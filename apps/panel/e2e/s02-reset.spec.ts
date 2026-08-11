@@ -1,6 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const COMPLIANT = 'Lecture-hall-7';
+
+/** The y of the on-screen keyboard's top edge — the submit button must clear it. */
+function oskTop(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const panel = document.querySelector('.us-panel') as HTMLElement;
+    const osk = parseFloat(getComputedStyle(panel).getPropertyValue('--osk-h')) || 0;
+    return panel.getBoundingClientRect().bottom - osk;
+  });
+}
 
 test.describe('S-02 Forced/voluntary password reset', () => {
   test('primary journey — happy: forced reset lands on the dashboard', async ({ page }) => {
@@ -38,7 +47,7 @@ test.describe('S-02 Forced/voluntary password reset', () => {
     await expect(page).toHaveURL(/\/login\/reset$/);
   });
 
-  test('geometry — submit bottom edge <=404 in both forced and voluntary modes', async ({ page }) => {
+  test('geometry — submit clears the keyboard in both forced and voluntary modes', async ({ page }) => {
     // forced
     await page.goto('/login');
     await page.getByLabel('Username').fill('n.silva');
@@ -47,12 +56,12 @@ test.describe('S-02 Forced/voluntary password reset', () => {
     await expect(page).toHaveURL(/\/login\/reset$/);
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.us-panel')!).getPropertyValue('--osk-h').trim()))
-      .toBe('380px');
+      .toBe('320px');
     // `.us-reset`'s height is CSS-transitioned (200ms) off the --osk-h change;
     // the property flips instantly but the layout settles a beat later.
     await page.waitForTimeout(300);
     let box = await page.getByRole('button', { name: 'Set password' }).boundingBox();
-    expect(box!.y + box!.height).toBeLessThanOrEqual(404);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(await oskTop(page));
 
     // voluntary
     await page.goto('/login');
@@ -66,10 +75,10 @@ test.describe('S-02 Forced/voluntary password reset', () => {
     await page.getByLabel('Current password').click();
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.us-panel')!).getPropertyValue('--osk-h').trim()))
-      .toBe('380px');
+      .toBe('320px');
     await page.waitForTimeout(300);
     box = await page.getByRole('button', { name: 'Set password' }).boundingBox();
-    expect(box!.y + box!.height).toBeLessThanOrEqual(404);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(await oskTop(page));
   });
 
   test('no header on /login/reset', async ({ page }) => {

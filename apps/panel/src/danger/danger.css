@@ -24,6 +24,10 @@
   display: grid;
   place-items: center;
   padding: var(--sp-10);
+  /* Reserve the on-screen keyboard's reach so a dialog with OSK-bound fields
+     (add/edit user) centers above it and its footer stays tappable. Collapses
+     to plain padding when the keyboard is closed (--osk-h defaults to 0px). */
+  padding-bottom: calc(var(--sp-10) + var(--osk-h, 0px));
   background: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 

@@ -72,7 +72,7 @@ describe('scenario dev overlay', () => {
       'disk-full', 'ws-flap', 'quiz-network-loss', 'auth-failures',
       'poweroff-not-halted', 'channel-failures',
     ]) {
-      expect(screen.getByRole('radio', { name: new RegExp(name) })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: new RegExp(`^${name}$`) })).toBeTruthy();
     }
   });
 

@@ -1,4 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** The y of the on-screen keyboard's top edge — the submit button must clear it. */
+function oskTop(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const panel = document.querySelector('.us-panel') as HTMLElement;
+    const osk = parseFloat(getComputedStyle(panel).getPropertyValue('--osk-h')) || 0;
+    return panel.getBoundingClientRect().bottom - osk;
+  });
+}
 
 test.describe('S-01 Login', () => {
   test('primary journey — happy: sign in and land on the dashboard', async ({ page }) => {
@@ -35,19 +44,19 @@ test.describe('S-01 Login', () => {
     await expect(page).toHaveURL(/\/login\/reset$/);
   });
 
-  test('geometry — with the keyboard open, the submit button clears y<=404', async ({ page }) => {
+  test('geometry — with the keyboard open, the submit button clears the keyboard', async ({ page }) => {
     await page.goto('/login');
     // Username is autofocused on mount, which opens the keyboard before first paint.
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.us-panel')!).getPropertyValue('--osk-h').trim()))
-      .toBe('380px');
+      .toBe('320px');
     // `.us-login`'s height is CSS-transitioned (200ms) off the --osk-h change;
     // the property flips instantly but the layout settles a beat later.
     await page.waitForTimeout(300);
 
     const box = await page.getByRole('button', { name: 'Log In' }).boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.y + box!.height).toBeLessThanOrEqual(404);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(await oskTop(page));
   });
 
   test('no page scroll on the login screen', async ({ page }) => {

@@ -44,7 +44,10 @@ export function AddUserDialog({ onSubmit, onCancel, pending, error }: AddUserDia
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" {...passwordBinding} />
         </label>
         {error ? <p className="us-device__missing">{error}</p> : null}
-        <footer className="us-dangerconfirm__footer">
+        {/* Keep the pressed field focused so the on-screen keyboard neither
+            closes nor reflows the dialog between mousedown and click — otherwise
+            the footer slides out from under the tap and the action is lost. */}
+        <footer className="us-dangerconfirm__footer" onMouseDown={(e) => e.preventDefault()}>
           <button type="button" className="us-dangerconfirm__cancel" onClick={onCancel}>Cancel</button>
           <button
             type="button"
