@@ -11,15 +11,20 @@ export function AnswerReveal({ result }: { result: StudentQuizResultPayload }) {
   const correctText = optionText(result.question.options, result.correctOptionId);
 
   return (
-    <dl className="result-reveal">
+    <dl className="m-0 flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-5 shadow-sm">
       {!missed && (
-        <>
-          <dt>Your answer</dt>
-          <dd>{ownText}</dd>
-        </>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-base text-muted">Your answer</dt>
+          <dd className="m-0 text-right text-base font-semibold text-text">{ownText}</dd>
+        </div>
       )}
-      <dt>Correct answer</dt>
-      <dd>{correctText}</dd>
+      <div className="flex items-center justify-between gap-4">
+        <dt className="text-base text-muted">Correct answer</dt>
+        <dd className="m-0 flex items-center gap-1.5 text-right text-base font-semibold text-success">
+          <span aria-hidden="true">✓</span>
+          {correctText}
+        </dd>
+      </div>
     </dl>
   );
 }

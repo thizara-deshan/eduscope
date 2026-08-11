@@ -1,11 +1,11 @@
 'use client';
 
 import { QuizMobileShell } from '../../components/quiz-mobile-shell.js';
+import { Card, CardContent } from '../../components/ui/card.js';
 import { useQuizConnectionState } from '../../store/selectors.js';
 import { JoinCodeForm } from './join-code-form.js';
 import { JoinStatus } from './join-status.js';
 import { useJoinResolution } from './use-join-resolution.js';
-import './join.css';
 
 /**
  * S-37 Join. `/j` renders this with `autoSubmit=false` (the manual-entry
@@ -19,13 +19,23 @@ export function JoinScreen({ initialCode, autoSubmit }: { initialCode: string; a
 
   return (
     <QuizMobileShell screenId="S-37" connectionState={connectionState}>
-      <h1>Join the quiz</h1>
-      <JoinCodeForm
-        code={code}
-        onChange={setCode}
-        onSubmit={submit}
-        disabled={connectionState !== 'online' || status === 'resolving'}
-      />
+      <div className="pt-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Live quiz</p>
+        <h1 className="mt-1.5 text-3xl font-extrabold tracking-tight text-text">Join the quiz</h1>
+        <p className="mt-2 text-base text-muted">Enter the code shown on your lecturer&rsquo;s screen.</p>
+      </div>
+
+      <Card className="mt-6">
+        <CardContent className="p-5">
+          <JoinCodeForm
+            code={code}
+            onChange={setCode}
+            onSubmit={submit}
+            disabled={connectionState !== 'online' || status === 'resolving'}
+          />
+        </CardContent>
+      </Card>
+
       <JoinStatus status={status} onRetry={retry} />
     </QuizMobileShell>
   );

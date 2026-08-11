@@ -23,9 +23,12 @@ export function QuestionViewport({
 
   if (question.state === 'none') {
     return (
-      <div className="quiz-live__waiting">
-        <p>Waiting for your lecturer&rsquo;s next question</p>
-        <p className="quiz-live__hint">Keep this tab open — the next question will appear here.</p>
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface/60 px-6 py-12 text-center">
+        <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-2xl">
+          ⏳
+        </span>
+        <p className="m-0 text-lg font-semibold text-text">Waiting for your lecturer&rsquo;s next question</p>
+        <p className="m-0 text-base text-muted">Keep this tab open — the next question will appear here.</p>
       </div>
     );
   }
@@ -34,19 +37,19 @@ export function QuestionViewport({
     phase === 'submitting' || phase === 'locked' || phase === 'rejected-closed' || connectionState !== 'online';
 
   return (
-    <div className="quiz-live__question">
-      <p className="quiz-live__prompt">{question.prompt}</p>
+    <div>
+      <p className="mb-5 text-xl font-bold leading-snug tracking-tight text-text">{question.prompt}</p>
       {phase === 'rejected-closed' && (
-        <p role="alert" className="quiz-live__rejected">
+        <p role="alert" className="mb-4 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-base font-medium text-danger">
           Question closed before your answer arrived.
         </p>
       )}
       {phase === 'retryable' && (
-        <p role="alert" className="quiz-live__retry">
+        <p role="alert" className="mb-4 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-base font-medium text-warning">
           That didn&rsquo;t go through. Tap an option to try again.
         </p>
       )}
-      <div className="quiz-live__options">
+      <div className="flex flex-col gap-3">
         {question.options.map((option) => (
           <AnswerOption
             key={option.id}

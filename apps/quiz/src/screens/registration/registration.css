@@ -1,4 +1,0 @@
-.reg-field { margin-top: var(--sp-6); }
-.reg-field__hint { color: var(--text-muted); font-size: var(--fs-md); margin: var(--sp-1) 0 0; }
-.reg-field__error { color: var(--danger); font-size: var(--fs-md); margin: var(--sp-1) 0 0; }
-.reg-banner { color: var(--danger); margin-bottom: var(--sp-5); }

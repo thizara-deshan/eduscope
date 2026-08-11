@@ -7,7 +7,6 @@ import { QuizLiveHeader } from './quiz-live-header.js';
 import { QuestionViewport } from './question-viewport.js';
 import { ResultScreen } from '../result/result-screen.js';
 import { EndedScreen } from '../ended/ended-screen.js';
-import './live.css';
 
 const WAITING = { state: 'none' as const };
 

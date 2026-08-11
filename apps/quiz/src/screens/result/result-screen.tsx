@@ -5,7 +5,6 @@ import { ResultVerdict } from './result-verdict.js';
 import { AnswerReveal } from './answer-reveal.js';
 import { OwnStanding } from './own-standing.js';
 import { NextQuestionWait } from './next-question-wait.js';
-import './result.css';
 
 /** S-40 Result. Renders from the self-contained `quiz.result` payload only. */
 export function ResultScreen({
@@ -17,10 +16,12 @@ export function ResultScreen({
 }) {
   return (
     <QuizMobileShell screenId="S-40" connectionState={connectionState}>
-      <ResultVerdict result={result} />
-      <AnswerReveal result={result} />
-      <OwnStanding result={result} />
-      <NextQuestionWait />
+      <div className="flex flex-col gap-5 pt-2">
+        <ResultVerdict result={result} />
+        <AnswerReveal result={result} />
+        <OwnStanding result={result} />
+        <NextQuestionWait />
+      </div>
     </QuizMobileShell>
   );
 }

@@ -10,7 +10,7 @@ export function fieldMessage(violations: readonly FieldViolation[] | undefined, 
 export function FieldProblem({ id, message }: { id: string; message: string | undefined }) {
   if (!message) return null;
   return (
-    <p id={id} role="alert" className="reg-field__error">
+    <p id={id} role="alert" className="text-sm font-medium text-danger">
       {message}
     </p>
   );

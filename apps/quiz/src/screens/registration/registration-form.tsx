@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ResolveJoinCodeResponse } from '@eduscope/shared';
+import { Button } from '../../components/ui/button.js';
 import { fieldMessage, type FieldViolation } from './field-problem.js';
 import { PolicyField } from './policy-field.js';
 
@@ -44,7 +45,7 @@ export function RegistrationForm({
     // Server problems stay authoritative (frontend-conventions §1) — the
     // `pattern`/`maxLength` attributes are advisory (mobile keyboard hints),
     // not a client-side gate, so `noValidate` keeps every submit reaching it.
-    <form onSubmit={submit} noValidate>
+    <form onSubmit={submit} noValidate className="flex flex-col gap-5">
       <PolicyField
         label="Full name"
         maxLength={policy.fullNameMaxLength}
@@ -67,9 +68,9 @@ export function RegistrationForm({
         {...register('studentIdNumber', { required: true })}
         id="studentIdNumber"
       />
-      <button type="submit" disabled={disabled || submitting}>
+      <Button type="submit" size="block" disabled={disabled || submitting}>
         {submitting ? 'Joining…' : 'Join'}
-      </button>
+      </Button>
     </form>
   );
 }

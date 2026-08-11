@@ -10,7 +10,12 @@ export function ConnectionStrip({ state }: { state: ConnectionState }) {
   if (state === 'online') return null;
 
   return (
-    <div className="quiz-shell__connection" role="status" aria-live="polite">
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center justify-center gap-2 bg-warning-soft px-5 py-2 text-center text-[15px] font-medium text-warning"
+    >
+      <span aria-hidden="true" className="h-2 w-2 rounded-full bg-warning" />
       {COPY[state]}
     </div>
   );

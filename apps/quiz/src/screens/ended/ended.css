@@ -1,8 +1,0 @@
-.ended-summary {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--sp-2) var(--sp-5);
-  margin: var(--sp-6) 0;
-}
-.ended-summary dt { color: var(--text-muted); }
-.ended-summary dd { margin: 0; font-weight: 600; text-align: right; }

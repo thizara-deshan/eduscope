@@ -1,4 +1,6 @@
 import { forwardRef, type InputHTMLAttributes } from 'react';
+import { Input } from '../../components/ui/input.js';
+import { Label } from '../../components/ui/label.js';
 import { FieldProblem } from './field-problem.js';
 
 interface PolicyFieldProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -15,9 +17,9 @@ export const PolicyField = forwardRef<HTMLInputElement, PolicyFieldProps>(functi
   const errorId = error ? `${id}-error` : undefined;
 
   return (
-    <div className="reg-field">
-      <label htmlFor={id}>{label}</label>
-      <input
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
         id={id}
         ref={ref}
         aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
@@ -25,7 +27,7 @@ export const PolicyField = forwardRef<HTMLInputElement, PolicyFieldProps>(functi
         {...rest}
       />
       {hint && (
-        <p id={hintId} className="reg-field__hint">
+        <p id={hintId} className="text-sm text-muted">
           {hint}
         </p>
       )}

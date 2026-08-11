@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation';
 import { TransportError } from '@eduscope/api-client';
 import { QuizAppProblemError } from '@eduscope/api-client/quiz';
 import { QuizMobileShell } from '../../components/quiz-mobile-shell.js';
+import { Button } from '../../components/ui/button.js';
+import { Card, CardContent } from '../../components/ui/card.js';
 import { useQuizClient } from '../../client/quiz-client-provider.js';
 import { useQuizConnectionState } from '../../store/selectors.js';
 import { RegistrationForm } from './registration-form.js';
 import { useRegistration } from './use-registration.js';
-import './registration.css';
 
 function bannerFor(error: unknown): string | null {
   if (error instanceof QuizAppProblemError) {
@@ -55,7 +56,7 @@ export function RegistrationScreen({ joinCode }: { joinCode: string }) {
   if (resolveQuery.isPending) {
     return (
       <QuizMobileShell screenId="S-38" connectionState={connectionState}>
-        <p role="status" aria-live="polite">
+        <p role="status" aria-live="polite" className="pt-8 text-center text-base text-muted">
           Loading…
         </p>
       </QuizMobileShell>
@@ -65,11 +66,11 @@ export function RegistrationScreen({ joinCode }: { joinCode: string }) {
   if (resolveQuery.isError) {
     return (
       <QuizMobileShell screenId="S-38" connectionState={connectionState}>
-        <div role="alert">
-          <p>Something went wrong. Try again.</p>
-          <button type="button" onClick={() => void resolveQuery.refetch()}>
+        <div role="alert" className="mt-6 rounded-2xl border border-danger/30 bg-danger-soft px-5 py-4">
+          <p className="m-0 text-base font-medium text-danger">Something went wrong. Try again.</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => void resolveQuery.refetch()}>
             Try again
-          </button>
+          </Button>
         </div>
       </QuizMobileShell>
     );
@@ -86,19 +87,29 @@ export function RegistrationScreen({ joinCode }: { joinCode: string }) {
 
   return (
     <QuizMobileShell screenId="S-38" connectionState={connectionState}>
-      <h1>Join the quiz</h1>
+      <div className="pt-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-primary">You&rsquo;re in</p>
+        <h1 className="mt-1.5 text-3xl font-extrabold tracking-tight text-text">Join the quiz</h1>
+        <p className="mt-2 text-base text-muted">Add your details so your lecturer can see your score.</p>
+      </div>
+
       {banner && (
-        <div role="alert" className="reg-banner">
+        <div role="alert" className="mt-5 rounded-2xl border border-danger/30 bg-danger-soft px-5 py-4 text-base font-medium text-danger">
           {banner}
         </div>
       )}
-      <RegistrationForm
-        policy={resolveQuery.data.registrationPolicy}
-        onSubmit={(values) => registration.mutate(values)}
-        submitting={registration.isPending}
-        disabled={connectionState !== 'online'}
-        fieldViolations={fieldViolations}
-      />
+
+      <Card className="mt-6">
+        <CardContent className="p-5">
+          <RegistrationForm
+            policy={resolveQuery.data.registrationPolicy}
+            onSubmit={(values) => registration.mutate(values)}
+            submitting={registration.isPending}
+            disabled={connectionState !== 'online'}
+            fieldViolations={fieldViolations}
+          />
+        </CardContent>
+      </Card>
     </QuizMobileShell>
   );
 }
