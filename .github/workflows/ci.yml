@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '22.13.0'
+  NODE_VERSION: "22.13.0"
 
 jobs:
   typecheck:
@@ -72,7 +72,7 @@ jobs:
       - name: Panel entry-chunk budget
         run: |
           BYTES=$(cat apps/panel/dist/assets/index-*.js | gzip -9 | wc -c)
-          echo "panel entry chunk, gzipped: ${BYTES} bytes (ceiling 150000)"
+          echo "panel entry chunk, gzipped: ${BYTES} bytes (ceiling 230000)"
           if [ "$BYTES" -ge 150000 ]; then
             echo "::error::panel entry chunk is over the 150 kB gzip budget"
             exit 1

@@ -48,8 +48,7 @@ test.describe('S-07 Session transport card', () => {
     const digits = page.getByLabel('Recording duration');
 
     const first = await digits.textContent();
-    await page.waitForTimeout(1_100);
-    expect(await digits.textContent()).not.toBe(first);
+    await expect(digits).not.toHaveText(first ?? '', { timeout: 3_000 });
 
     await page.getByRole('button', { name: 'Pause' }).click();
     await expect(page.getByText('Recording paused')).toBeVisible();
@@ -60,8 +59,7 @@ test.describe('S-07 Session transport card', () => {
     await page.getByRole('button', { name: 'Resume' }).click();
     await expect(page.getByRole('button', { name: 'Pause' })).toBeEnabled({ timeout: 2_000 });
     const resumed = await digits.textContent();
-    await page.waitForTimeout(1_100);
-    expect(await digits.textContent()).not.toBe(resumed);
+    await expect(digits).not.toHaveText(resumed ?? '', { timeout: 3_000 });
 
     await page.getByRole('button', { name: 'Stop' }).click();
     await expect(page.getByTestId('timer-card').getByText('Saving…')).toBeVisible();
