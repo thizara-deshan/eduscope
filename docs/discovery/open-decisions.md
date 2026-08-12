@@ -20,19 +20,19 @@
 
 | ID | Decision | Origin | Who decides | Latest phase w/o rework | Default if unresolved |
 |----|----------|--------|-------------|-------------------------|------------------------|
-| D-02b | Upload API specification | Seed | Institute (spec owner) + PM | Phase 4 | Build against placeholder contract |
-| D-03 | On-device database | Seed | Tech lead / architect | Phase 3 | SQLite + Drizzle |
-| D-10 | Room-controls hardware | Seed | PM + hardware engineer | Post-launch (Phase 5+) | UI stays placeholder |
-| D-12 | Physical room hardware (record button, camera switch) | Discovery | PM + hardware engineer | Phase 3 | Retire both |
-| D-13 | Upload timing policy (immediate vs windowed) | Discovery | PM + institute IT | Phase 3 | Immediate auto-upload, no windows |
-| D-14 | Auto-shutdown after uploads | Discovery | PM | Phase 4 | Drop |
-| D-15 | Disk-pressure retention behavior | Discovery | PM | Phase 3 | Uploaded-oldest-first early delete; block start when critical |
-| D-16 | Wi-Fi provisioning | Discovery | PM | Phase 2 | Drop — wired only |
-| D-17 | Time/NTP/timezone ownership | Discovery | PM + institute IT staff | Phase 2 (UI) / Phase 3 (deploy) | Deploy layer owns; UI read-only |
+| D-02b | Upload API specification | Seed | Institute (spec owner) + PM | Phase 4 | Build against placeholder contract — **deferral documented [ADR-002](../adr/ADR-002-upload-api-spec-deferral.md)** |
+| ~~D-03~~ | On-device database | Seed | Tech lead / architect | Phase 3 | **Closed 2026-08-12 → SQLite + Drizzle ([ADR-001](../adr/ADR-001-on-device-database.md))** |
+| D-10 | Room-controls hardware | Seed | PM + hardware engineer | Post-launch (Phase 5+) | UI stays placeholder — **deferral documented [ADR-004](../adr/ADR-004-room-controls-hardware-deferral.md)** |
+| ~~D-12~~ | Physical room hardware (record button, camera switch) | Discovery | PM + hardware engineer | Phase 3 | ✅ **Decided 2026-08-12 → Retire both** (PM ratification, §11) |
+| ~~D-13~~ | Upload timing policy (immediate vs windowed) | Discovery | PM + institute IT | Phase 3 | ✅ **Decided 2026-08-12 → Immediate auto-upload, no windows** (PM ratification, §11) |
+| D-14 | Auto-shutdown after uploads | Discovery | PM | Phase 4 | Drop — **deferral documented [ADR-003](../adr/ADR-003-auto-shutdown-after-uploads.md)** |
+| ~~D-15~~ | Disk-pressure retention behavior | Discovery | PM | Phase 3 | ✅ **Decided 2026-08-12 → Uploaded-oldest-first early delete; never delete un-uploaded; block start when critical** (PM ratification, §11) |
+| ~~D-16~~ | Wi-Fi provisioning | Discovery | PM | Phase 2 | ✅ **Decided 2026-08-12 → Drop — wired only** (PM ratification, §11) |
+| ~~D-17~~ | Time/NTP/timezone ownership | Discovery | PM + institute IT staff | Phase 2 (UI) / Phase 3 (deploy) | ✅ **Decided 2026-08-12 → Deploy layer owns; UI read-only** (PM ratification, §11) |
 | D-18 | Scheduled recordings | Discovery | PM | Phase 1 | Retire — not in scope |
-| D-19 | Streaming platform list | Discovery | PM | Phase 2 | YouTube + Facebook + Custom RTMP |
-| D-20 | Home of provisioning powers (ex dev-admin) | Discovery | PM + tech lead | Phase 3 | Deploy-layer config, no UI page |
-| D-21 | Class-roster provenance (quiz/leaderboard) | Discovery | PM + institute | Phase 3 | Quiz-app self-registration |
+| ~~D-19~~ | Streaming platform list | Discovery | PM | Phase 2 | ✅ **Decided 2026-08-12 → YouTube + Facebook + Custom RTMP** (PM ratification, §11) |
+| ~~D-20~~ | Home of provisioning powers (ex dev-admin) | Discovery | PM + tech lead | Phase 3 | ✅ **Decided 2026-08-12 → Deploy-layer config, no UI page** (PM ratification, §11) |
+| ~~D-21~~ | Class-roster provenance (quiz/leaderboard) | Discovery | PM + institute | Phase 3 | ✅ **Decided 2026-08-12 → Quiz-app self-registration** (PM ratification, §11) |
 | SQO-1 | Institution student-ID validation policy values | S-37…S-41 wireframe gate | PM + institute | Before Wave 7 contract application | **Resolved 2026-08-11** — `^[A-Z]{2}[0-9]{7,8}$`, text input, max 10; applied with CG-1 in v0.6.0 |
 
 ---
@@ -41,7 +41,8 @@
 
 ### Carried over from the seed register
 
-#### D-02b — Upload API specification *(architecture decided: A-19)*
+#### D-02b — Upload API specification *(architecture decided: A-19)* ⏸️ DEFERRAL DOCUMENTED ([ADR-002](../adr/ADR-002-upload-api-spec-deferral.md))
+- **Deferral:** architecture accepted (A-19); concrete spec pending the institute; project proceeds on the placeholder contract, revisited in Phase 4 via Prompt 12. Register entry remains open until the spec lands.
 - **Question:** exact request/response contract of the new institute upload API (metadata fields, auth, resumability, error semantics).
 - **Options on the table:** new institute API — spec to be provided by the institute.
 - **Blocks (concrete):**
@@ -55,7 +56,8 @@
 - **Who decides:** the institute (spec owner); PM negotiates and accepts.
 - **Latest phase without rework:** **Phase 4** — the adapter pattern (A-19) was chosen precisely so only the adapter changes; landing later than Phase-4 integration start means the real adapter slips the end-to-end gate.
 
-#### D-03 — On-device database
+#### D-03 — On-device database ✅ CLOSED 2026-08-12 ([ADR-001](../adr/ADR-001-on-device-database.md))
+- **Outcome:** SQLite + Drizzle with an explicit, versioned migration set. Ripple checklist (core-api data layer, migrations, parameterized-query rewrite, session-state and job-queue schemas) lives in the ADR and is scheduled into Prompt 11. No contract impact.
 - **Question:** storage engine for core-api.
 - **Options on the table:** (a) SQLite + Drizzle (recommended for appliance); (b) MySQL (`mysql2`); (c) Postgres.
 - **Blocks (concrete):**
@@ -68,7 +70,8 @@
 - **Who decides:** tech lead / architect.
 - **Latest phase without rework:** **Phase 3** (Backend Architecture) — the data-layer design and migration set are Phase-3 deliverables; the Phase-2 frontend never sees the engine.
 
-#### D-10 — Room controls hardware (projector power / lights / AC)
+#### D-10 — Room controls hardware (projector power / lights / AC) ⏸️ DEFERRAL DOCUMENTED ([ADR-004](../adr/ADR-004-room-controls-hardware-deferral.md))
+- **Deferral:** UI placeholder only; no lights/AC/projector-power backend this release; revisit post-launch (Phase 5+). Master mic mute stays the only live control.
 - **Question:** control pipelines for room devices.
 - **Options on the table:** hardware engineer reports control pipelines "still in progress".
 - **Blocks (concrete):** nothing in this release (PM confirmed) — matrix §4 "Room Controls" row ships `room/RoomControlsPanel` as placeholder (master mic mute is the only live control, owned by the real-mic-control row). Mildly related: §5.1 item 6 suggests Room Controls as the home for the power-off button — that placement does **not** depend on D-10.
@@ -78,7 +81,8 @@
 
 ### New — surfaced by discovery
 
-#### D-12 — Physical room hardware: record button + 4-way camera switch
+#### D-12 — Physical room hardware: record button + 4-way camera switch ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-005](../adr/ADR-005-physical-room-hardware-retirement.md)
+- **Outcome:** retire both; recording is controlled from the touch panel only. No GPIO event path in the pipeline-manager (Prompt 10 scope) and no hardware-initiated state transition.
 - **Question:** are the GPIO record button (B-13) and the 4-way camera-switch button (B-62 `indicators` writer) live hardware in deployed rooms that the rewrite must support, or dead half-wired features to retire?
 - **Origin:** inventory "Needs human confirmation" item 8; both are half-wired today (button flips a DB flag nothing reads; switch writes rows with no reader).
 - **Blocks (concrete):** matrix §3 "Physical record button" and "4-way camera-switch button" RETIRE rows (each carries this exact veto); pipeline-manager design scope (prompt 10) — if kept, GPIO events become pipeline-manager inputs and the recording state machine gains a hardware-initiated stop/switch transition (B-05's LED handling is the pattern); record-LED itself is **not** part of this decision (kept per B-05).
@@ -86,7 +90,8 @@
 - **Who decides:** PM (is it product?) with hardware engineer (is it wired on the new Radxa build?).
 - **Latest phase without rework:** **Phase 3** — pipeline-manager design must include the GPIO event path if kept; resurrecting it in Phase 4 reopens the state machine and the design doc.
 
-#### D-13 — Upload timing policy: immediate vs windowed
+#### D-13 — Upload timing policy: immediate vs windowed ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-006](../adr/ADR-006-upload-timing-policy.md)
+- **Outcome:** immediate auto-upload on recording finish (resumable, retries); no windows, no toggle. Upload-queue view includes a per-file manual re-enqueue action.
 - **Question:** A-19 says recordings auto-upload, killing the legacy instant/scheduled toggle — but does the institute need upload *windows* (bandwidth protection during teaching hours), and is per-file manual re-enqueue an operator action?
 - **Origin:** B-22 (windowed uploads with positional settings rows), B-30 (fake "instant" mode — silent no-op, do not carry), matrix §1a `fus` row and §5.1 item 2; §2c `fmupload` RETIRE row's veto (manual re-upload as re-enqueue).
 - **Blocks (concrete):** upload job queue service design (matrix §5.2 item 8); Admin UI — whether an upload-schedule card exists at all (Phase-2 upload-queue status view, §5.1 item 2); B-22's window semantics (wrap-around-midnight, backup window) — carried or dropped.
@@ -94,7 +99,8 @@
 - **Who decides:** PM with institute IT (they own the network-load concern).
 - **Latest phase without rework:** **Phase 3** — the queue service design either has a scheduler or it doesn't; adding windows in Phase 4 also retrofits the Admin UI.
 
-#### D-14 — Auto-shutdown after uploads
+#### D-14 — Auto-shutdown after uploads ⏸️ DEFERRAL DOCUMENTED ([ADR-003](../adr/ADR-003-auto-shutdown-after-uploads.md))
+- **Deferral:** dropped on the documented default; manual power-off (B-50) is the only shutdown path; PM may revisit in Phase 4 (small hook, no UI/contract impact).
 - **Question:** resurrect "power off the device after the nightly upload batch completes" (a disabled stub in legacy) or drop it?
 - **Origin:** B-29 (stub with commented-out body — no shutdown ever occurs); inventory item 8.
 - **Blocks (concrete):** matrix §3 upload-pipeline row (queue-drained hook); B-50/power-off row (§2g) — the refuse-while-recording rule and shutdown path would be shared; couples to D-13 (only meaningful if uploads batch at night).
@@ -102,7 +108,8 @@
 - **Who decides:** PM (facilities/energy policy question).
 - **Latest phase without rework:** **Phase 4** — it is a small hook on the queue-drained event plus a config flag; no UI or contract impact.
 
-#### D-15 — Disk-pressure retention behavior
+#### D-15 — Disk-pressure retention behavior ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-007](../adr/ADR-007-disk-pressure-retention.md)
+- **Outcome:** at a configured pressure threshold, delete already-uploaded recordings oldest-first even if <14 days; never auto-delete a never-uploaded recording; when critically full with nothing eligible, refuse new recording starts with a clear dashboard warning.
 - **Question:** A-20 fixes auto-delete at 14 days — but what happens when the disk fills *before* 14 days (legacy: hardcoded 80 % threshold, delete >7-day-old files **including never-uploaded ones**)? Delete early (which files first?), block new recordings, or both?
 - **Origin:** B-20 (cleanup cron ignores upload status; inert `duf`/`fdd` settings), B-53 (Home warning tied to the 80 % threshold), matrix §3 "Storage cleanup cron" row and §5.1 item 7.
 - **Blocks (concrete):** retention job design in core-api (matrix §3 cleanup row); lecturer-facing storage warning design (§5.1 item 7 — the warning text must state the real policy, B-53's lesson); recording-start precondition in the state machine (can a start be refused for disk space?); `LocalStoragePage` capacity semantics.
@@ -110,7 +117,8 @@
 - **Who decides:** PM.
 - **Latest phase without rework:** **Phase 3** — the refused-start rule is a state-machine transition and the warning is a Phase-2 dashboard element; the default keeps both buildable now, but reversing "never delete un-uploaded" later changes the retention job only (cheap), while removing the refused-start state later touches contract + UI.
 
-#### D-16 — Wi-Fi provisioning
+#### D-16 — Wi-Fi provisioning ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-008](../adr/ADR-008-wifi-provisioning-dropped.md)
+- **Outcome:** drop — wired-only appliance; no SSID UI, no wireless stack.
 - **Question:** does the appliance need Wi-Fi/SSID configuration, or is it wired-only?
 - **Origin:** B-54 (SSID CRUD endpoints with fully commented-out UI; **no** wireless command anywhere in the codebase — the architecture map's "SSID via nmcli" claim is a MAP GAP); inventory item 8.
 - **Blocks (concrete):** matrix §1a device/network settings row (SSID rows RETIRE-unless-roadmap); `admin/pages/NetworkSettings.tsx` scope (LAN + vLAN + camera IPs today); deploy-layer netplan work (§5.2 item 10).
@@ -118,7 +126,8 @@
 - **Who decides:** PM.
 - **Latest phase without rework:** **Phase 2** — NetworkSettings is built in Phase 2; adding a Wi-Fi card later is UI + deploy-layer rework.
  
-#### D-17 — Time / NTP / timezone ownership
+#### D-17 — Time / NTP / timezone ownership ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-009](../adr/ADR-009-device-time-ownership.md)
+- **Outcome:** deploy layer owns it — NTP + timezone configured at provisioning; Admin UI shows current time/sync status read-only (a line on an existing page, not a page of its own). No user-editable clock.
 - **Question:** who owns device time — an Admin UI page, or the deploy layer (preconfigured NTP/timezone) with at most a read-only display? Legacy's pickers were placebo, but correct time is load-bearing: generated titles (A-07), 14-day retention (A-20), upload windows (D-13), log timestamps (SystemLogs).
 - **Origin:** B-55 (sys.jsx time pickers only `console.log`); matrix §1a System-page RETIRE row and §5.1 item 8.
 - **Blocks (concrete):** Admin UI page list (does a System/Time page exist? — Phase 2); deploy-layer provisioning spec (chrony/NTP + timezone, `Asia/Colombo` assumption in B-22); SystemLogs timestamp trustworthiness (§4 System Logs row).
@@ -127,6 +136,7 @@
 - **Latest phase without rework:** **Phase 2** for the UI question (page exists or not); **Phase 3** for the deploy-layer mechanism.
 
 #### D-18 — Scheduled recordings
+> Note: D-18 was **not** on the PM ratification sheet — its default (retire) lands earliest at Phase 1 and is treated as already-held by the PRD/domain model. If the PM later wants scheduling, it is the expensive post-freeze path noted below.
 - **Question:** legacy stored "Schedule Settings" nothing ever consumed (placebo). Is unattended, timetable-driven recording a roadmap feature, or retired?
 - **Origin:** B-55 (`ss` settings CRUD, no consumer); matrix §1a Schedule-settings RETIRE row's veto ("then it becomes NEW design work").
 - **Blocks (concrete):** if resurrected, this is the widest-blast open item: the domain model and recording state machine (prompt 04/05) gain an unattended-start actor, A-07's one-tap model gains a scheduler, and the mutual-exclusion rules (B-15) need a machine-initiated variant. If retired: nothing — the RETIRE row stands.
@@ -134,7 +144,8 @@
 - **Who decides:** PM.
 - **Latest phase without rework:** **Phase 1** — it must be in the PRD/domain model/state machines to land cheaply; after the contract freezes, it is a contract-version bump and new screens. (Given the default, silence is safe; a *yes* after Phase 1 is the expensive path.)
 
-#### D-19 — Streaming platform list
+#### D-19 — Streaming platform list ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-010](../adr/ADR-010-streaming-platform-list.md)
+- **Outcome:** YouTube + Facebook as first-class options (A-10), plus one generic Custom RTMP entry (URL + key) covering anything else without per-platform code. No Twitter/LinkedIn tiles.
 - **Question:** reconcile three platform lists: legacy flags (Facebook/YouTube/Twitter/LinkedIn, B-59), A-10's launch set (YouTube + Facebook, "others later"), and the prototype's picker (Twitch + Custom RTMP among them).
 - **Origin:** matrix §1 Live-Stream-setup row ("reconcile the platform list"); B-58 (FB URLs need the stunnel4 RTMPS bridge — platform choice has infrastructure weight), B-59.
 - **Blocks (concrete):** `admin/pages/StreamingConfig.tsx` platform picker contents (Phase 2); streaming relay design (which platforms need RTMPS bridging — §2a stream-control row); saved-config schema in core-api.
@@ -142,7 +153,8 @@
 - **Who decides:** PM.
 - **Latest phase without rework:** **Phase 2** — it's the picker's contents; adding a generic Custom RTMP now makes later platform additions config, not rework.
 
-#### D-20 — Home of provisioning powers (ex dev-admin)
+#### D-20 — Home of provisioning powers (ex dev-admin) ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-011](../adr/ADR-011-provisioning-powers-home.md)
+- **Outcome:** deploy layer owns provisioning — institute profile, hall code, and storage identity live in a config store written at install time (documented flow, not a UI); Admin UI shows device identity read-only. HDD swap/format stays an Admin-UI operation (IT staff do it in the field, A-21).
 - **Question:** the role model collapses user/admin/dev-admin → lecturer/admin (A-21). Where do dev-admin's provisioning powers go — upload-domain/institute profile (B-47), storage identity + HDD registration (B-51), SD-card path, hall code (A-07)? Into the Admin UI, or into a deploy-layer config store with no UI?
 - **Origin:** matrix §1 settings-shell row ("decide explicitly whether dev-admin's provisioning powers fold into admin or into the deploy layer"), §1a Dev-options row, §5.1 item 9.
 - **Blocks (concrete):** Admin UI page list (Phase 2 — is there a Provisioning page?); core-api config-store design (typed config replacing `.env` sed-ing, B-47/B-48; boot-frozen `isSliit` B-26 must not recur); deploy-layer provisioning flow (§5.1 item 9); hall-code source for A-07 titles; role-permission matrix (B-43 successor).
@@ -150,7 +162,8 @@
 - **Who decides:** PM with tech lead (who owns the deploy layer).
 - **Latest phase without rework:** **Phase 3** — the config store and deploy layer are Phase-3 designs; moving provisioning *into* the UI later adds screens but doesn't break the store, while the reverse (UI first, then ripping it out) is rework.
 
-#### D-21 — Class-roster provenance for quiz identity & leaderboard
+#### D-21 — Class-roster provenance for quiz identity & leaderboard ✅ DECIDED 2026-08-12 (PM ratification, §11) — [ADR-012](../adr/ADR-012-quiz-roster-provenance.md)
+- **Outcome:** quiz-app self-registration — students enter name + student ID on first join (validated per SQO-1, no email verification); leaderboard keys on student ID; roster import/SSO is a later upgrade that maps onto the same IDs. Couples to D-02b only if the institute API later exposes enrollment.
 - **Question:** the leaderboard and per-student drill-down (A-16) need student names + IDs. Where does the roster come from — the institute API (D-02b), quiz-app self-registration at first join, or manual import?
 - **Origin:** matrix §4 Insights-panel row ("mock `CLASS_ROSTER` today — roster provenance is undecided, likely D-02b-adjacent"); A-16 (basic login now, SSO later; leaderboard = name + ID, panel-only).
 - **Blocks (concrete):** Quiz App account/data model (§5.2 item 2 — basic login now must be designed against *some* identity source); `LeaderboardPanel`/`StudentDetailDialog`/`NamesDialog` data contract; device↔quiz-server sync payload (does the device ever hold roster data?); couples to D-02b (if the institute API exposes enrollment) and to the SSO-later path.
@@ -208,6 +221,27 @@ Discovery cross-refs added; outcomes are verbatim from the seed register.
 | A-20 | Recordings library rules | Lecturers + admins play; only admins delete; auto-delete after 14 days. | Governs matrix §1 FM row, §2c rows, §3 cleanup row; disk-pressure detail is D-15 |
 | A-21 | User management | Bulk Excel import required; admin section for IT staff; no migration from old devices. | Matrix §1a UM row (B-44 validation is the baseline contract); role collapse feeds D-20 |
 | A-22 | Projector question flow | Send-to-projector = overlay/switch from slides passthrough to question + join QR; simultaneously live on the quiz app. Leaderboard never on projector. | Matrix §4 projector rows |
+
+### A-xx → ADR index (back-documented 2026-08-12)
+
+All 22 A-xx decisions are recorded as ADRs, merged where topically coherent and kept
+separate where a decision is cited independently downstream. Each ADR lists its ripple
+checklist without applying it (contract items route through Prompt 12).
+
+| ADR | Covers A-xx | Theme |
+|-----|-------------|-------|
+| [ADR-013](../adr/ADR-013-programme-strategy-scope-method.md) | A-01, A-03, A-04 | Programme: strategy, scope, method |
+| [ADR-014](../adr/ADR-014-hardware-av-io-topology.md) | A-06, A-08, A-11, A-18 | Hardware & AV I/O topology |
+| [ADR-015](../adr/ADR-015-pipeline-architecture-runtime.md) | A-05, A-13 | Pipeline architecture & runtime |
+| [ADR-016](../adr/ADR-016-recording-session-model.md) | A-07, A-12 | Recording session model |
+| [ADR-017](../adr/ADR-017-output-channels-layout-model.md) | A-09 | Output channels & layout |
+| [ADR-018](../adr/ADR-018-live-streaming-path.md) | A-10 | Live streaming path |
+| [ADR-019](../adr/ADR-019-live-meeting-integration.md) | A-15 | Live meeting integration |
+| [ADR-020](../adr/ADR-020-ai-serving-question-cadence.md) | A-02, A-14 | On-device AI serving & cadence |
+| [ADR-021](../adr/ADR-021-quiz-platform-projector-flow.md) | A-16, A-22 | Quiz platform & projector flow |
+| [ADR-022](../adr/ADR-022-panel-thumbnail-transport-webrtc.md) | A-17 | Panel thumbnail transport (WebRTC) |
+| [ADR-023](../adr/ADR-023-recording-storage-retention-upload.md) | A-19, A-20 | Recording storage, retention & upload |
+| [ADR-024](../adr/ADR-024-user-management-role-model.md) | A-21 | User management & role model |
 
 ---
 
@@ -664,3 +698,35 @@ onto the same student IDs, and no screen assumes a roster exists.
   preserves the PRD/domain/state-machine invariants rather than porting legacy UI.
 - Student privacy is structural: no response or component accepts a class list
   or another student's identity/result; S-40/S-41 receive own summaries only.
+
+---
+
+## 11. Decided at PM ratification — D-12, D-13, D-15, D-16, D-17, D-19, D-20, D-21 (2026-08-12)
+
+The PM ratified all eight defaults on the ratification sheet
+([pm-ratification-2026-08-12.md](pm-ratification-2026-08-12.md)) with **no
+overrides**. Each default was the assumption the Phase-2 frontend mock was already
+built on, so ratification is a confirmation, not a design change. All eight are now
+**decided**; an **ADR (prompt 15) is pending for each** before the Phase-3
+pipeline-manager and service designs (Prompts 10–11) consume them.
+
+The two decisions closed earlier this day are recorded with them for a single index:
+D-03 (architect-owned, [ADR-001](../adr/ADR-001-on-device-database.md)) and the three
+deferral ADRs (D-02b/[ADR-002](../adr/ADR-002-upload-api-spec-deferral.md),
+D-14/[ADR-003](../adr/ADR-003-auto-shutdown-after-uploads.md),
+D-10/[ADR-004](../adr/ADR-004-room-controls-hardware-deferral.md)).
+
+| ID | Outcome (ratified default) | Primarily feeds | ADR |
+|----|----------------------------|-----------------|-----|
+| D-12 | Retire the GPIO record button and 4-way camera switch; panel-only recording control — no GPIO event path, no hardware-initiated state transition | Pipeline-manager scope (Prompt 10); recording state machine | [ADR-005](../adr/ADR-005-physical-room-hardware-retirement.md) |
+| D-13 | Immediate auto-upload on finish (resumable, retries); no windows, no toggle; per-file manual re-enqueue in the queue view | Upload job-queue service design (Prompt 11); Admin UI | [ADR-006](../adr/ADR-006-upload-timing-policy.md) |
+| D-15 | At a pressure threshold delete uploaded-oldest-first even if <14 days; never auto-delete a never-uploaded recording; refuse new starts when critically full, with a dashboard warning | Retention job (Prompt 11); recording-start precondition (state machine); dashboard warning (Phase 2) | [ADR-007](../adr/ADR-007-disk-pressure-retention.md) |
+| D-16 | Wired-only appliance; no SSID UI, no wireless stack | NetworkSettings scope; deploy-layer netplan | [ADR-008](../adr/ADR-008-wifi-provisioning-dropped.md) |
+| D-17 | Deploy layer owns NTP + timezone; Admin UI shows time/sync status read-only; no user-editable clock | Deploy-layer provisioning; SystemLogs timestamp trust; Admin UI | [ADR-009](../adr/ADR-009-device-time-ownership.md) |
+| D-19 | YouTube + Facebook first-class + one generic Custom RTMP (URL + key); no Twitter/LinkedIn tiles | StreamingConfig picker (Phase 2); streaming relay design; saved-config schema | [ADR-010](../adr/ADR-010-streaming-platform-list.md) |
+| D-20 | Deploy-layer config store owns provisioning (institute profile, hall code, storage identity); Admin UI device identity read-only; HDD swap/format stays an Admin-UI op | core-api config-store design (Prompt 11); deploy-layer flow; A-07 hall-code source; role-permission matrix | [ADR-011](../adr/ADR-011-provisioning-powers-home.md) |
+| D-21 | Quiz-app self-registration (name + student ID at first join, validated per SQO-1, no email verify); leaderboard keys on student ID; import/SSO later maps onto the same IDs | Quiz-service identity model (Prompt 11); leaderboard/detail data contract; device↔quiz-server sync | [ADR-012](../adr/ADR-012-quiz-roster-provenance.md) |
+
+**Contract note.** None of the eight forces a `contracts/` change on its own; any
+element they touch is tagged and reconciled at the Prompt-12 drift review. Each ADR
+lists its ripple checklist without applying it.
