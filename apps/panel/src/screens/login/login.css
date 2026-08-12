@@ -33,10 +33,9 @@
 }
 
 .us-login__logo {
-  color: var(--brand-red);
-  font-size: var(--fs-lg);
-  font-weight: 800;
-  letter-spacing: var(--tracking-wide);
+  height: 40px;
+  width: auto;
+  display: block;
 }
 
 .us-login__body {

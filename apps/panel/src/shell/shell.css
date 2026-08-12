@@ -21,10 +21,9 @@
 }
 
 .us-header__logo {
-  color: var(--brand-red);
-  font-size: var(--fs-md);
-  font-weight: 800;
-  letter-spacing: var(--tracking-wide);
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
 .us-header__divider {

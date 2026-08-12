@@ -1,18 +1,18 @@
-import type { IntervalMinutes } from '@eduscope/shared';
-import { useTicker } from '../../hooks/use-ticker.js';
-import { useOverlays } from '../../overlays/overlay-host.js';
-import { useAiStudio } from '../../ai/use-ai-studio.js';
-import { QuestionsModal } from './questions-modal.js';
-import { QuizJoinChip } from './quiz-join-chip.js';
-import '../../ai/ai.css';
+import type { IntervalMinutes } from "@eduscope/shared";
+import { useTicker } from "../../hooks/use-ticker.js";
+import { useOverlays } from "../../overlays/overlay-host.js";
+import { useAiStudio } from "../../ai/use-ai-studio.js";
+import { QuestionsModal } from "./questions-modal.js";
+import { QuizJoinChip } from "./quiz-join-chip.js";
+import "../../ai/ai.css";
 
 const INTERVALS: readonly IntervalMinutes[] = [10, 15, 20, 30];
 
 function formatRemaining(ms: number | null): string {
-  if (ms === null) return '--:--';
+  if (ms === null) return "--:--";
   const total = Math.max(0, Math.floor(ms / 1_000));
-  const minutes = String(Math.floor(total / 60)).padStart(2, '0');
-  const seconds = String(total % 60).padStart(2, '0');
+  const minutes = String(Math.floor(total / 60)).padStart(2, "0");
+  const seconds = String(total % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
 }
 
@@ -30,7 +30,9 @@ export function AiStudioCard() {
   const now = useTicker(1_000);
 
   const openReview = () => {
-    const id = overlays.open(<QuestionsModal onClose={() => overlays.close(id)} />);
+    const id = overlays.open(
+      <QuestionsModal onClose={() => overlays.close(id)} />,
+    );
   };
   const generateAndReview = () => {
     studio.generateNow();
@@ -49,13 +51,14 @@ export function AiStudioCard() {
     );
   }
 
-  const remainingMs = studio.nextAt !== null
-    ? Math.max(0, Date.parse(studio.nextAt) - now)
-    : studio.remainingMs;
+  const remainingMs =
+    studio.nextAt !== null
+      ? Math.max(0, Date.parse(studio.nextAt) - now)
+      : studio.remainingMs;
 
   return (
     <section
-      className={`us-assistant us-studio${studio.stale ? ' us-studio--stale' : ''}`}
+      className={`us-assistant us-studio${studio.stale ? " us-studio--stale" : ""}`}
       data-testid="ai-studio-card"
       data-screen="S-13"
       data-state={studio.state}
@@ -63,18 +66,26 @@ export function AiStudioCard() {
     >
       <header className="us-assistant__head">
         <div className="us-assistant__titlewrap">
-          <span className="us-assistant__badge" aria-hidden="true">✨</span>
+          <span className="us-assistant__badge" aria-hidden="true">
+            ✨
+          </span>
           <div>
             <h1 className="us-assistant__title">Eduscope AI Studio</h1>
-            <p className="us-assistant__sub">Turn your lecture into instant classroom questions</p>
+            <p className="us-assistant__sub">
+              Turn your lecture into instant classroom questions
+            </p>
           </div>
         </div>
         <QuizJoinChip />
       </header>
 
       <div className="us-studio__body">
-        {studio.state === 'degraded' ? (
-          <div className="us-studio__unavailable" role="alert" data-testid="ai-studio-degraded">
+        {studio.state === "degraded" ? (
+          <div
+            className="us-studio__unavailable"
+            role="alert"
+            data-testid="ai-studio-degraded"
+          >
             <p>The question service is not responding.</p>
             <button
               type="button"
@@ -82,29 +93,37 @@ export function AiStudioCard() {
               disabled={studio.generatePending}
               onClick={studio.generateNow}
             >
-              {studio.generatePending ? 'Retrying…' : 'Retry'}
+              {studio.generatePending ? "Retrying…" : "Retry"}
             </button>
           </div>
         ) : (
           <div className="us-studio__generate">
             <div className="us-genside">
-              <span className="us-genside__title">Generate questions every</span>
+              <span className="us-genside__title">
+                Generate questions every
+              </span>
               <select
                 className="us-genside__select"
                 value={studio.intervalMinutes}
-                disabled={studio.state === 'held' || studio.intervalPending}
-                onChange={(event) => studio.setInterval(Number(event.target.value) as IntervalMinutes)}
+                disabled={studio.state === "held" || studio.intervalPending}
+                onChange={(event) =>
+                  studio.setInterval(
+                    Number(event.target.value) as IntervalMinutes,
+                  )
+                }
                 aria-label="Auto-generation interval"
               >
                 {INTERVALS.map((minutes) => (
-                  <option key={minutes} value={minutes}>{minutes} Minutes</option>
+                  <option key={minutes} value={minutes}>
+                    {minutes} Minutes
+                  </option>
                 ))}
               </select>
               <span className="us-genside__hint" aria-live="polite">
-                {studio.state === 'held'
-                  ? 'Paused — nothing new is being transcribed'
+                {studio.state === "held"
+                  ? "Paused — nothing new is being transcribed"
                   : studio.intervalPending
-                    ? 'Interval updating…'
+                    ? "Interval updating…"
                     : `⟳ Next set in ${formatRemaining(remainingMs)}`}
               </span>
             </div>
@@ -116,27 +135,47 @@ export function AiStudioCard() {
             </div>
 
             <div className="us-genside">
-              <span className="us-genside__title">Generate now</span>
+              {/* <span className="us-genside__title">Generate now</span> */}
               <button
                 type="button"
                 className="us-genbtn"
-                disabled={studio.state === 'held' || studio.state === 'generating' || studio.generatePending}
+                disabled={
+                  studio.state === "held" ||
+                  studio.state === "generating" ||
+                  studio.generatePending
+                }
                 onClick={generateAndReview}
               >
-                {studio.state === 'generating' || studio.generatePending ? 'Generating…' : 'Generate Questions Now'}
+                {studio.state === "generating" || studio.generatePending
+                  ? "Generating…"
+                  : "Generate Questions Now"}
               </button>
-              <span className="us-genside__hint">From everything taught so far.</span>
+              <span className="us-genside__hint">
+                From everything taught so far.
+              </span>
             </div>
           </div>
         )}
 
         {studio.refusal !== null ? (
-          <p className="us-studio__refusal" role="alert" data-testid="ai-studio-refusal">{studio.refusal}</p>
+          <p
+            className="us-studio__refusal"
+            role="alert"
+            data-testid="ai-studio-refusal"
+          >
+            {studio.refusal}
+          </p>
         ) : null}
 
         {studio.setFailed ? (
-          <div className="us-studio__setfailed" role="alert" data-testid="ai-studio-setfailed">
-            <span>Couldn&apos;t generate questions ({studio.setErrorReason}).</span>
+          <div
+            className="us-studio__setfailed"
+            role="alert"
+            data-testid="ai-studio-setfailed"
+          >
+            <span>
+              Couldn&apos;t generate questions ({studio.setErrorReason}).
+            </span>
             <button
               type="button"
               className="us-genbtn"
@@ -150,14 +189,24 @@ export function AiStudioCard() {
 
         {studio.setReady ? (
           <div className="us-readybanner" data-testid="ai-studio-readybanner">
-            <span className="us-readybanner__icon" aria-hidden="true">✓</span>
+            <span className="us-readybanner__icon" aria-hidden="true">
+              ✓
+            </span>
             <div className="us-readybanner__text">
               <span className="us-readybanner__title">A new set is ready</span>
               <span className="us-readybanner__sub">
-                {studio.draftCount} {studio.draftCount === 1 ? 'question' : 'questions'} drafted from your lecture
+                {studio.draftCount}{" "}
+                {studio.draftCount === 1 ? "question" : "questions"} drafted
+                from your lecture
               </span>
             </div>
-            <button type="button" className="us-readybanner__btn" onClick={openReview}>Review Questions</button>
+            <button
+              type="button"
+              className="us-readybanner__btn"
+              onClick={openReview}
+            >
+              Review Questions
+            </button>
           </div>
         ) : null}
       </div>

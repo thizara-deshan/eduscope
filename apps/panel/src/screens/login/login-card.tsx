@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
-import { AuthMessage, type AuthMessageValue } from '../../auth/auth-message.js';
-import './login.css';
+import type { ReactNode } from "react";
+import { AuthMessage, type AuthMessageValue } from "../../auth/auth-message.js";
+import logoDark from "../../assets/eduscopeLogoDark1.png";
+import "./login.css";
 
 /**
  * Auth-blind (S-01 §4): the only piece with layout math in it, so the
@@ -20,7 +21,7 @@ export function LoginCard({
     <div className="us-login">
       <div className="us-login__card">
         <div className="us-login__band" aria-hidden="true">
-          <span className="us-login__logo">Eduscope</span>
+          <img className="us-login__logo" src={logoDark} alt="Eduscope" />
         </div>
         <div className="us-login__body">
           <h1 className="us-login__title">Welcome back</h1>
