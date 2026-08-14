@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eduscope quiz-service — student REST surface
-  version: 0.6.0
+  version: 1.0.0
   description: |
     Student-facing REST contract for Wave 7 (CG-1). The quiz-service owns this
     surface. Participant identity is carried only by the Secure, HttpOnly,
@@ -10,8 +10,12 @@ info:
 
     Join codes are resolved case-insensitively and the public resolution route
     is rate-limited. Registration validates format only and does not consult a
-    roster in v0 (D-21). The authoritative institute policy is
+    roster in v1 (D-21, ratified ADR-012). The authoritative institute policy is
     `^[A-Z]{2}[0-9]{7,8}$`: two uppercase letters followed by 7 or 8 digits.
+
+    **v1.0.0 (2026-08-14):** version bump in lockstep with core-api's Prompt-12
+    drift reconciliation (docs/design/contract-drift-report.md). No shape change
+    to the student surface — D-21 was confirmed as-is.
 
 servers:
   - url: /api/student/v1

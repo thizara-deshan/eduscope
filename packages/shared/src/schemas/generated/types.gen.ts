@@ -785,7 +785,7 @@ export type NetworkConfigUpdate = {
 };
 
 /**
- * Per-channel override is DM-P4 (open).
+ * DM-P4 resolved v1.0.0 (DR-14): device-default plus optional per-channel override.
  */
 export type Scope = 'device-default' | 'channel';
 
@@ -801,9 +801,12 @@ export type AudioCodec = 'aac';
 export type EncodingProfile = {
     id: Ulid;
     /**
-     * Per-channel override is DM-P4 (open).
+     * DM-P4 resolved v1.0.0 (DR-14): device-default plus optional per-channel override.
      */
     scope: 'device-default' | 'channel';
+    /**
+     * Set iff scope = channel; null for the device-default profile.
+     */
     channelId: ChannelId | null;
     videoBitrateKbps: number;
     framerate: number;
@@ -834,7 +837,18 @@ export type EncoderCapabilities = {
     audioBitratesKbps: Array<number>;
 };
 
+/**
+ * DM-P4 resolved v1.0.0 (DR-14). Omitting `channelId` (or sending null)
+ * writes the device-default profile — the pre-v1 behaviour, unchanged for
+ * existing callers. A `channelId` writes that channel's per-channel
+ * override (streaming and local recording may want different bitrates).
+ *
+ */
 export type EncodingProfileUpdate = {
+    /**
+     * null/absent ⇒ device-default (scope=device-default); a ChannelId ⇒ that channel's override (scope=channel).
+     */
+    channelId?: ChannelId | null;
     videoBitrateKbps?: number;
     framerate?: number;
     gop?: number;
@@ -1207,6 +1221,13 @@ export type LogEntry = {
     category: LogCategory;
     service: 'core-api' | 'pipeline-manager' | 'ai' | 'deploy' | 'quiz-sync';
     message: string;
+    /**
+     * DR-01 (v1.0.0): the single `ai` service value covers all three AI
+     * sub-services (STT / slide / question). Attribution rides
+     * `context.subservice` (`stt` | `slide` | `question`) rather than
+     * widening the closed `service` enum — no exhaustive-switch break.
+     *
+     */
     context: {
         [key: string]: unknown;
     } | null;
@@ -1244,6 +1265,14 @@ export type SystemAlert = {
         id: string;
     } | null;
 };
+
+/**
+ * DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+ * quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+ * correlation (ADR-021) but does not hard-reject on it in v1.
+ *
+ */
+export type ContractVersion = string;
 
 export type Cursor = string;
 
@@ -2469,7 +2498,12 @@ export type UpdateNetworkConfigResponse = UpdateNetworkConfigResponses[keyof Upd
 export type GetEncoderSettingsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * DR-14 (v1.0.0) — the channel whose effective profile to read; absent ⇒ device-default.
+         */
+        channelId?: ChannelId;
+    };
     url: '/settings/encoder';
 };
 
@@ -3323,6 +3357,15 @@ export type ExportLogsCsvResponse = ExportLogsCsvResponses[keyof ExportLogsCsvRe
 
 export type QuizSyncCreateSessionData = {
     body: QuizSessionCreateRequest;
+    headers?: {
+        /**
+         * DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+         * quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+         * correlation (ADR-021) but does not hard-reject on it in v1.
+         *
+         */
+        'x-eduscope-contract'?: string;
+    };
     path?: never;
     query?: never;
     url: '/device/v1/quiz-sessions';
@@ -3348,6 +3391,15 @@ export type QuizSyncCreateSessionResponse = QuizSyncCreateSessionResponses[keyof
 
 export type QuizSyncCloseSessionData = {
     body?: never;
+    headers?: {
+        /**
+         * DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+         * quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+         * correlation (ADR-021) but does not hard-reject on it in v1.
+         *
+         */
+        'x-eduscope-contract'?: string;
+    };
     path: {
         quizSessionId: Ulid;
     };
@@ -3366,6 +3418,15 @@ export type QuizSyncCloseSessionResponse = QuizSyncCloseSessionResponses[keyof Q
 
 export type QuizSyncPublishData = {
     body: PublicationPush;
+    headers?: {
+        /**
+         * DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+         * quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+         * correlation (ADR-021) but does not hard-reject on it in v1.
+         *
+         */
+        'x-eduscope-contract'?: string;
+    };
     path?: never;
     query?: never;
     url: '/device/v1/publications';
@@ -3389,6 +3450,15 @@ export type QuizSyncPublishResponses = {
 
 export type QuizSyncClosePublicationData = {
     body: PublicationCloseRequest;
+    headers?: {
+        /**
+         * DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+         * quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+         * correlation (ADR-021) but does not hard-reject on it in v1.
+         *
+         */
+        'x-eduscope-contract'?: string;
+    };
     path: {
         publicationId: Ulid;
     };

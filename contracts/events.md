@@ -1,6 +1,6 @@
-# Eduscope WS Event Catalog — Contract v0
+# Eduscope WS Event Catalog — Contract v1
 
-> Contract **v0.6.0** — the realtime half of [openapi.yaml](openapi.yaml) and
+> Contract **v1.0.0** — the realtime half of [openapi.yaml](openapi.yaml) and
 > [quiz-app.yaml](quiz-app.yaml).
 > Successor of state-machines.md §10; that section now defers here (see its
 > catalog note). Payload schemas are the zod definitions in
@@ -14,6 +14,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 1.0.0 | 2026-08-14 | **Prompt-12 drift reconciliation** ([contract-drift-report.md](../docs/design/contract-drift-report.md)). Ratification bump — every ratified `x-decision` was confirmed as-is. §1 names the `Sec-WebSocket-Protocol` subprotocol as the v1 WS-auth transport (DR-05). §4 records the sync auth scheme as a per-device **static bearer** (DR-03, retiring the "DM-P5 open" wording) and notes the sync stream is intentionally unmocked, backend↔backend (DR-22). `[D-15]`/`[D-21]` tags resolved in place; `[D-02b]` retained (upload payload still deferred, ADR-002). No payload schema changed. |
 | 0.6.0 | 2026-08-11 | §5 defines the participant-cookie-authenticated student WS and atomic connect snapshot (CG-22); student `quiz.question` becomes state-discriminated and names `ownAnswerOptionId` (CG-23); `quiz.result` gains its question snapshot, selected option and rank freshness (CG-24); student `quiz.session` becomes a participation-discriminated terminal summary (CG-25). Wave 7 S-39…S-41 wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.5.0 | 2026-08-09 | §2.18 `UploadJobPayload` gains `failureClass` (CG-20), mirroring the openapi `UploadJob.failureClass` so S-35 can tell an offline stall from a server failure live, not only on a REST snapshot. §1 records the implicit scoped-subscription semantic (CG-3): calling a flow's REST entry marks the AuthSession subscribed to its scoped stream — no WS client→server message. Wave 5 (S-35/S-23) wireframe-gate answers; see [contract-amendments.md](../docs/design/contract-amendments.md). |
 | 0.4.0 | 2026-08-08 | §2.15 `QuizSessionPayload` gains `syncState` (CG-19), mirroring `QuizSessionProjection.syncState` so the joined-count staleness is knowable live and not only on REST snapshot. Wave 4 (S-20) wireframe-gate answer; see [contract-amendments.md](../docs/design/contract-amendments.md). |
@@ -25,8 +26,9 @@
 ## 1. Transport & envelope
 
 **Endpoint.** `GET /api/v1/ws` (upgrade), authenticated with the same bearer
-token as REST (`?token=` or `Sec-WebSocket-Protocol`; Phase-3 hardening
-decides which — the token is short-lived either way, PF-17).
+token as REST, carried in the **`Sec-WebSocket-Protocol` subprotocol** (v1.0.0,
+DR-05 — closes C-8; the `?token=` query form is retired to avoid tokens in URLs).
+The token is short-lived either way (PF-17).
 
 **Direction.** Server→client **only** on this channel — clients send no WS
 messages; commands go over REST (target-architecture §2.1). The two
@@ -158,7 +160,7 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | | |
 |---|---|
 | Direction | core-api → panel, admin |
-| Payload | `StorageStatusPayload` — `pressure`, `freeBytes`, `totalBytes`, `policy` (full `RetentionPolicy` so warning text quotes real values — INV-RP-1) `[D-15]` |
+| Payload | `StorageStatusPayload` — `pressure`, `freeBytes`, `totalBytes`, `policy` (full `RetentionPolicy` so warning text quotes real values — INV-RP-1) _(D-15 confirmed as-is, ADR-007, v1.0.0)_ |
 | Emitter | Machine 5b: HL-10…HL-14; R-20 |
 | Frequency | On transition + every 60 s |
 | Consumers | Dashboard storage warning (LP-12), AD-4 |
@@ -336,11 +338,20 @@ Rules:
 
 ---
 
-## 4. Device ↔ quiz-server sync contract (A-16, QZ-7, DM-P5) `[D-21]`
+## 4. Device ↔ quiz-server sync contract (A-16, QZ-7) — `D-21`/`DM-P5` resolved v1.0.0
 
 Cross-zone and unreliable by construction: the device sits on the campus LAN,
 the quiz server is public, students may be on mobile data. **Every connection
 is device-initiated** — the public zone can never dial into the LAN.
+
+> **v1.0.0 (DR-22):** this stream is **intentionally unmocked** — it is
+> backend↔backend (core-api ↔ quiz-service) with no panel/frontend surface, so
+> the panel mock has nothing to stand in for and instead fabricates the
+> downstream effects (`quiz.responses`, `quiz.session` joined count/`syncState`)
+> directly. Its correctness therefore rests entirely on a **core-api +
+> quiz-service integration test** of the full `sync.hello → replay →
+> answers/participants/heartbeat → stale/fail` loop, gated on the auth scheme
+> below.
 
 Two halves:
 
@@ -354,8 +365,11 @@ Two halves:
    participant counts **back** to the device. Zod:
    `QuizSyncClientMessage` / `QuizSyncServerMessage`.
 
-Auth: provisioned device credential (bearer). The scheme (static token vs
-signed) is an open item under **DM-P5**.
+Auth: provisioned device credential (bearer). **v1.0.0 (DR-03):** the scheme is
+a per-device **static bearer**, minted by the deploy layer at provisioning (D-20)
+and stored hashed at rest on the quiz server; HMAC-signed requests are the
+SSO-era upgrade (D-02b / roster era), not v1. Every outbound REST call carries
+the optional `x-eduscope-contract` header (DR-10, openapi quiz-sync ops).
 
 | Message | Direction | Fields | Emitter / frequency | Consumer |
 |---|---|---|---|---|
@@ -511,7 +525,7 @@ has an endpoint/event.
 | C-4 | **Channel enable/disable only during an active session** (409 `session.not-active` otherwise); idle-state switches write `enabledByDefault` via `PUT /channels/{id}`. Matches machine 1c scope; flag if the panel should treat idle toggles as commands instead. |
 | C-5 | **Network apply is 202 + row-readback** (`appliedAt`/`lastApplyError`) + `system.alert` on failure — no dedicated `network.apply` event, keeping §10's closed catalog small. |
 | C-6 | **Student-app REST surface applied in v0.6 (CG-1).** Join-code resolution, self-registration/rejoin, answer submission, the participant cookie, registration policy, and named problems are quiz-service-owned and defined in `contracts/quiz-app.yaml`. Student realtime payloads and atomic reconnect are §5 here. |
-| C-7 | **Quiz-sync auth scheme** (static bearer vs signed requests) left open under DM-P5; the paths assume `deviceAuth` bearer. |
-| C-8 | **WS auth transport** (`?token=` vs subprotocol) is a Phase-3 hardening pick; both are representable without a contract bump. |
+| C-7 | **Quiz-sync auth scheme — RESOLVED v1.0.0 (DR-03):** per-device static bearer, minted at provisioning (D-20), hashed at rest; HMAC-signed requests are the SSO-era upgrade. |
+| C-8 | **WS auth transport — RESOLVED v1.0.0 (DR-05):** the `Sec-WebSocket-Protocol` subprotocol (the `?token=` form is retired). |
 | C-9 | **`GET /recording/state` + REST snapshot mirrors** exist alongside the WS on-subscribe snapshot so screens can cold-render and the mock adapter is REST-testable. They are read-only mirrors, not second truths (SM-R-1: same single writer). |
 | C-10 | **Retention policy is read-only in v0** (embedded in `/storage` and `storage.status`). No PRD screen edits it; if [D-15] closes with admin-editable thresholds, add `PUT /settings/retention` in v0.2. |
