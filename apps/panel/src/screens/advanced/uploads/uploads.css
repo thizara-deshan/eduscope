@@ -23,42 +23,104 @@
 
 .us-uploads__chip {
   min-height: var(--tap-min);
-  padding: 0 var(--sp-4);
+  padding: 0 var(--sp-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.us-uploads__chip--active {
+@media (hover: hover) {
+  .us-uploads__chip:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+.us-uploads__chip--active,
+.us-uploads__chip--active:hover {
   border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 700;
+}
+
+.us-uploads__chip:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .us-uploads__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  /* Right/bottom breathing room so row shadows aren't clipped by the scroll. */
+  padding: var(--sp-1) var(--sp-1) var(--sp-2) 0;
   overflow-y: auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  scrollbar-gutter: stable;
 }
 
 .us-uploads__empty {
   flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.us-uploads__load-more {
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) {
+  .us-uploads__load-more:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+}
+
+.us-uploads__load-more:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .us-uploadrow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
   min-height: var(--tap-row-lg);
-  padding: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface-2);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (hover: hover) {
+  .us-uploadrow:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
 }
 
 .us-uploadrow__main {
@@ -95,15 +157,61 @@
 
 .us-uploadrow__expand,
 .us-uploadrow__requeue {
+  flex: 0 0 auto;
   min-width: var(--tap-min);
   min-height: var(--tap-min);
 }
 
-.us-uploadrow__requeue {
-  background: var(--accent);
-  color: white;
+.us-uploadrow__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0 var(--sp-4);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .us-uploadrow__expand:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text);
+  }
+}
+
+.us-uploadrow__requeue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-6);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: filter 0.15s ease;
+}
+
+@media (hover: hover) {
+  .us-uploadrow__requeue:hover:not(:disabled) {
+    filter: brightness(0.94);
+  }
+}
+
+.us-uploadrow__requeue:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.us-uploadrow__expand:focus-visible,
+.us-uploadrow__requeue:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .us-uploadrow__refused {

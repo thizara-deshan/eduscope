@@ -1082,15 +1082,22 @@
 
 .us-lb__columns {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 48px 50px 58px 40px;
+  grid-template-columns: 36px minmax(0, 1fr) 56px 54px 68px 46px;
   align-items: center;
   gap: var(--sp-3);
   padding: 0 var(--sp-4) var(--sp-2);
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: var(--tracking-caps);
+  letter-spacing: 0.2px;
   text-transform: uppercase;
+}
+
+.us-lb__columns span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .us-lb__columns span:not(:nth-child(2)) {
@@ -1100,7 +1107,7 @@
 .us-lb__row {
   width: 100%;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 48px 50px 58px 40px;
+  grid-template-columns: 36px minmax(0, 1fr) 56px 54px 68px 46px;
   align-items: center;
   gap: var(--sp-3);
   min-height: 60px;

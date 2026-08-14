@@ -255,6 +255,7 @@
   min-width: var(--tap-min);
   min-height: var(--tap-min);
   accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .us-reclist__body {

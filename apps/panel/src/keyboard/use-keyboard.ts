@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type FocusEvent } from 'react';
 import { create } from 'zustand';
 
 export type OskLayout = 'default' | 'numeric' | 'ip';
 
 export interface OskFieldBinding {
-  onFocus(): void;
+  onFocus(event: FocusEvent<HTMLElement>): void;
   onBlur(): void;
   readonly 'data-osk': OskLayout;
 }
@@ -101,7 +101,23 @@ export function useOskField({
   }, [id, value, onChange, updateIfActive]);
 
   return {
-    onFocus: () => focus({ id, value, onChange }, layout),
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      focus({ id, value, onChange }, layout);
+      // The keyboard opens as an absolute overlay across the bottom of the
+      // panel; the browser has no idea it now covers the focused field, so it
+      // never scrolls it into view on its own. Once `--osk-h` has been applied
+      // (KeyboardHost sets it in a post-commit effect), nudge the field up so
+      // it clears the keys. `scroll-margin-bottom` on the field (set in CSS to
+      // the OSK height) is what actually reserves the clearance.
+      const el = event.currentTarget;
+      if (typeof el?.scrollIntoView === 'function') {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          });
+        });
+      }
+    },
     onBlur: () => blurIfActive(id),
     'data-osk': layout,
   };

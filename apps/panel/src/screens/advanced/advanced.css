@@ -90,10 +90,24 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
-  padding: 20px;
+  /* Reserve the on-screen-keyboard's height at the bottom so a focused field
+     near the foot of the page can scroll clear of the keys (the OSK is an
+     absolute overlay the browser can't account for). Collapses to plain 20px
+     when the keyboard is closed (--osk-h defaults to 0px). */
+  padding: 20px 20px calc(20px + var(--osk-h, 0px));
   display: flex;
   flex-direction: column;
   gap: 16px;
+  scroll-behavior: smooth;
+}
+
+/* Each field keeps a keyboard's worth of clearance below it, so
+   scrollIntoView (fired on focus) lifts it above the on-screen keyboard
+   instead of leaving it hidden behind the keys. */
+.us-adm__content input:not([type='checkbox']):not([type='radio']),
+.us-adm__content select,
+.us-adm__content textarea {
+  scroll-margin-bottom: calc(var(--osk-h, 0px) + var(--sp-6));
 }
 
 .us-adm__pagehead {

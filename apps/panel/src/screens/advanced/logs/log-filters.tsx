@@ -1,4 +1,5 @@
 import type { LogCategory, LogLevel } from '@eduscope/shared';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 import type { LogFilter } from './use-logs.js';
 
 interface LogFiltersProps {
@@ -18,6 +19,11 @@ function without(filter: LogFilter, key: keyof LogFilter): LogFilter {
 
 /** S-34 — level/category chips, search, time range, sessionId drill-in. */
 export function LogFilters({ filter, onChange }: LogFiltersProps): JSX.Element {
+  const searchBinding = useOskField({
+    value: filter.q ?? '',
+    onChange: (next) => onChange(next ? { ...filter, q: next } : without(filter, 'q')),
+  });
+
   return (
     <div className="us-logs__filters">
       <input
@@ -26,6 +32,7 @@ export function LogFilters({ filter, onChange }: LogFiltersProps): JSX.Element {
         onChange={(e) => onChange(e.target.value ? { ...filter, q: e.target.value } : without(filter, 'q'))}
         placeholder="Search message"
         aria-label="Search logs"
+        {...searchBinding}
       />
       <div className="us-logs__chips">
         <button

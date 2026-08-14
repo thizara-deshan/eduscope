@@ -69,9 +69,12 @@ export function StreamingScreen(): JSX.Element {
   };
 
   const requestDelete = (target: StreamTarget) => {
+    // Capture the id THIS open returns and close exactly that overlay. Reading
+    // `overlays.stack.at(-1)` here closed over the stack as it was before the
+    // dialog opened (empty), so both buttons no-op'd and the dialog was stuck.
+    let overlayId = -1;
     const close = () => {
-      const id = overlays.stack.at(-1)?.id;
-      if (id !== undefined) overlays.close(id);
+      if (overlayId !== -1) overlays.close(overlayId);
     };
     const confirmDelete = () => {
       const targetId: Ulid = target.id;
@@ -80,7 +83,7 @@ export function StreamingScreen(): JSX.Element {
       streamTargetsConfigMutation.save({ streamTargetIds: nextIds });
       close();
     };
-    overlays.open(
+    overlayId = overlays.open(
       <DangerConfirm
         title={`Delete ${target.displayName}?`}
         body={<p>This removes the saved destination. This can&rsquo;t be undone.</p>}
