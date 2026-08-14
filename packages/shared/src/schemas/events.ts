@@ -411,7 +411,7 @@ export const zQuizSyncServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sync.heartbeat'), at: zEventInstant }),
 ]);
 
-// ── §5 student realtime, shared with apps/quiz (contract v0.6) ────────
+// ── §5 student realtime, shared with apps/quiz (added contract v0.6) ────────
 
 export const zStudentQuizOption = z.object({
   id: zUlid,

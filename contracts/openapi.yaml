@@ -1,11 +1,19 @@
 openapi: 3.1.0
 info:
   title: Eduscope core-api — public REST surface
-  version: 0.6.0
+  version: 1.0.0
   description: |
-    Contract v0 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
+    Contract v1 for the Eduscope UMS rewrite ("Unistream"). The Phase-2 frontend
     is built against this contract on a mock adapter before any backend exists
     (PRD §9); the Phase-4 backend implements it unchanged or bumps the version.
+
+    **v1.0.0 (2026-08-14) — Prompt-12 drift reconciliation.** Ratification bump,
+    not a breaking reshape: every ratified `x-decision` placeholder was confirmed
+    as-is (PM ratification 2026-08-12, ADRs 005–012). See
+    docs/design/contract-drift-report.md. Only shape change: an additive,
+    optional `x-eduscope-contract` header on the quiz-sync ops (DR-10). `D-02b`
+    (institute upload payload) stays deferred and keeps its tag. No consumer-breaking
+    change beyond what 0.x already shipped.
 
     Sources of truth: docs/design/domain-model.md (entity naming — every schema
     below `$ref`s those names exactly), docs/design/state-machines.md
@@ -38,9 +46,13 @@ info:
       dashboard (v0.2, CG-13 / S02-D-3).
     - **Secrets never appear in any response**: stream keys, upload
       credentials, RTSP passwords, password hashes (INV-ST-1, INV-U-1, PF-17).
-    - `x-decision: D-xx` marks paths/schemas whose SHAPE depends on an open
+    - `x-decision: D-xx` marks paths/schemas whose SHAPE depends on a still-open
       decision (docs/discovery/open-decisions.md); `P-1` is the open title
       fact-check; `DM-Pn` are proposed register entries from the domain model.
+      At v1.0.0 a decision that was ratified without changing the shape carries
+      `x-decision-resolved: '<id> …'` instead — the shape is frozen and the tag
+      is history. Only genuinely-open items keep the bare `x-decision` tag
+      (today: `D-02b`, and `D-10` as a post-launch deferral).
     - The zod mirror of every schema lives in `packages/shared/src/schemas/`
       and is what the mock adapter and the future backend validate against.
 
@@ -214,7 +226,7 @@ paths:
         (R-04, meta names the unbound role or invalid preset). Class B failures
         happen AFTER acceptance and arrive as `recording.state{error}` within
         5 s (R-06, PF-2).
-      x-decision: D-15
+      x-decision-resolved: 'D-15 — confirmed as-is, ADR-007, v1.0.0'
       responses:
         '202': { $ref: '#/components/responses/CommandAccepted' }
         '409': { $ref: '#/components/responses/Problem' }
@@ -508,7 +520,7 @@ paths:
         lecturer's microphone mid-lecture (B-15's defect, reproduced here —
         S06-D-5). No session is non-terminal means no owner to protect, so the
         guard does not apply outside a session.
-      x-decision: D-10
+      x-decision: D-10  # STILL DEFERRED post-launch (ADR-004); the deferred room-controls hardware never had a contract shape — the audio master-mute this op carries is real
       parameters: [{ $ref: '#/components/parameters/roleId' }]
       requestBody:
         required: true
@@ -766,7 +778,7 @@ paths:
       operationId: requeueUploadJob
       summary: U-09 cmd.upload.requeue — dead-letter → queued (B-35's successor)
       x-required-role: admin
-      x-decision: D-13
+      x-decision-resolved: 'D-13 — confirmed as-is, ADR-006, v1.0.0'
       description: Only dead-letter jobs are requeueable (`upload.not-requeueable` otherwise). Remote cleanup runs first if remoteLectureId is set (INV-UJ-6).
       parameters: [{ $ref: '#/components/parameters/jobId' }]
       responses:
@@ -779,7 +791,7 @@ paths:
       tags: [provisioning]
       operationId: getProvisioning
       summary: AD-10 read-only device identity — editing happens in the deploy layer
-      x-decision: D-20
+      x-decision-resolved: 'D-20 — confirmed as-is, ADR-011, v1.0.0'
       description: core-api never writes this entity (INV-DP-1). Time/NTP ownership is [D-17]. Secret-bearing fields are never exposed.
       responses:
         '200':
@@ -866,7 +878,7 @@ paths:
       tags: [storage]
       operationId: getStorageOverview
       summary: AD-4 Local Storage — capacity, SMART, volumes, retention policy
-      x-decision: D-15
+      x-decision-resolved: 'D-15 — confirmed as-is, ADR-007, v1.0.0'
       description: The retention policy is included so warning text is GENERATED from real values (INV-RP-1, B-53 closed).
       responses:
         '200':
@@ -925,7 +937,7 @@ paths:
       operationId: listNetworkConfigs
       summary: AD-2 LAN + vLAN rows (no Wi-Fi fields exist, INV-NC-1)
       x-required-role: admin
-      x-decision: D-16
+      x-decision-resolved: 'D-16 — confirmed as-is, ADR-008, v1.0.0'
       responses:
         '200':
           description: One row per interface; lastApplyError surfaced, not swallowed.
@@ -966,7 +978,17 @@ paths:
       operationId: getEncoderSettings
       summary: AD-3 encoder profile + capability-probed option sets
       x-required-role: admin
-      description: The UI renders ONLY values present in capabilities — unsupported values are absent, not inert (INV-EP-1, B-56 closed).
+      description: |
+        The UI renders ONLY values present in capabilities — unsupported values
+        are absent, not inert (INV-EP-1, B-56 closed). v1.0.0 (DR-14): pass
+        `?channelId=` to read that channel's effective profile (its override if
+        one exists, else the device-default); omit it for the device-default.
+      parameters:
+        - name: channelId
+          in: query
+          required: false
+          description: DR-14 (v1.0.0) — the channel whose effective profile to read; absent ⇒ device-default.
+          schema: { $ref: '#/components/schemas/ChannelId' }
       responses:
         '200':
           description: Profile + capabilities.
@@ -981,7 +1003,7 @@ paths:
     put:
       tags: [settings]
       operationId: updateEncoderSettings
-      summary: Update the device-default EncodingProfile (per-channel scope is DM-P4)
+      summary: Update the EncodingProfile — device-default, or a per-channel override via body channelId (DR-14, v1.0.0)
       x-required-role: admin
       requestBody:
         required: true
@@ -1002,7 +1024,7 @@ paths:
       operationId: listStreamTargets
       summary: AD-8 saved destinations — stream keys NEVER read back (INV-ST-1)
       x-required-role: admin
-      x-decision: D-19
+      x-decision-resolved: 'D-19 — confirmed as-is, ADR-010, v1.0.0'
       responses:
         '200':
           description: Targets with hasStreamKey flags.
@@ -1020,7 +1042,7 @@ paths:
       operationId: createStreamTarget
       summary: Add a destination (YouTube / Facebook / Custom RTMP)
       x-required-role: admin
-      x-decision: D-19
+      x-decision-resolved: 'D-19 — confirmed as-is, ADR-010, v1.0.0'
       requestBody:
         required: true
         content:
@@ -1440,7 +1462,7 @@ paths:
       tags: [quiz]
       operationId: listPublicationResponses
       summary: LP-17 drill-down — AnswerProjection rows (read-only, minimal PII, DM-14)
-      x-decision: D-21
+      x-decision-resolved: 'D-21 — confirmed as-is, ADR-012, v1.0.0'
       parameters: [{ $ref: '#/components/parameters/publicationId' }]
       responses:
         '200':
@@ -1552,9 +1574,11 @@ paths:
 
   # ─────────────────── quiz-sync (device → quiz-service) ───────────────────
   # Hosted by the QUIZ SERVICE on the campus web server (A-16). The device is
-  # the only caller; auth is a provisioned device credential (DM-P5 — the
-  # scheme is an open item, see events.md). Correlation ids are ULIDs
-  # generatable offline on both sides (INV-G-2).
+  # the only caller; auth is a provisioned device static bearer (DR-03, v1.0.0 —
+  # see deviceAuth). Correlation ids are ULIDs generatable offline on both sides
+  # (INV-G-2). Every call carries the optional x-eduscope-contract header (DR-10)
+  # so the two independently-deployed zones (ADR-021) log a version mismatch
+  # loudly rather than failing silently; quiz-service does NOT hard-reject on it.
 
   /device/v1/quiz-sessions:
     servers:
@@ -1567,8 +1591,9 @@ paths:
       tags: [quiz-sync]
       operationId: quizSyncCreateSession
       summary: Z-01 — mint a QuizSession for a lecture (quiz-service owns joinCode/joinUrl, DM-15)
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       security: [{ deviceAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/contractVersion' }]
       requestBody:
         required: true
         content:
@@ -1592,9 +1617,11 @@ paths:
       tags: [quiz-sync]
       operationId: quizSyncCloseSession
       summary: Z-05 — lecture ended; students see "session ended" (INV-QZ-2)
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       security: [{ deviceAuth: [] }]
-      parameters: [{ $ref: '#/components/parameters/quizSessionId' }]
+      parameters:
+        - { $ref: '#/components/parameters/quizSessionId' }
+        - { $ref: '#/components/parameters/contractVersion' }
       responses:
         '204': { description: Closed (idempotent). }
 
@@ -1608,7 +1635,7 @@ paths:
       tags: [quiz-sync]
       operationId: quizSyncPublish
       summary: sync.publication push (Q-30/Q-31) — the ack IS G-PUBLISH-ACK
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       description: |
         Must answer within T-PUBLISH-ACK (5 s, 1 retry at 2 s) or the device
         marks the publication failed (Q-32) and the projector stays on slides.
@@ -1616,6 +1643,7 @@ paths:
         time (Z-22) — server-to-server only; students never see correctness
         before close. Idempotent on publicationId.
       security: [{ deviceAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/contractVersion' }]
       requestBody:
         required: true
         content:
@@ -1635,10 +1663,12 @@ paths:
       tags: [quiz-sync]
       operationId: quizSyncClosePublication
       summary: Q-33/Q-34/Q-35 close — closedAt authoritative on BOTH sides (INV-QPUB-4)
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       description: A late answer is rejected by quiz-service against this closedAt even if the instruction arrived late; no grace window (SM-Q-6).
       security: [{ deviceAuth: [] }]
-      parameters: [{ $ref: '#/components/parameters/publicationId' }]
+      parameters:
+        - { $ref: '#/components/parameters/publicationId' }
+        - { $ref: '#/components/parameters/contractVersion' }
       requestBody:
         required: true
         content:
@@ -1657,9 +1687,22 @@ components:
     deviceAuth:
       type: http
       scheme: bearer
-      description: Provisioned device credential for quiz-sync paths (DM-P5 — scheme open).
+      description: |
+        Provisioned device credential for quiz-sync paths. **v1.0.0 (DR-03):** the
+        scheme is a per-device **static bearer**, minted by the deploy layer at
+        provisioning (D-20) and stored hashed at rest on the quiz server;
+        HMAC-signed requests are the SSO-era upgrade (D-02b / roster era), not v1.
 
   parameters:
+    contractVersion:
+      name: x-eduscope-contract
+      in: header
+      required: false
+      description: |
+        DR-10 (v1.0.0). The device's contract version (e.g. `1.0`) on every
+        quiz-sync call. quiz-service logs a mismatch loudly for cross-zone
+        correlation (ADR-021) but does not hard-reject on it in v1.
+      schema: { type: string, maxLength: 16, example: '1.0' }
     cursor:
       name: cursor
       in: query
@@ -2503,7 +2546,7 @@ components:
     DeviceProvisioning:
       type: object
       description: Read-only in Admin (AD-10); written only by the deploy flow (INV-DP-1). Secrets omitted.
-      x-decision: D-20
+      x-decision-resolved: 'D-20 — confirmed as-is, ADR-011, v1.0.0'
       required: [deviceId, serialNumber, instituteProfileId, hallCode, hallDisplayName, titlePattern, timezone, ntpServers, expectedStorageVolumeUuid, featureFlags, quizServerBaseUrl, llmEndpoint, provisionedAt, provisionedBy]
       properties:
         deviceId: { $ref: '#/components/schemas/Ulid' }
@@ -2590,7 +2633,7 @@ components:
     RetentionPolicy:
       type: object
       description: Warning text is GENERATED from these values (INV-RP-1); the UI may not hardcode a threshold.
-      x-decision: D-15
+      x-decision-resolved: 'D-15 — confirmed as-is, ADR-007, v1.0.0'
       required: [maxAgeDays, warningThresholdPct, criticalThresholdPct, earlyDeleteOrder, neverDeleteUnuploaded, refuseStartWhenCritical]
       properties:
         maxAgeDays: { type: integer, description: 14 (A-20). }
@@ -2631,7 +2674,7 @@ components:
     NetworkConfig:
       type: object
       description: No Wi-Fi fields exist [D-16] (INV-NC-1). Camera addresses live on PhysicalInput (INV-NC-3).
-      x-decision: D-16
+      x-decision-resolved: 'D-16 — confirmed as-is, ADR-008, v1.0.0'
       required: [id, interfaceName, kind, vlanId, addressMode, ipv4Address, prefixLength, gateway, dnsServers, appliedAt, lastApplyError]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
@@ -2668,9 +2711,10 @@ components:
       required: [id, scope, channelId, videoBitrateKbps, framerate, gop, rateControl, codec, container, audioCodec, audioBitrateKbps, capabilityVerifiedAt]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
-        scope: { type: string, enum: [device-default, channel], description: Per-channel override is DM-P4 (open). }
+        scope: { type: string, enum: [device-default, channel], description: 'DM-P4 resolved v1.0.0 (DR-14): device-default plus optional per-channel override.' }
         channelId:
           oneOf: [{ $ref: '#/components/schemas/ChannelId' }, { type: 'null' }]
+          description: Set iff scope = channel; null for the device-default profile.
         videoBitrateKbps: { type: integer, minimum: 2000, maximum: 8000 }
         framerate: { type: integer }
         gop: { type: integer }
@@ -2712,7 +2756,15 @@ components:
 
     EncodingProfileUpdate:
       type: object
+      description: |
+        DM-P4 resolved v1.0.0 (DR-14). Omitting `channelId` (or sending null)
+        writes the device-default profile — the pre-v1 behaviour, unchanged for
+        existing callers. A `channelId` writes that channel's per-channel
+        override (streaming and local recording may want different bitrates).
       properties:
+        channelId:
+          oneOf: [{ $ref: '#/components/schemas/ChannelId' }, { type: 'null' }]
+          description: 'null/absent ⇒ device-default (scope=device-default); a ChannelId ⇒ that channel''s override (scope=channel).'
         videoBitrateKbps: { type: integer, minimum: 2000, maximum: 8000 }
         framerate: { type: integer }
         gop: { type: integer }
@@ -2722,7 +2774,7 @@ components:
     StreamTarget:
       type: object
       description: The stream key NEVER appears in any response, log or event (INV-ST-1, PF-17).
-      x-decision: D-19
+      x-decision-resolved: 'D-19 — confirmed as-is, ADR-010, v1.0.0'
       required: [id, platform, displayName, ingestUrl, hasStreamKey, requiresTlsBridge, enabled, lastPreflightAt, lastPreflightResult]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
@@ -2742,7 +2794,7 @@ components:
 
     StreamTargetCreate:
       type: object
-      x-decision: D-19
+      x-decision-resolved: 'D-19 — confirmed as-is, ADR-010, v1.0.0'
       required: [platform, displayName, ingestUrl, streamKey]
       properties:
         platform: { type: string, enum: [youtube, facebook, custom-rtmp] }
@@ -2999,7 +3051,7 @@ components:
     AnswerProjection:
       type: object
       description: Device-side read model (INV-AP-1 — replaced, never edited). Minimal PII (DM-14).
-      x-decision: D-21
+      x-decision-resolved: 'D-21 — confirmed as-is, ADR-012, v1.0.0'
       required: [id, publicationId, studentIdNumber, studentDisplayName, selectedOptionId, isCorrect, responseTimeMs, submittedAt, syncedAt]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
@@ -3040,7 +3092,7 @@ components:
     # ── quiz-sync payloads (server-to-server, DM-P5) ──
     QuizSessionCreateRequest:
       type: object
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       required: [lectureSessionId, deviceId, hallDisplayName]
       properties:
         lectureSessionId: { $ref: '#/components/schemas/Ulid' }
@@ -3049,7 +3101,7 @@ components:
 
     QuizSessionCreateResponse:
       type: object
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       required: [id, lectureSessionId, state, joinCode, joinUrl, openedAt]
       properties:
         id: { $ref: '#/components/schemas/Ulid' }
@@ -3062,7 +3114,7 @@ components:
     PublicationPush:
       type: object
       description: Server-to-server only — carries correctness so quiz-service evaluates at submit time (Z-22). Students never see it before close.
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       required: [publicationId, quizSessionId, questionId, prompt, options, correctOptionId, publishedAt]
       properties:
         publicationId: { $ref: '#/components/schemas/Ulid' }
@@ -3085,7 +3137,7 @@ components:
 
     PublicationCloseRequest:
       type: object
-      x-decision: DM-P5
+      x-decision-resolved: 'DM-P5 — sync shape confirmed; auth = static device bearer (DR-03), v1.0.0'
       required: [publicationId, closedAt, closeReason]
       properties:
         publicationId: { $ref: '#/components/schemas/Ulid' }
@@ -3106,7 +3158,14 @@ components:
         category: { $ref: '#/components/schemas/LogCategory' }
         service: { type: string, enum: [core-api, pipeline-manager, ai, deploy, quiz-sync] }
         message: { type: string }
-        context: { type: [object, 'null'], additionalProperties: true }
+        context:
+          type: [object, 'null']
+          additionalProperties: true
+          description: |
+            DR-01 (v1.0.0): the single `ai` service value covers all three AI
+            sub-services (STT / slide / question). Attribution rides
+            `context.subservice` (`stt` | `slide` | `question`) rather than
+            widening the closed `service` enum — no exhaustive-switch break.
         sessionId:
           oneOf: [{ $ref: '#/components/schemas/Ulid' }, { type: 'null' }]
         userId:

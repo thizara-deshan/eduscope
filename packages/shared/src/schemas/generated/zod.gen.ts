@@ -1092,6 +1092,10 @@ export const zEncoderCapabilities = z.object({
 });
 
 export const zEncodingProfileUpdate = z.object({
+    channelId: z.union([
+        zChannelId,
+        z.null()
+    ]).optional(),
     videoBitrateKbps: z.number().int().gte(2000).lte(8000).optional(),
     framerate: z.number().int().optional(),
     gop: z.number().int().optional(),

@@ -12,6 +12,62 @@ during a plan, and never speculatively.
 
 ---
 
+## 0.6.0 → 1.0.0 — 2026-08-14 · Prompt-12 drift reconciliation
+
+The Phase-3 backend designs (core-api, ai-services, quiz-service, pipeline-manager,
+domain-model) were reconciled against the 0.6.0 contract after PM ratification
+(2026-08-12, ADRs 005–012). Full walk, severities, frontend/backend obligations,
+and the two-owner sign-off are in
+[contract-drift-report.md](contract-drift-report.md). **Both the frontend owner
+and the backend owner signed before this tag** (report §6).
+
+**Headline: this is a ratification bump, not a breaking reshape.** Every ratified
+`x-decision` placeholder was confirmed as-is — *no decided decision amended an
+existing shape*. `info.version` `0.6.0` → `1.0.0` on `openapi.yaml`,
+`quiz-app.yaml`, and `events.md`.
+
+### Amendment rows (all applied at recommended options)
+
+| # | DR | Decision | Severity | Change |
+|---|---|---|---|---|
+| **V1-1** | DR-10 | quiz-service Q-4 | **additive** | New optional `x-eduscope-contract` request header on the four `quiz-sync` ops (`#/components/parameters/contractVersion`). Logged loudly on mismatch, never hard-rejected (ADR-021). |
+| **V1-2** | DR-03 | DM-P5 / C-7 / F-3 / Q-6 | **behavioral** (no wire shape) | `deviceAuth` scheme + events.md §4 name the v1 scheme: per-device **static bearer**, minted at provisioning (D-20), hashed at rest; HMAC-signed is the SSO-era upgrade. Closes C-7. |
+| **V1-3** | DR-05 | core-api F-5 / C-8 | **behavioral** (no wire shape) | events.md §1 names the `Sec-WebSocket-Protocol` subprotocol as the WS-auth transport; the `?token=` form is retired. Closes C-8. |
+| **V1-4** | DR-01 | core-api F-1 | **additive** (prose; option A) | `LogEntry.context.subservice` (`stt`/`slide`/`question`) carries AI attribution; the closed `service` enum is **not** widened (no exhaustive-switch break). |
+| **V1-5** | DR-22 | events.md §4 | **behavioral** (note) | events.md §4 records that the device↔quiz sync stream is intentionally unmocked (backend↔backend); its only validation is a core-api + quiz-service integration test, gated on V1-2. |
+| **V1-6** | §1 walk | ADRs 006–012 | **confirm** | `x-decision` tags for D-13/D-15/D-16/D-19/D-20/D-21 (openapi) and D-15/D-21 (events.md) converted to `x-decision-resolved` — shapes frozen, unchanged. |
+| **V1-7** | §1 walk | ADR-002 / ADR-004 | **defer (retained)** | `[D-02b]` (upload payload, still Phase-4) and `D-10` (room-controls hardware, post-launch) keep their tags, now annotated as genuine deferrals. |
+| **V1-8** | DR-14 | domain-model DM-P4 | **additive** | `EncodingProfileUpdate` gains optional `channelId` (write a per-channel override; absent/null ⇒ device-default, unchanged for existing callers); `getEncoderSettings` gains an optional `?channelId=` query; `EncodingProfile.scope`/`channelId` descriptions mark DM-P4 resolved. Applied at the frontend owner's signed "recommended options" pick (report §6). |
+
+**Not applied — deferred to non-signatory owners** (report §5): **DR-13** (transcript/PII
+retention — PM + institute, DM-P1/P2/Q-3) stays silent in the contract. **DR-08** (named
+merge-refusal code): recommended option is *keep `conflict` + `meta.reason`*, so no change.
+These are recorded, not silently dropped. **DR-14** was applied (V1-8) on the signed pick,
+though its named owner is the tech lead — flagged here for the tech lead's post-hoc awareness.
+
+### Generated layer + mock lockstep
+
+- `packages/shared` codegen re-run against both amended OpenAPI files:
+  `types.gen.ts` gains `ContractVersion`, the optional `x-eduscope-contract` header
+  on the four quiz-sync ops, and the `LogEntry.context.subservice` prose. **`zod.gen.ts`
+  is unchanged** — every change is additive/optional or prose, so no validation shape moved.
+- **Mock:** no behavioral change was needed — the mock was already contract-correct
+  for every *confirmed* decision (reconnect, frequency, latency, pagination, error
+  taxonomy all validated in the drift report §2.2), and the DR-10 header lives on the
+  device↔quiz path the panel mock does not implement (DR-22). No hardcoded
+  contract-version constant exists to bump; historical `v0.2`/`v0.6` "added-at"
+  citations in the mock are left intact.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `pnpm --filter @eduscope/shared codegen` | pass — core + quiz layers regenerated; additive delta only (`ContractVersion`, quiz-sync `x-eduscope-contract` header, `EncodingProfileUpdate.channelId`) |
+| `pnpm typecheck` (4 projects) | pass |
+| `pnpm test` | **1477 total; every contract test green** — contract-honesty (13), event-coverage, gate-contract-coverage, operation-coverage, shared rest/events/quiz coverage, student-quiz, and the mock encoder path (validates the new `EncodingProfileUpdate`). The only non-passing are the `tools/eslint-rules/gate-boundary.test.ts` GATE-3 cases, which are **nondeterministic environmental timeouts** — each spawns a full `pnpm lint` that exceeds the 20 s per-test timeout on this machine (2 timed out one run, 1 the next); unrelated to this change |
+
+---
+
 ## 0.4.0 → 0.5.0 — 2026-08-09 · Wave 5 (Library, playback, export, upload queue) gate
 
 Carries the **five** gaps the W-5…W-9 wireframe gate answered — **CG-5** (S-21),

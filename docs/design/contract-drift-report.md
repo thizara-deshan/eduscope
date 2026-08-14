@@ -5,10 +5,15 @@
 > **Inputs:** `contracts/` (openapi.yaml 0.6.0, quiz-app.yaml 0.6.0, events.md 0.6.0);
 > every doc in `docs/design/` and `docs/adr/`; the mock adapter in
 > `packages/api-client`.
-> **Status:** ⛔ **HELD AT THE STOP GATE.** This report is the sign-off artifact.
-> **No `contracts/` file, zod schema, `events.md` changelog, or mock file has been
-> changed yet.** The 1.0.0 tag and its lockstep edits (§4) apply _only after both the
-> frontend owner and the backend owner sign §6._
+> **Status:** ✅ **SIGNED & APPLIED (2026-08-14).** Both the frontend owner and the
+> backend owner signed §6. The §4 amendments were applied at the recommended options
+> and **v1.0.0 is tagged** across `openapi.yaml`, `quiz-app.yaml`, and `events.md`;
+> the generated zod layer was regenerated and the changelog recorded in
+> [contract-amendments.md](contract-amendments.md#060--100--2026-08-14--prompt-12-drift-reconciliation).
+> **DR-14 was applied** (additive per-channel encoder override) on the frontend owner's
+> signed "recommended options" pick — flagged to the tech lead (its named owner) for
+> awareness. **DR-13 remains deferred** to PM + institute (contract stays silent);
+> **DR-08** kept its recommended no-change option. See §4/§5 for what did and did not change.
 
 ---
 
@@ -200,13 +205,21 @@ are complete in §1/§2). "Apply?" states whether the item edits `contracts/` at
   the subprotocol; the mock has no socket auth to change.
 - **Backend:** core-api WS upgrade validates the subprotocol token.
 
-### DR-14 · `EncodingProfile` scope (domain-model DM-P4) — **additive (if adopted) · DEFER to tech lead**
+### DR-14 · `EncodingProfile` scope (domain-model DM-P4) — **additive · APPLIED (V1-8, option A)**
 
-- **Options:** (A, rec.) device default + optional per-channel `scope` override on
-  `EncodingProfile`/`EncodingProfileUpdate`; (B) device-global only (status quo).
-- **Frontend:** if A, AD-3 encoder page gains a per-channel override affordance.
-- **Backend:** if A, pipeline-manager honors a per-channel bitrate; core-api stores
-  `scope`. **Not applied** — DM-P4 is owned by the tech lead and unratified.
+- **Applied** at the frontend owner's signed "recommended options" pick. The read
+  model `EncodingProfile` already carried `scope` (`device-default`|`channel`) +
+  `channelId`; v1.0.0 completes the write path additively: `EncodingProfileUpdate`
+  gains optional `channelId` (absent/null ⇒ device-default, unchanged for existing
+  callers), `getEncoderSettings` gains an optional `?channelId=` query, and the
+  `scope`/`channelId` descriptions mark DM-P4 resolved.
+- **Frontend:** AD-3 encoder page may add a per-channel override affordance (optional;
+  omitting `channelId` preserves today's single-profile behaviour). No mock change —
+  the mock `updateEncoderSettings` accepts the optional `channelId`.
+- **Backend:** pipeline-manager honors a per-channel bitrate when an override exists;
+  core-api stores `scope`/`channelId`.
+- **Owner note:** DM-P4's named owner is the tech lead (not a signatory) — flagged in
+  the changelog for their post-hoc awareness; the change is additive and reversible.
 
 ### DR-13 · Retention rulings (DM-P1 / DM-P2 / Q-3) — **defer · DO NOT APPLY**
 
@@ -250,8 +263,9 @@ diff below traces to a §3 row; there are no silent changes.**
 5. **DR-05:** events.md §1 names the subprotocol transport.
 6. **DR-01 (A):** prose confirming `context.subservice` attribution (no enum diff).
 7. **DR-22:** events.md §4 note that the sync stream is intentionally unmocked.
-8. **DR-08 / DR-14:** apply _only if_ the respective owner picks the additive option
-   in §6; otherwise omit.
+8. **DR-14:** APPLIED (V1-8) — the signed pick chose recommended options; additive
+   `channelId` on `EncodingProfileUpdate` + optional `?channelId=` on GET.
+   **DR-08:** omitted — its recommended option is *no change*.
 
 **Generated + hand-authored zod (`packages/shared`):** 9. Re-run codegen against both amended OpenAPI files. The only _shape_ delta is the
 DR-10 header (and DR-08/DR-14 iff chosen) — so `types.gen.ts`/`zod.gen.ts` are
@@ -279,7 +293,10 @@ gate validates against the regenerated 1.0.0 schemas.
 ## 5. Ambiguous items requiring an owner's decision (not decided here)
 
 Per the steward's rule — _present options with a recommendation, never decide_ — these
-do **not** get applied without the named owner's pick:
+did **not** get applied without a pick. **Resolution at sign-off (2026-08-14):** the
+owners selected the **recommended** option for DR-01, DR-03, DR-05, and DR-14 (all now
+applied — §4); **DR-08** kept its recommended no-change option; **DR-13** stays deferred
+to PM + institute (contract silent). The table below is the menu that was offered:
 
 | Item                          | Owner                         | Recommended                     | Alternative                                   |
 | ----------------------------- | ----------------------------- | ------------------------------- | --------------------------------------------- |
