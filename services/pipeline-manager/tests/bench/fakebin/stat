@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""Fake `stat -c%s <path>`: prints the real file size, or exits nonzero if
+the file does not exist (matching the real GNU coreutils behavior the
+scripts' `|| echo 0` fallbacks depend on)."""
+from __future__ import annotations
+
+import os
+import sys
+
+args = [a for a in sys.argv[1:] if not a.startswith("-")]
+if not args:
+    print("fake stat: no path given", file=sys.stderr)
+    raise SystemExit(1)
+
+path = args[0]
+if not os.path.exists(path):
+    print(f"fake stat: cannot stat '{path}'", file=sys.stderr)
+    raise SystemExit(1)
+
+print(os.path.getsize(path))

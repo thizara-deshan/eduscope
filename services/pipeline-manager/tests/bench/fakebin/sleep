@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Fake `sleep`: instant, but advances the bench-test state's step counter
+so a polling loop's fake `curl /status` sees a new snapshot each iteration."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+STATE = Path(os.environ["FAKE_PM_STATE"])
+step_file = STATE / "step"
+current = int(step_file.read_text()) if step_file.exists() else 0
+step_file.write_text(str(current + 1))

@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""A tiny fake `jq` that understands only the exact filters the A-15/A-16
+bench scripts use (not general JQ). Reads JSON from stdin unless -n is given.
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    raw = False
+    compact = False
+    exit_mode = False
+    null_input = False
+    kv: dict[str, str] = {}
+    filter_expr = None
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "-r":
+            raw = True
+        elif arg == "-c":
+            compact = True
+        elif arg == "-e":
+            exit_mode = True
+        elif arg == "-n":
+            null_input = True
+        elif arg == "--arg":
+            kv[args[i + 1]] = args[i + 2]
+            i += 2
+        else:
+            filter_expr = arg
+        i += 1
+
+    data = None if null_input else json.load(sys.stdin)
+    result = _eval(filter_expr, data, kv)
+
+    if result is None or result is False:
+        if not null_input:
+            print("null" if not raw else "")
+        return 1 if exit_mode else 0
+
+    if exit_mode:
+        return 0 if result else 1
+
+    if raw and isinstance(result, str):
+        print(result)
+    else:
+        print(json.dumps(result, separators=(",", ":") if compact else (", ", ": ")))
+    return 0
+
+
+def _eval(expr: str, data, kv: dict[str, str]):
+    expr = expr.strip()
+
+    if expr == ".consumerId":
+        return data.get("consumerId")
+
+    if expr == ".publishers.rtsp.pid":
+        return data["publishers"]["rtsp"]["pid"]
+
+    if expr == ".publishers | map_values(.pid)":
+        return {k: v.get("pid") for k, v in data["publishers"].items()}
+
+    if expr == ".consumers | map(select(.state == \"running\") | .pgid) | sort":
+        return sorted(c["pgid"] for c in data["consumers"] if c["state"] == "running")
+
+    if expr == ".publishers[$id].pid":
+        return data["publishers"][kv["id"]].get("pid")
+
+    if expr == ".publishers[$id].state":
+        return data["publishers"][kv["id"]].get("state")
+
+    if expr == ".consumers[] | select(.id == $id) | .state":
+        for c in data["consumers"]:
+            if c["id"] == kv["id"]:
+                return c["state"]
+        return None
+
+    if expr == ".consumers[] | select(.id == $id) | .pgid":
+        for c in data["consumers"]:
+            if c["id"] == kv["id"]:
+                return c["pgid"]
+        return None
+
+    if expr == "{preset:$p, outputPath:$o}":
+        return {"preset": kv["p"], "outputPath": kv["o"]}
+
+    if expr == ('[.publishers.usb,.publishers.rtsp,.publishers.rtsp2,.publishers.audio]\n'
+                 '  | all(.state == "online" or .state == "degraded")'):
+        pubs = data["publishers"]
+        return all(pubs[k]["state"] in ("online", "degraded") for k in ("usb", "rtsp", "rtsp2", "audio"))
+
+    raise SystemExit(f"fake jq: unsupported filter: {expr!r}")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

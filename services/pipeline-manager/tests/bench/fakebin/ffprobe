@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Fake `ffprobe`. Driven by JSON config files under $FAKE_PM_STATE so tests
+can control duration/start_time per output file without a real media file.
+
+  ffprobe_duration.json    {"<basename>": 12.5, "default": 5.0}
+  ffprobe_start_time.json  {"<basename>:v": 0.02, "<basename>:a": 0.0, "default": 0.0}
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+STATE = Path(os.environ["FAKE_PM_STATE"])
+args = sys.argv[1:]
+path = args[-1]
+basename = os.path.basename(path)
+
+is_duration = any("format=duration" in a for a in args)
+select_streams = next((a for a in args if a in ("v:0", "a:0")), None)
+if "-select_streams" in args:
+    idx = args.index("-select_streams")
+    select_streams = args[idx + 1]
+
+if is_duration:
+    config_path = STATE / "ffprobe_duration.json"
+    config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    value = config.get(basename, config.get("default", 5.0))
+    print(value)
+else:
+    config_path = STATE / "ffprobe_start_time.json"
+    config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    kind = "v" if select_streams == "v:0" else "a"
+    value = config.get(f"{basename}:{kind}", config.get("default", 0.0))
+    print(value)

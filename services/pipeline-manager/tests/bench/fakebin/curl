@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""A fake `curl` for A-15/A-16 bench-script tests. Reads/writes its state
+from the directory named by $FAKE_PM_STATE. No real network I/O ever happens.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+STATE = Path(os.environ["FAKE_PM_STATE"])
+
+
+def _step() -> int:
+    step_file = STATE / "step"
+    return int(step_file.read_text()) if step_file.exists() else 0
+
+
+def _status_snapshot() -> dict:
+    sequence = json.loads((STATE / "sequence.json").read_text())
+    idx = min(_step(), len(sequence) - 1)
+    return sequence[idx]
+
+
+def _log(name: str, entry: dict) -> None:
+    path = STATE / name
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry) + "\n")
+
+
+def _post_response(path: str, body: dict) -> dict:
+    match = re.match(r"^/publishers/([a-z0-9]+)/(start|stop)$", path)
+    if match:
+        return {"publisherId": match.group(1), "state": "starting" if match.group(2) == "start" else "stopping"}
+
+    if path == "/consumers/record":
+        return {"consumerId": STATE.joinpath("next_record_id").read_text().strip(), "state": "starting"}
+    if path == "/consumers/live":
+        return {"consumerId": STATE.joinpath("next_live_id").read_text().strip(), "state": "starting"}
+    if path == "/consumers/meeting":
+        return {"consumerId": STATE.joinpath("next_meeting_id").read_text().strip(), "state": "starting"}
+
+    if re.match(r"^/consumers/.+/stop$", path):
+        return {"state": "stopping"}
+
+    return {}
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    method = "GET"
+    body = None
+    url = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "-X":
+            method = args[i + 1]
+            i += 1
+        elif arg == "-d":
+            body = json.loads(args[i + 1])
+            i += 1
+        elif arg in ("-H", "-w", "-o", "--max-time"):
+            i += 1  # skip flag + its value
+        elif arg.startswith("-"):
+            pass  # ignore -f -s -S -N etc.
+        else:
+            url = arg
+        i += 1
+
+    if url is None:
+        print("fake curl: no URL given", file=sys.stderr)
+        return 1
+
+    path = re.sub(r"^https?://[^/]+", "", url)
+
+    fail_marker = STATE / "force_fail"
+    if fail_marker.exists() and fail_marker.read_text().strip() in (path, "*"):
+        print("fake curl: forced failure", file=sys.stderr)
+        return 22
+
+    if path == "/status" and method == "GET":
+        print(json.dumps(_status_snapshot()))
+        return 0
+
+    if method == "POST":
+        _log("posts.jsonl", {"path": path, "body": body})
+        print(json.dumps(_post_response(path, body or {})))
+        return 0
+
+    print("{}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
