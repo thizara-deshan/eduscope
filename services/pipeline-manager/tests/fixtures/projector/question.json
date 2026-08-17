@@ -1,0 +1,5 @@
+{
+  "question_text": "Which layer owns the process supervisor?",
+  "options": ["core-api", "pipeline-manager", "the frontend panel", "nginx"],
+  "join_qr_png_path": "/media/eduscope/qr/join-current.png"
+}
