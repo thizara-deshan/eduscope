@@ -4,13 +4,20 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from ..models import Channel, LayoutPresetId, SourceRole
-from .builder import ROLE_SOCKETS, PipelineBuilder, PipelineSpec, UnsupportedPipeline
-from .layouts import LayoutPreset, Tile, get_layout
+from .builder import (
+    CAMERA_ROLES,
+    ROLE_SOCKETS,
+    PipelineBuilder,
+    PipelineSpec,
+    UnsupportedPipeline,
+    audio_branch,
+    source_branch_normalized,
+)
+from .layouts import LayoutPreset, get_layout
 from .platforms.base import Pad, PlatformProfile
-from .profiles import EncodeProfile, ProfileKind, get_profile
+from .profiles import ProfileKind, get_profile
 
 AUDIO_ROLE = SourceRole.MIC_LECTURER
-CAMERA_ROLES = (SourceRole.LECTURER_CAM, SourceRole.STUDENTS_CAM)
 
 
 @dataclass(frozen=True)
@@ -41,85 +48,27 @@ def _require_output_path(req: RecordRequest) -> str:
     return req.output_path
 
 
-def _source_branch_normalized(
-    builder: PipelineBuilder, platform: PlatformProfile, tile: Tile, sink_pad: str | None
-) -> None:
-    socket = ROLE_SOCKETS[tile.role]
-    builder.add("shmsrc", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!")
-    if tile.role in CAMERA_ROLES:
-        builder.add(
-            platform.shm_video_caps(tile.role),
-            "!",
-            "h264parse",
-            "!",
-            *platform.decoder(),
-            "!",
-            *platform.convert(),
-            "!",
-        )
-    else:
-        builder.add(platform.shm_video_caps(tile.role), "!")
-    builder.add(
-        "queue",
-        "max-size-buffers=6",
-        "leaky=downstream",
-        "!",
-        "videorate",
-        "drop-only=true",
-        "!",
-        "video/x-raw,framerate=30/1",
-        "!",
-        *platform.scale(),
-        "!",
-        f"video/x-raw,width={tile.w},height={tile.h}",
-        "!",
-        "queue",
-        "!",
-    )
-    if sink_pad:
-        builder.add(sink_pad)
-
-
-def _audio_branch(
-    builder: PipelineBuilder, platform: PlatformProfile, profile: EncodeProfile, mux_pad: str
-) -> None:
-    socket = ROLE_SOCKETS[AUDIO_ROLE]
-    builder.add(
-        "shmsrc",
-        f"socket-path={socket}",
-        "is-live=true",
-        "do-timestamp=true",
-        "!",
-        platform.audio_caps(),
-        "!",
-        "queue",
-        "!",
-        "audioconvert",
-        "!",
-        "audioresample",
-        "!",
-        *platform.audio_encoder(profile),
-        "!",
-        "queue",
-        "!",
-        mux_pad,
-    )
-
-
 def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: PlatformProfile) -> PipelineSpec:
     output_path = _require_output_path(req)
     profile = get_profile(ProfileKind.RECORD_COMPOSITE)
     builder = PipelineBuilder()
+    multi_tile = len(layout.tiles) > 1
 
-    if len(layout.tiles) == 1:
+    if not multi_tile:
         tile = layout.tiles[0]
-        _source_branch_normalized(builder, platform, tile, sink_pad=None)
+        source_branch_normalized(
+            builder, platform, tile.role,
+            target_width=tile.w, target_height=tile.h, apply_scale=False, sink_pad=None,
+        )
         builder.add(*platform.encoder(profile), "!", "h264parse", "config-interval=1", "!", "queue", "!", "mux.")
     else:
         pads = []
         for index, tile in enumerate(layout.tiles):
             sink_pad = f"comp.sink_{index}"
-            _source_branch_normalized(builder, platform, tile, sink_pad=sink_pad)
+            source_branch_normalized(
+                builder, platform, tile.role,
+                target_width=tile.w, target_height=tile.h, apply_scale=True, sink_pad=sink_pad,
+            )
             pads.append(Pad(name=f"sink_{index}", xpos=tile.x, ypos=tile.y, width=tile.w, height=tile.h))
         builder.add(*platform.compositor("comp", pads), "!")
         builder.add(
@@ -137,7 +86,7 @@ def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: 
             "mux.",
         )
 
-    _audio_branch(builder, platform, profile, "mux.")
+    audio_branch(builder, platform, profile, "mux.")
     builder.add(*platform.mux("mpegts", "mux"), "!", *platform.file_sink(output_path))
 
     return PipelineSpec(
@@ -168,7 +117,7 @@ def _build_camera_passthrough(req: RecordRequest, layout: LayoutPreset, platform
         "!",
         "mux.",
     )
-    _audio_branch(builder, platform, profile, "mux.")
+    audio_branch(builder, platform, profile, "mux.")
     builder.add(*platform.mux("mpegts", "mux"), "!", *platform.file_sink(output_path))
 
     return PipelineSpec(
@@ -224,7 +173,7 @@ def _build_separate(req: RecordRequest, layout: LayoutPreset, platform: Platform
         "muxu.",
     )
     if usb_output.include_audio:
-        _audio_branch(builder, platform, reencode_profile, "muxu.")
+        audio_branch(builder, platform, reencode_profile, "muxu.")
 
     cam_role = cam_output.role_ids[0]
     builder.add(
@@ -242,7 +191,7 @@ def _build_separate(req: RecordRequest, layout: LayoutPreset, platform: Platform
         "muxc.",
     )
     if cam_output.include_audio:
-        _audio_branch(builder, platform, passthrough_profile, "muxc.")
+        audio_branch(builder, platform, passthrough_profile, "muxc.")
 
     builder.add(*platform.mux("mpegts", "muxu"), "!", *platform.file_sink(usb_path))
     builder.add(*platform.mux("mpegts", "muxc"), "!", *platform.file_sink(cam_path))

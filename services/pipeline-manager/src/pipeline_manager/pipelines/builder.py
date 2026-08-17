@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 from ..models import SourceRole
+from .platforms.base import DisplayOut, EncodeProfileLike, PlatformProfile
 
 GST_LAUNCH_PREFIX: tuple[str, ...] = ("gst-launch-1.0", "-e", "-m")
+CANVAS_WIDTH = 1920
+CANVAS_HEIGHT = 1080
 
 # Publisher aliases stay internal (usb/rtsp/rtsp2/audio); fixed sockets (design §0.2).
 ROLE_SOCKETS: dict[SourceRole, str] = {
@@ -14,6 +17,8 @@ ROLE_SOCKETS: dict[SourceRole, str] = {
     SourceRole.STUDENTS_CAM: "/tmp/rtsp2.sock",
     SourceRole.MIC_LECTURER: "/tmp/audio.sock",
 }
+
+CAMERA_ROLES = (SourceRole.LECTURER_CAM, SourceRole.STUDENTS_CAM)
 
 
 class InvalidToken(ValueError):
@@ -59,3 +64,104 @@ class PipelineSpec:
     encode_slots: int
     outputs: tuple[str, ...]
     placement: Any | None = None
+
+
+@dataclass(frozen=True)
+class DisplayPlacement:
+    """Applied post-spawn (wmctrl) — placement is not part of pipeline text (§2.4)."""
+
+    output: DisplayOut
+    x: int
+    y: int
+    width: int
+    height: int
+    fullscreen: bool
+
+
+def source_branch_normalized(
+    builder: PipelineBuilder,
+    platform: PlatformProfile,
+    role: SourceRole,
+    *,
+    target_width: int,
+    target_height: int,
+    apply_scale: bool,
+    sink_pad: str | None,
+    sink_queue_props: Sequence[str] = (),
+) -> None:
+    """shmsrc -> (decode if camera) -> normalize -> (scale+queue if apply_scale).
+
+    A full-canvas single tile (apply_scale=False) chains straight from the
+    framerate caps into whatever the caller adds next (an encoder) — matching
+    live_cam1.sh/live_usb.sh, which have no redundant scale or queue there.
+    """
+    socket = ROLE_SOCKETS[role]
+    builder.add("shmsrc", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!")
+    if role in CAMERA_ROLES:
+        builder.add(
+            platform.shm_video_caps(role),
+            "!",
+            "h264parse",
+            "!",
+            *platform.decoder(),
+            "!",
+            *platform.convert(),
+            "!",
+        )
+    else:
+        builder.add(platform.shm_video_caps(role), "!")
+    builder.add(
+        "queue",
+        "max-size-buffers=6",
+        "leaky=downstream",
+        "!",
+        "videorate",
+        "drop-only=true",
+        "!",
+        "video/x-raw,framerate=30/1",
+        "!",
+    )
+    if apply_scale:
+        builder.add(
+            *platform.scale(),
+            "!",
+            f"video/x-raw,width={target_width},height={target_height}",
+            "!",
+            "queue",
+            *sink_queue_props,
+            "!",
+        )
+        if sink_pad:
+            builder.add(sink_pad)
+
+
+def audio_branch(
+    builder: PipelineBuilder,
+    platform: PlatformProfile,
+    profile: EncodeProfileLike,
+    mux_pad: str,
+    *,
+    queue_props: Sequence[str] = (),
+) -> None:
+    socket = ROLE_SOCKETS[SourceRole.MIC_LECTURER]
+    builder.add(
+        "shmsrc",
+        f"socket-path={socket}",
+        "is-live=true",
+        "do-timestamp=true",
+        "!",
+        platform.audio_caps(),
+        "!",
+        "queue",
+        "!",
+        "audioconvert",
+        "!",
+        "audioresample",
+        "!",
+        *platform.audio_encoder(profile),
+        "!",
+        "queue",
+        *queue_props,
+        "!",
+        mux_pad,
+    )
