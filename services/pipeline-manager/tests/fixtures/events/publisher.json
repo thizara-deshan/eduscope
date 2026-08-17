@@ -1,0 +1,42 @@
+[
+  {
+    "sequence": 1,
+    "publisherId": "usb",
+    "roleId": "presentation",
+    "state": "online",
+    "fps": 60,
+    "rms": null,
+    "lastError": null,
+    "occurredAt": "2026-08-14T09:00:00Z"
+  },
+  {
+    "sequence": 2,
+    "publisherId": "rtsp",
+    "roleId": "lecturer-cam",
+    "state": "degraded",
+    "fps": 12,
+    "rms": null,
+    "lastError": "rtsp reconnecting",
+    "occurredAt": "2026-08-14T09:00:05Z"
+  },
+  {
+    "sequence": 3,
+    "publisherId": "rtsp2",
+    "roleId": "students-cam",
+    "state": "offline",
+    "fps": 0,
+    "rms": null,
+    "lastError": "no route",
+    "occurredAt": "2026-08-14T09:00:10Z"
+  },
+  {
+    "sequence": 4,
+    "publisherId": "audio",
+    "roleId": "mic-lecturer",
+    "state": "online",
+    "fps": null,
+    "rms": 0.21,
+    "lastError": null,
+    "occurredAt": "2026-08-14T09:00:15Z"
+  }
+]
