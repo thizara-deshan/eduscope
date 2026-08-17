@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import itertools
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -16,14 +18,16 @@ from .consumers.projector import ProjectorConsumer
 from .consumers.thumbnails import RoleNotPreviewable, ThumbnailController
 from .hardware.helper_client import HelperClient
 from .hardware.led import LedController
-from .hardware.watchdog import CaptureCardWatchdog, ProbeResult
+from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, run_watchdog_loop
 from .models import PublisherId
 from .pipelines.layouts import InvalidRatio, PresetChannelMismatch
 from .pipelines.platforms.rk3588 import RK3588Profile
+from .pipelines.preflight import as_preflight_check
 from .publishers.base import ROLE_PUBLISHERS, PublisherController
 from .supervisor.health import HealthConfirmer
 from .supervisor.ledger import EncodeLedger, EncoderBudgetExceeded
 from .supervisor.process import ProcessSupervisor
+from .supervisor.recovery import recover_orphans
 
 DOMAIN_EXCEPTIONS = (
     DomainProblem,
@@ -68,8 +72,96 @@ async def _domain_problem_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse(status_code=problem.status, content=body)
 
 
+# ── lifespan seams ─────────────────────────────────────────────────────────
+# Each device-touching action is an injected seam with an off-board no-op
+# default; Workstream F / the board bring-up injects the real ones. This keeps
+# unit tests hermetic and cross-platform while giving the lifespan real
+# ordering (A-14 Step 4).
+
+
+def _default_proc_scanner(pid: int):
+    return None  # off-board: adopt nothing (no /proc read)
+
+
+def _default_expected_processes():
+    return []
+
+
+async def _noop_start_publisher(controller) -> None:
+    return None  # off-board: real GStreamer spawn is board bring-up (Workstream F)
+
+
+async def _no_preflight_source():
+    return None  # off-board: gst-inspect is board-only, so preflight stays unset
+
+
+async def _run_startup(app: FastAPI) -> None:
+    """construct state → recover exact orphans → (boot preflight) → start bound
+    publishers/watchdog → serve (A-14 Step 4). Every step is a no-op off-board
+    by default; injected seams make each observable in tests and real on board.
+    """
+    state = app.state
+    # 1. Conservative orphan adoption (empty off-board: no sidecars, scanner→None).
+    state.recovery = recover_orphans(
+        state.expected_processes(),
+        state.runtime_dir,
+        proc_scanner=state.proc_scanner,
+    )
+    # 2. Boot-time preflight gate (board-only; None off-board leaves it unset).
+    report = await state.preflight_source()
+    if report is not None:
+        state.preflight_check = as_preflight_check(report)
+    # 3. Bring up publishers that already hold a valid binding.
+    for controller in state.publishers.values():
+        if controller.has_binding:
+            await state.start_publisher(controller)
+    # 4. Start the capture-card watchdog probe loop.
+    state.watchdog_task = asyncio.create_task(run_watchdog_loop(state.watchdog))
+
+
+async def _run_shutdown(app: FastAPI) -> None:
+    """Stop the watchdog and auxiliary/channel/display children; leave an
+    actively adopted record untouched for core-api recovery policy; close
+    preview negotiations and flush ownership sidecars."""
+    state = app.state
+    task = getattr(state, "watchdog_task", None)
+    if task is not None:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        state.watchdog_task = None
+
+    for consumer_id in list(state.consumers):
+        if consumer_id.startswith("record:"):
+            continue  # an adopted/active record is finalized by core-api, not here
+        consumer = state.consumers.pop(consumer_id, None)
+        if consumer is None:
+            continue
+        with suppress(Exception):
+            await consumer.stop()
+
+    projector = getattr(state, "projector", None)
+    if projector is not None and getattr(projector, "process", None) is not None:
+        with suppress(Exception):
+            await projector.stop()
+
+    for negotiation_id in list(state.thumbnails.negotiations):
+        await state.thumbnails.close(negotiation_id)
+
+    state.flush_sidecars()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _run_startup(app)
+    try:
+        yield
+    finally:
+        await _run_shutdown(app)
+
+
 def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
-    app = FastAPI(title="pipeline-manager")
+    app = FastAPI(title="pipeline-manager", lifespan=lifespan)
     settings = settings or Settings()
     app.state.settings = settings
 
@@ -99,6 +191,17 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
     app.state.has_ai_subscription = lambda: True
     # Injected by tests / wired to a real PreflightRunner call later; None skips the check.
     app.state.preflight_check = None
+
+    # Lifespan seams (A-14 Step 4). Off-board no-op defaults; board bring-up
+    # (Workstream F) injects real orphan scanning, publisher spawn, and preflight.
+    app.state.runtime_dir = settings.runtime_dir
+    app.state.proc_scanner = _default_proc_scanner
+    app.state.expected_processes = _default_expected_processes
+    app.state.start_publisher = _noop_start_publisher
+    app.state.preflight_source = _no_preflight_source
+    app.state.flush_sidecars = lambda: None
+    app.state.watchdog_task = None
+    app.state.recovery = None
 
     id_counter = itertools.count(1)
     app.state.new_id = lambda: f"{next(id_counter):08d}"

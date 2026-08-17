@@ -126,8 +126,9 @@ so idle previews, health tiles, and fast resume all work.
 
 - **Discovery (B-57 successor):** on boot and on binding change, the manager probes
   V4L2 for the capture dongle and validates the mic ALSA device; camera addresses
-  come from core-api provisioning (`cmd.admin.set_binding`, HL-09), never hardcoded.
-  Camera IPs are edited in exactly one place (INV-PI-2, B-46 dupes die).
+  come from core-api provisioning (`cmd.admin.set_binding`, HL-09) over
+  `PUT /publishers/{id}/binding` (§3.2), never hardcoded. Camera IPs are edited in
+  exactly one place (INV-PI-2, B-46 dupes die).
 - **Supervision:** a dead publisher is auto-restarted **3× with `T-CONSUMER-RESTART`
   backoff (1 s / 3 s / 8 s, max 3 / 120 s)**, then held `offline` with an alert until
   an input change or manual retry (§6.1 of the machines). Restart of a publisher does
@@ -559,8 +560,21 @@ and manual restart):
 |---|---|---|
 | `POST /publishers/{id}/start` | — | `{publisherId, state}` |
 | `POST /publishers/{id}/stop` | — | `{publisherId, state}` |
+| `PUT /publishers/{id}/binding` | `{address, credentials?, devicePath?}` | `{publisherId, state}` |
 
 `id ∈ {usb, rtsp, rtsp2, audio}`.
+
+**Binding ingress (added 2026-08-18 review).** `PUT /publishers/{id}/binding` is the
+one place a source address reaches the manager: core-api pushes it
+(`cmd.admin.set_binding`, HL-09) so camera IPs/credentials are edited in exactly one
+place (INV-PI-2, B-46) and never hardcoded on the box. Credentials arrive **separate
+from** the address, are inserted only as discrete GStreamer property tokens (never
+interpolated into the URL string), and are redacted from `/status`, `/events`, and
+logs. A publisher stays `offline` until it holds a valid binding; a binding change
+resets its restart budget (§1.1). Static board devices (mic ALSA card/control, HDMI-#2
+ALSA device, capture-card identifier, hub location/port) are `Settings`/env,
+provisioned by Workstream F — not part of this route. This route is **internal-only**
+and consumed only by core-api; it owns no public v1 operation.
 
 **Consumers:**
 

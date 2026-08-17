@@ -50,11 +50,19 @@ class ThumbnailController:
         self._python_executable = python_executable
         self._send_signal = send_signal
         self.negotiations: dict[str, ThumbnailNegotiation] = {}
+        self.allowed_roles: frozenset[SourceRole] | None = None
+
+    def set_allowed_roles(self, roles: "frozenset[SourceRole] | None") -> None:
+        """`None` means no restriction (previews for any online/bound role);
+        a set restricts which roles `offer()` will negotiate."""
+        self.allowed_roles = roles
 
     def _consumer_id(self, negotiation_id: str) -> str:
         return f"thumbnails:{negotiation_id}"
 
     async def offer(self, offer: ThumbnailOffer) -> ConsumerEvent:
+        if self.allowed_roles is not None and offer.role_id not in self.allowed_roles:
+            raise RoleNotPreviewable(f"{offer.role_id.value} is not an enabled preview source")
         if not self._is_role_online_and_bound(offer.role_id):
             raise RoleNotPreviewable(f"{offer.role_id.value} is not online/bound")
 

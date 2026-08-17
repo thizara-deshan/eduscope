@@ -70,6 +70,35 @@ class PreflightRunner:
         return await self.inspect(elements)
 
 
+PreflightCheck = Callable[[], PreflightReport]
+
+
+def make_preflight_source(
+    profile: PlatformProfile,
+    *,
+    include_webrtc: bool = True,
+    runner: PreflightRunner | None = None,
+) -> Callable[[], Awaitable[PreflightReport]]:
+    """Async callable that runs the platform preflight once. The FastAPI
+    lifespan awaits it at boot (board-only — it spawns `gst-inspect`) and, on
+    the returned report, publishes a cached sync `preflight_check` that the
+    live/meeting routes read before flipping a channel on (design CH-01/CH-03).
+    Off-board the lifespan uses a source returning `None`, so `preflight_check`
+    stays unset and the routes skip the gate.
+    """
+    active_runner = runner or PreflightRunner()
+
+    async def _source() -> PreflightReport:
+        return await active_runner.run_for_profile(profile, include_webrtc=include_webrtc)
+
+    return _source
+
+
+def as_preflight_check(report: PreflightReport) -> PreflightCheck:
+    """Wrap a computed report as the sync callable the route seam expects."""
+    return lambda: report
+
+
 def _profile_for(platform_id: str) -> PlatformProfile:
     if platform_id == "rk3588":
         return RK3588Profile()

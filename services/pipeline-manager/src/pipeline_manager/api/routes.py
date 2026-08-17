@@ -19,6 +19,7 @@ from ..pipelines.projector import ProjectorMode, QuestionOverlay
 from ..pipelines.record import RecordRequest
 from ..pipelines.snapshot import InvalidSnapshotInterval, SnapshotRequest
 from ..pipelines.thumbnails import ThumbnailOffer
+from ..publishers.base import PublisherBinding
 from .auth import require_bearer
 from .events import format_sse
 from .problems import DomainProblem, InvalidPresetString, NegotiationNotFound
@@ -61,6 +62,24 @@ class PublisherCommandAccepted(BaseModel):
     model_config = ConfigDict(extra="forbid")
     publisherId: str
     state: str
+
+
+class PublisherCredentialsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class PublisherBindingBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    address: str = Field(min_length=1, max_length=2048)
+    credentials: PublisherCredentialsBody | None = None
+    devicePath: str | None = Field(default=None, max_length=1024)
+
+
+class ThumbnailStartBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sources: list[str] | None = None
 
 
 class RecordStartBody(BaseModel):
@@ -150,6 +169,28 @@ async def stop_publisher(publisher_id: str, request: Request) -> PublisherComman
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
     return PublisherCommandAccepted(publisherId=publisher_id, state="stopping")
+
+
+@router.put("/publishers/{publisher_id}/binding", status_code=202)
+async def bind_publisher(publisher_id: str, body: PublisherBindingBody, request: Request) -> PublisherCommandAccepted:
+    """Core-api pushes each source binding here (`cmd.admin.set_binding`,
+    HL-09) — the one place a camera address/credential reaches the manager.
+    A binding change resets the publisher's restart budget; credentials are
+    stored for spawn-time property tokens only and are never echoed back."""
+    try:
+        pid = PublisherId(publisher_id)
+    except ValueError:
+        raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
+    controller = request.app.state.publishers[pid]
+    binding = PublisherBinding(
+        address=body.address,
+        username=body.credentials.username if body.credentials else None,
+        password=body.credentials.password if body.credentials else None,
+        device_path=body.devicePath,
+    )
+    controller.bind(binding)
+    # Never echo credentials — the response carries only id + current state.
+    return PublisherCommandAccepted(publisherId=publisher_id, state=controller.current_state().value)
 
 
 # ── record ───────────────────────────────────────────────────────────────
@@ -262,6 +303,17 @@ async def start_snapshot(body: SnapshotStartBody, request: Request) -> CommandAc
 
 @router.post("/consumers/snapshot/stop", status_code=202)
 async def stop_snapshot(request: Request) -> Response:
+    """Stop the running snapshot consumer(s) without the caller needing to
+    track the opaque id — core-api addresses snapshot as a singleton AUX
+    class (design §3.2)."""
+    state = request.app.state
+    for consumer_id in [cid for cid in state.consumers if cid.startswith("snapshot:")]:
+        consumer = state.consumers[consumer_id]
+        try:
+            await consumer.stop()
+        except ConsumerNotRunning:
+            pass
+        state.consumers.pop(consumer_id, None)
     return Response(status_code=202)
 
 
@@ -269,12 +321,28 @@ async def stop_snapshot(request: Request) -> Response:
 
 
 @router.post("/consumers/thumbnails/start", status_code=202)
-async def start_thumbnails(request: Request) -> Response:
+async def start_thumbnails(body: ThumbnailStartBody, request: Request) -> Response:
+    """Enable the preview capability, optionally restricting which source
+    roles may be negotiated. Absent `sources` means no restriction (the
+    prior default); actual media flows only once an `offer` arrives."""
+    roles: frozenset[SourceRole] | None = None
+    if body.sources is not None:
+        try:
+            roles = frozenset(SourceRole(value) for value in body.sources)
+        except ValueError as exc:
+            raise DomainProblem("invalid_preset", "Unknown roleId in sources", 400) from exc
+    request.app.state.thumbnails.set_allowed_roles(roles)
     return Response(status_code=202)
 
 
 @router.post("/consumers/thumbnails/stop", status_code=202)
 async def stop_thumbnails(request: Request) -> Response:
+    """Close every open negotiation and release their provisional encode
+    slots; idempotent when none are open."""
+    controller = request.app.state.thumbnails
+    for negotiation_id in list(controller.negotiations):
+        await controller.close(negotiation_id)
+    controller.set_allowed_roles(None)
     return Response(status_code=202)
 
 
@@ -382,7 +450,11 @@ async def post_device_led(body: LedBody, request: Request) -> dict:
 async def get_sources(request: Request) -> dict:
     state = request.app.state
     return {
-        pid.value: {"roleId": controller.role.value, "state": controller.current_state().value}
+        pid.value: {
+            "roleId": controller.role.value,
+            "state": controller.current_state().value,
+            "bound": controller.has_binding,
+        }
         for pid, controller in state.publishers.items()
     }
 
@@ -400,6 +472,7 @@ async def get_status(request: Request) -> dict:
         "publishers": {
             pid.value: {
                 "state": controller.current_state().value,
+                "bound": controller.has_binding,
                 "fps": controller.health.fps,
                 "rms": controller.health.rms,
                 "lastError": controller.health.last_error,

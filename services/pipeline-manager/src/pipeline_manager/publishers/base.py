@@ -1,10 +1,34 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Literal
 
 from ..models import PublisherId, PublisherState, SourceRole
+
+
+@dataclass(frozen=True)
+class PublisherBinding:
+    """The source a publisher captures. Address (and, for RTSP, credentials)
+    arrive from core-api (`cmd.admin.set_binding`, HL-09) via
+    `PUT /publishers/{id}/binding`; they are edited in exactly one place and
+    never hardcoded on the box. The password is never echoed back in
+    status/errors/logs — call `redacted()` before anything leaves the service.
+    """
+
+    address: str
+    username: str | None = None
+    password: str | None = None
+    device_path: str | None = None
+
+    @property
+    def has_secret(self) -> bool:
+        return self.password is not None
+
+    def redacted(self) -> "PublisherBinding":
+        if self.password is None:
+            return self
+        return replace(self, password="<redacted>")
 
 # Internal publisher ids map to canonical v1 roles exactly once (design §1.1).
 PUBLISHER_ROLES: dict[PublisherId, SourceRole] = {
@@ -117,12 +141,18 @@ class PublisherController:
         self.clock = clock
         self.restart_budget = RestartBudget(clock=clock)
         self.health = PublisherHealth()
-        self.binding: str | None = None
+        self.binding: PublisherBinding | str | None = None
 
-    def bind(self, binding: str) -> None:
-        """A binding change or manual retry resets the restart budget."""
+    def bind(self, binding: "PublisherBinding | str") -> None:
+        """A binding change or manual retry resets the restart budget. Accepts
+        a structured `PublisherBinding` (from `PUT /publishers/{id}/binding`)
+        or a bare address string (legacy/manual retry)."""
         self.binding = binding
         self.restart_budget.reset()
+
+    @property
+    def has_binding(self) -> bool:
+        return self.binding is not None
 
     def manual_retry(self) -> None:
         self.restart_budget.reset()

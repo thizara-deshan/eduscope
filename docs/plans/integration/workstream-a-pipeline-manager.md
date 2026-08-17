@@ -21,6 +21,8 @@
 7. **No task may depend on an open decision.** Encountering one stops that workstream. Update this master plan and ask for review; do not choose an option in code.
 8. **Master-plan scope is fixed at workstream planning time.** A JIT workstream plan may expand a task but may not add/drop contract ownership or KEEP coverage. If reality conflicts, update this master plan and flag the gate.
 
+> **Note (2026-08-18 review).** Rule 3's "inventory-coverage ledger below" refers to the master plan's Workstream A table (`docs/plans/integration-plan.md`) and `pipeline-manager.md` §0.4 (Behavioral-inventory coverage); the ledger is not reproduced in this JIT doc.
+
 ### Workstream A gate acknowledgement required before execution
 
 JIT reconciliation found two related A-03 drifts and corrected the master plan in the same planning run:
@@ -29,6 +31,8 @@ JIT reconciliation found two related A-03 drifts and corrected the master plan i
 - `packages/api-client/src/mock/seed/sources.ts` currently carries composite tile sizes that violate the even 16:9 invariant and the proven `scripts/bash/_layout.sh` oracle. A-03 therefore moves layout reference data to one language-neutral shared catalog, makes the mock consume it, and generates the Python package resource from it.
 
 The gate must acknowledge this correction before Task A-01 executes. It changes no public contract shape, master task, contract owner, or KEEP assignment.
+
+> **Post-review addendum (2026-08-18).** A review of this plan against the code as built (branch `sonnet5/workstream-a-pipeline-manager`) surfaced eight specification gaps; all are resolved specification-only and indexed in [§ Review addendum — gap resolutions](#review-addendum--gap-resolutions-2026-08-18) at the end of this document. One resolution adds an internal-only route — `PUT /publishers/{id}/binding`, over which core-api pushes each source binding (`cmd.admin.set_binding`, HL-09) — which the Workstream A gate must acknowledge alongside the A-03 correction. It changes no public v1 contract shape, master task, contract owner, or KEEP assignment.
 
 ### Fixed service rules
 
@@ -39,7 +43,7 @@ The gate must acknowledge this correction before Task A-01 executes. It changes 
 - Every GStreamer subprocess receives `-e -m`, starts in its own process group, captures stdout/stderr, and is launched from an argv list with `shell=False`. No global `killall`, shell interpolation, or `pkill` from the normal managed-child path.
 - Stop deadlines are 5 s for pause and 8 s for stop. Unexpected restart backoff is 1 s, 3 s, 8 s, with at most 3 attempts in 120 s.
 - `T-START-CONFIRM=5 s`, `T-SOURCE-DEBOUNCE=3 s`, `T-SOURCE-DEGRADE=2 s`, `T-SOURCE-OFFLINE=10 s`, `T-HEALTH-STALE=6 s`, `T-CAPTURE-PROBE=30 s`, and `T-CAPTURE-RECOVER=25 s`.
-- The encode ledger admits two guaranteed video encodes plus one provisional thumbnail encode. Record/live guarantees must not be displaced by a thumbnail request.
+- The encode ledger admits two guaranteed video encodes plus one provisional thumbnail encode. Record/live guarantees must not be displaced by a thumbnail request. Only `record`, `live`, and `thumbnail` consumers reserve encode slots; `meeting`, `projector`, and `snapshot` are encode-free (HDMI display / PNG-on-CPU, `pipeline-manager.md` §1.2), so the full A-16 output mix reserves exactly the three-slot capacity rather than exceeding it.
 - A dead source never ends a lecture: record builders include an in-pipeline placeholder route; a dead record consumer opens a new segment through the core-api state machine rather than silently continuing the old segment.
 - The service never derives identity or metadata from output filenames. `outputPath` and separate output paths are supplied by core-api and treated as opaque absolute paths beneath the configured recordings root.
 - There is no room-mic implementation, physical record-button input, upload/retention logic, relay configuration mutation, frontend code, or systemd unit in Workstream A. Workstream F owns target package installation and service units.
@@ -63,6 +67,8 @@ pnpm --filter @eduscope/api-client test
 ```
 
 Expected: all three commands exit 0; pytest prints no failures, and both package test suites remain green. Each task below runs its focused tests before this regression and makes exactly one commit.
+
+> **Dev-host test tiers (2026-08-18 review).** Five tests are `skipif(sys.platform == "win32")` for behavior that is genuinely POSIX-only — targeted-EOS process-group signals (`killpg`/`getpgid`, A-08/A-14), AF_UNIX socket files (A-15 wrapper), and AF_UNIX asyncio in the helper client (A-13). On a Windows planning/dev host, "green" therefore means *N passed / 5 skipped*, not zero skips; those five behaviors are exercised for real only by the A-15/A-16 board gates. All production code stays POSIX-correct for the RK3588 target.
 
 ---
 
@@ -993,6 +999,7 @@ Routes are:
 
 ```text
 POST /publishers/{id}/start|stop
+PUT  /publishers/{id}/binding
 POST /consumers/record
 POST /consumers/live
 POST /consumers/meeting
@@ -1013,7 +1020,9 @@ GET  /events
 GET  /healthz
 ```
 
-The three signaling routes are internal only and map to A-11; they do not change v1's panel-facing `/api/v1/ws/preview` contract. FastAPI lifetime order is: construct state→recover exact orphans→start valid publishers/watchdog→serve; shutdown stops auxiliary/channel/display children, leaves an actively adopted record untouched for core-api recovery policy, and flushes sidecars.
+The three signaling routes are internal only and map to A-11; they do not change v1's panel-facing `/api/v1/ws/preview` contract. `PUT /publishers/{id}/binding` is also internal-only: core-api pushes the source binding (`{address, credentials?, devicePath?}`, `cmd.admin.set_binding`/HL-09), which is the one place a camera address/credential reaches the manager (edited in exactly one place, never hardcoded); a publisher stays `offline` until it holds a valid binding, a binding change resets its restart budget, and credentials are redacted from `/status`, `/events`, and logs. FastAPI lifetime order is: construct state→recover exact orphans→start valid publishers/watchdog→serve; shutdown stops auxiliary/channel/display children, leaves an actively adopted record untouched for core-api recovery policy, and flushes sidecars.
+
+> **Implementation status (2026-08-18 review).** The binding route, the `bind()` call site behind `POST /publishers/{id}/start`, the FastAPI lifespan above (orphan recovery + publisher/watchdog start + shutdown ordering), and the `preflight_check` wiring are **board-bring-up items** and are stubbed in the current code (`create_app` wires state only; publisher start/stop return `202` without spawning). This is the natural content of the A-15/A-16 board runs and Workstream F service bring-up; it is tracked in the [Review addendum](#review-addendum--gap-resolutions-2026-08-18), not silently missing.
 
 - [ ] **Step 5: Prove all routes, reconnect, and contract regression**
 
@@ -1362,3 +1371,34 @@ No master task was added, removed, combined, or reassigned. A-15 and A-16 are th
 ### Gate note
 
 The master plan was updated in this planning commit rather than silently carrying stale A-03 assumptions. Execution is blocked until the Workstream A gate acknowledges the corrected v1 channel matrix and the single shared even-16:9 layout catalog approach.
+
+---
+
+## Review addendum — gap resolutions (2026-08-18)
+
+> A post-implementation review of this plan — cross-checked against the master plan, `pipeline-manager.md`, the v1 contracts (`contracts/openapi.yaml`, `contracts/events.md`), the proven `scripts/bash/*` oracles, and the code as built on branch `sonnet5/workstream-a-pipeline-manager` — surfaced the gaps below. Per the reviewing decision, resolution here is **specification-only** (this plan, `pipeline-manager.md`, and the bench README); no production code was changed in this pass. Each row states what the review found, how the specification gap is closed, and where it is now documented. The camera **binding ingress** mechanism (row 1b) was an open design decision resolved in favour of an internal route (core-api pushes), per binding rule 7 — chosen with review sign-off, not selected unilaterally in code.
+
+### Resolved specification gaps
+
+| # | Gap found in review | Resolution (specification) | Now specified in |
+|---|---|---|---|
+| 1a | A-01 `Settings` never listed the static board-device fields A-12/A-13 read. | Confirmed present in code (`config.py`): `mic_alsa_card`/`mic_alsa_control`, `mic_mixer_min`/`max`, `hdmi2_alsa_device`, `capture_card_stable_identifier`/`hub_location`/`hub_port`, `led_present`. Provisioned by Workstream F. | this addendum; `config.py`. |
+| 1b | No defined ingress for a camera's RTSP **address + credentials** (`build_rtsp_publisher` takes them, but `POST /publishers/{id}/start` carries no binding and nothing calls `PublisherController.bind()`). | Internal route **`PUT /publishers/{id}/binding`** — core-api pushes the binding (`cmd.admin.set_binding`, HL-09). Credentials live only in core-api, travel over localhost, are inserted as discrete GStreamer property tokens, and are redacted from `/status`/events. Internal-contract addition flagged to the gate (rule 8); no public v1 shape change. | design §1.1, §3.2; plan A-14; master-plan gate flag. |
+| 2 | Cross-platform test story on the stated Windows dev host was unplanned (supervisor/stop/recovery/helper use POSIX-only primitives). | Documented test tiers: 5 tests `skipif(win32)` for genuinely POSIX-only behavior (`killpg`/process groups, AF_UNIX socket files, AF_UNIX asyncio). Dev-host green = *N passed / 5 skipped*; verified for real only on the board gates. | "Repository and command conventions" note; bench README. |
+| 3 | A-16's `ffprobe rtmp://…/live/bench` needs a running nginx-RTMP relay that neither A (never mutates nginx) nor the gated Workstream B provisions. | Documented as an explicit **operator / Workstream-F prerequisite** for the A-16 gate, referencing the relay design (prompt 11); the check fails fast if it is absent. | bench README prerequisites + A-16 section. |
+| 4 | Whole-workstream closure is hardware-gated; the plan never flagged the expected board-less terminal state. | Documented: with no RK3588 target, A terminates "14/16 closed, A-15/A-16 code-complete, gate open" **by design**; evidence stays `NOT RUN — gate failed` rather than fabricated. | A-15/A-16 intros; execution summary. |
+| 5 | Encode-ledger accounting for the A-16 full mix rode on an unstated invariant. | Documented invariant: only `record`/`live`/`thumbnail` reserve encode slots; `meeting`/`projector`/`snapshot` are encode-free — the mix reserves exactly capacity 3. | encode-ledger fixed rule; design §1.2. |
+| 6 | `GET /sources` had no named implementation owner in the plan. | Not a gap in code — implemented in A-14 (`routes.py`, per-publisher role+state projection; design §3.2 → 5a/B-57). | this addendum; `routes.py`. |
+| 7 | Rule 3's "inventory-coverage ledger below" is a dangling pointer in this JIT doc. | Ledger lives in the master-plan Workstream A table and `pipeline-manager.md` §0.4; noted inline. | binding-rules note. |
+| 8 | Hardcoded display geometry (`x=1920`, HDMI #1/#2). | Documented as an accepted single-platform (RK3588) v1 limitation, behind `PlatformProfile`/`DisplayPlacement` for a future second platform — not a portability defect for v1. | this addendum; design §2.3. |
+
+### Implementation items still open (board bring-up / Workstream F — tracked, not silently missing)
+
+The docs-only pass closes the *specification* gaps. The following runtime wiring is revealed by the review, remains stubbed in code, and is verified only on the board — it is the natural content of the A-15/A-16 board runs and the Workstream F service bring-up:
+
+- **`PUT /publishers/{id}/binding`** route + the `PublisherController.bind()` call site — the RTSP builder and `bind()` exist; the route and its wiring do not yet. `POST /publishers/{id}/start` is currently a `202` stub that does not spawn.
+- **FastAPI lifespan** (A-14 Step 4): construct → recover orphans → bind + start publishers/watchdog → serve; shutdown ordering + sidecar flush. `create_app` presently wires state only.
+- **`preflight_check`** wiring to a real `PreflightRunner` (stays `None` off-board).
+- Real spawning behind the `thumbnails start|stop` and `snapshot/stop` `202` stubs.
+
+None of these change a public v1 contract; each is internal to the pipeline-manager runtime.

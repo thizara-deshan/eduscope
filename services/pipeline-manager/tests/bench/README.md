@@ -12,8 +12,13 @@ markers) against a faked service, never a real board.
 - RK3588 target board, booted, with `services/pipeline-manager` installed
   and its Python environment ready.
 - `curl`, `jq`, `ffprobe`, `stat`, `kill`, `awk` on `PATH`.
-- Camera/mic source bindings provisioned; recordings disk mounted; local
-  nginx-RTMP relay running (A-16 only).
+- Camera/mic source bindings provisioned (pushed by core-api via
+  `PUT /publishers/{id}/binding`, or a bench double) and recordings disk mounted.
+- **Local nginx-RTMP relay running (A-16 only).** Neither Workstream A (which
+  never mutates nginx) nor the still-gated Workstream B stands this up — the
+  bench operator / Workstream F must start it before A-16 (see the relay design,
+  prompt 11). A-16's `ffprobe rtmp://127.0.0.1:1935/live/bench` check fails fast
+  if it is absent.
 - The root helper listening on `/run/eduscope/helper.sock` (real or a
   provisioned double honoring the fixed verb allowlist).
 - `EDUSCOPE_PM_TOKEN` exported with the provisioned shared bearer token —
@@ -42,11 +47,12 @@ stays `NOT RUN — gate failed`.
 
 ## A-16 — outputs and RK3588 resources
 
-Runs only after A-15 passes on the same target commit. See
-`scripts/bench/outputs.sh`, `scripts/bench/resource-ledger.sh`, and
-`scripts/bench/webrtc.sh` (A-16) for the exact invocation once that task is
-implemented; `evidence/a16-template.md` mirrors the same fill-in-from-the-
-actual-run discipline.
+Runs only after A-15 passes on the same target commit, and requires the local
+nginx-RTMP relay named above. Run `scripts/bench/outputs.sh`,
+`scripts/bench/resource-ledger.sh`, and `scripts/bench/webrtc.sh`, then the
+manual HDMI-#2-mic and projector-latency procedures (plan A-16 Step 5).
+`evidence/a16-template.md` mirrors the same fill-in-from-the-actual-run
+discipline.
 
 ## Running the wrapper/parser tests (any host, no board needed)
 
@@ -61,3 +67,13 @@ harness (`tests/bench/fakebin/`, wired in via `tests/bench/conftest.py`'s
 `CURL=`/`JQ=`/... env-var overrides — the scripts default to the real tool
 name when unset) so the scripts' prerequisite checks, argument parsing, and
 output markers can be verified without any real service or hardware.
+
+## Windows / non-board dev host
+
+Beyond this bench directory, five unit tests are `skipif(sys.platform ==
+"win32")` for genuinely POSIX-only behavior — targeted-EOS process-group
+signals (`killpg`/`getpgid`), AF_UNIX socket files, and AF_UNIX asyncio in the
+helper client. On Windows, `python -m pytest -q` is green at *N passed / 5
+skipped*, not zero skips; those behaviors are verified for real only by the
+A-15/A-16 board gates. Production code stays POSIX-correct for the RK3588
+target.

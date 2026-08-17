@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     shared_bearer_token: str = Field(min_length=32)
     recordings_root: Path = Path("/media/eduscope/recordings")
     helper_socket: Path = Path("/run/eduscope/helper.sock")
+    runtime_dir: Path = Path("/run/eduscope/pipeline-manager")
     event_replay_size: int = Field(default=512, ge=32, le=4096)
     event_subscriber_queue_size: int = Field(default=100, ge=8, le=4096)
 

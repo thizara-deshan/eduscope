@@ -98,3 +98,26 @@ class CaptureCardWatchdog:
                 self.state = "failed"
                 return self.state
             await sleep(poll_interval)
+
+
+async def run_watchdog_loop(
+    watchdog: CaptureCardWatchdog,
+    *,
+    interval: float = PROBE_INTERVAL_SECONDS,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    stop_event: "asyncio.Event | None" = None,
+) -> None:
+    """Supervised probe loop: one `tick()` every `interval`, guarded so a
+    transient probe/hub-cycle error never tears the loop down. Cancel the task
+    (or set `stop_event`) to stop it — the FastAPI lifespan cancels it on
+    shutdown. On the board this runs for the process lifetime; off-board the
+    default probe simply reports the card absent.
+    """
+    while stop_event is None or not stop_event.is_set():
+        try:
+            await watchdog.tick()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - a probe/helper error must not kill the loop
+            pass
+        await sleep(interval)
