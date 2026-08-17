@@ -1,0 +1,36 @@
+[
+  {
+    "sequence": 1,
+    "consumerId": "record:01J000000000000000000001",
+    "kind": "running",
+    "state": "running",
+    "pgid": 40231,
+    "occurredAt": "2026-08-14T09:00:00Z"
+  },
+  {
+    "sequence": 2,
+    "consumerId": "record:01J000000000000000000001",
+    "kind": "eos",
+    "state": "exited",
+    "truncated": false,
+    "occurredAt": "2026-08-14T09:10:00Z"
+  },
+  {
+    "sequence": 3,
+    "consumerId": "record:01J000000000000000000002",
+    "kind": "exited",
+    "state": "exited",
+    "reason": "unexpected",
+    "truncated": true,
+    "occurredAt": "2026-08-14T09:15:00Z"
+  },
+  {
+    "sequence": 4,
+    "consumerId": "record:01J000000000000000000002",
+    "kind": "eos_timeout",
+    "state": "failed",
+    "truncated": true,
+    "errorCode": "eos_timeout",
+    "occurredAt": "2026-08-14T09:20:00Z"
+  }
+]

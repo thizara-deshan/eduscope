@@ -46,16 +46,21 @@ class EncodeLedger:
 
     @contextmanager
     def reserve(self, owner: str, slots: int, priority: Priority = "guaranteed") -> Iterator[Reservation]:
-        """Reserve before spawn, `.commit()` after spawn succeeds, release on
-        every terminal path (including spawn/confirm failure — the `finally`
-        below runs regardless of whether commit() was ever called)."""
-        reservation = self._acquire(owner, slots, priority)
+        """Convenience for a reservation scoped to one `with` block. Consumers
+        whose reservation must outlive a single block (held from before spawn
+        until the consumer's terminal state) should call `acquire()`/`release()`
+        directly instead — this context manager is built on exactly those.
+        """
+        reservation = self.acquire(owner, slots, priority)
         try:
             yield reservation
         finally:
             self.release(owner)
 
-    def _acquire(self, owner: str, slots: int, priority: Priority) -> Reservation:
+    def acquire(self, owner: str, slots: int, priority: Priority) -> Reservation:
+        """Reserve before spawn; call `.commit()` on the result after spawn
+        succeeds. Release on every terminal path (including spawn/confirm
+        failure) via `release(owner)`."""
         if owner in self._reservations:
             raise AlreadyReserved(f"{owner} already holds a reservation")
 
