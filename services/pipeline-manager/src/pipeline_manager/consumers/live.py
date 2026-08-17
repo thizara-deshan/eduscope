@@ -28,5 +28,5 @@ class LiveConsumer(ConsumerController):
         spec = build_live(request, self._platform)
         for role in spec.required_roles:
             if not self._is_publisher_running(role):
-                raise PublisherNotRunning(f"required publisher for {role.value} is not running")
+                raise PublisherNotRunning(role)
         return await self.spawn(spec, priority="guaranteed")

@@ -14,6 +14,8 @@ PUBLISHER_ROLES: dict[PublisherId, SourceRole] = {
     PublisherId.AUDIO: SourceRole.MIC_LECTURER,
 }
 
+ROLE_PUBLISHERS: dict[SourceRole, PublisherId] = {role: publisher for publisher, role in PUBLISHER_ROLES.items()}
+
 # Proven shm ring sizes (bytes) — pipeline-audit §4.2.
 PUBLISHER_RING_BYTES: dict[PublisherId, int] = {
     PublisherId.USB: 64_000_000,

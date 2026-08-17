@@ -71,7 +71,13 @@ class HelperClient:
         self._response_timeout = response_timeout
 
     async def _default_connector(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        return await asyncio.open_unix_connection(str(self._socket_path))
+        # The helper only ever runs on the RK3588 board (POSIX AF_UNIX); this
+        # guard turns a missing platform API into a clean HelperError instead
+        # of an AttributeError crash on a non-POSIX dev host.
+        connector = getattr(asyncio, "open_unix_connection", None)
+        if connector is None:
+            raise HelperError("AF_UNIX sockets are not available on this host")
+        return await connector(str(self._socket_path))
 
     async def _send(self, verb: str, args: BaseModel) -> HelperResponse:
         request_id = self._id_factory()

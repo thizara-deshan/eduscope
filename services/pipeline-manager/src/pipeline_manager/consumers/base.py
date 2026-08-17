@@ -31,7 +31,9 @@ class ConsumerEvent:
 
 
 class PublisherNotRunning(RuntimeError):
-    pass
+    def __init__(self, role) -> None:  # role: SourceRole, kept untyped to avoid an import cycle
+        super().__init__(f"required publisher for {role.value} is not running")
+        self.role = role
 
 
 class CaptureCardRecovering(RuntimeError):

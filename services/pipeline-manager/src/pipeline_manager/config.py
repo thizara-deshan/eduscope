@@ -17,6 +17,18 @@ class Settings(BaseSettings):
     recordings_root: Path = Path("/media/eduscope/recordings")
     helper_socket: Path = Path("/run/eduscope/helper.sock")
     event_replay_size: int = Field(default=512, ge=32, le=4096)
+    event_subscriber_queue_size: int = Field(default=100, ge=8, le=4096)
+
+    mic_alsa_card: str = "1"
+    mic_alsa_control: str = "Mic"
+    mic_mixer_min: int = 0
+    mic_mixer_max: int = 100
+    hdmi2_alsa_device: str = "hw:2,0"
+
+    capture_card_stable_identifier: str = "eduscope-capture-dongle"
+    capture_card_hub_location: str = "1-2"
+    capture_card_hub_port: int = Field(default=3, ge=1, le=32)
+    led_present: bool = True
 
     @field_validator("bind_host")
     @classmethod

@@ -58,7 +58,7 @@ class RecordConsumer:
 
         for role in spec.required_roles:
             if not self._is_publisher_running(role):
-                raise PublisherNotRunning(f"required publisher for {role.value} is not running")
+                raise PublisherNotRunning(role)
         if SourceRole.PRESENTATION in spec.required_roles and self._is_capture_card_recovering():
             raise CaptureCardRecovering("capture card is recovering")
 

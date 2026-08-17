@@ -30,7 +30,7 @@ class MeetingConsumer(ConsumerController):
         spec = build_meeting(request, self._platform)
         for role in spec.required_roles:
             if not self._is_publisher_running(role):
-                raise PublisherNotRunning(f"required publisher for {role.value} is not running")
+                raise PublisherNotRunning(role)
         event = await self.spawn(spec, priority="guaranteed")
         return event
 

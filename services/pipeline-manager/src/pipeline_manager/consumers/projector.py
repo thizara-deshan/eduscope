@@ -37,8 +37,13 @@ class ProjectorConsumer(ConsumerController):
         if self.process is None or self.process.popen.stdin is None:
             raise RuntimeError("projector worker is not running")
         message = encode_control_message(mode, payload)
-        self.process.popen.stdin.write(message)
-        self.process.popen.stdin.flush()
+        stdin = self.process.popen.stdin
+        # Popen streams are opened text=True (line-based bus parsing needs
+        # that for stdout/stderr); `.buffer` reaches the underlying binary
+        # writer so this length-delimited frame goes out byte-exact.
+        writer = getattr(stdin, "buffer", stdin)
+        writer.write(message)
+        writer.flush()
         self.mode = mode
         return message
 

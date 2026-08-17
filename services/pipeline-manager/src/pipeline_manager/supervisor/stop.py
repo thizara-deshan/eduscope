@@ -29,9 +29,13 @@ class StopResult:
 def send_group_signal(pgid: int, sig: int) -> None:
     """Targeted signal to exactly one process group — never a broad-pattern
     process-kill tool or a shell (B-06/B-14 death). Production always runs on
-    the RK3588 board (POSIX); `os.killpg` is the only production path.
+    the RK3588 board (POSIX) where `os.killpg` is used; the `os.kill` fallback
+    only lets this path execute end-to-end on a non-POSIX dev host running tests.
     """
-    os.killpg(pgid, sig)
+    if hasattr(os, "killpg"):
+        os.killpg(pgid, sig)
+    else:
+        os.kill(pgid, sig)
 
 
 async def stop_process(
