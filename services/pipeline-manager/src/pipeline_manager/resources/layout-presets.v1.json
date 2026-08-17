@@ -1,0 +1,108 @@
+[
+  {
+    "id": "pc-only",
+    "displayName": "Presentation only",
+    "description": "Full-frame presentation capture, no cameras.",
+    "allowedChannels": ["streaming"],
+    "kind": "single",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [{ "roleId": "presentation", "x": 0, "y": 0, "w": 1920, "h": 1080, "z": 0 }],
+    "parametric": false,
+    "outputs": [{ "streamKey": "main", "roleIds": ["presentation"], "includeAudio": true }],
+    "passthroughEligible": true,
+    "requiredRoles": ["presentation"]
+  },
+  {
+    "id": "cam-1",
+    "displayName": "Lecturer camera only",
+    "description": "Full-frame lecturer camera, no slides.",
+    "allowedChannels": ["local", "meeting", "streaming"],
+    "kind": "single",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [{ "roleId": "lecturer-cam", "x": 0, "y": 0, "w": 1920, "h": 1080, "z": 0 }],
+    "parametric": false,
+    "outputs": [{ "streamKey": "main", "roleIds": ["lecturer-cam"], "includeAudio": true }],
+    "passthroughEligible": true,
+    "requiredRoles": ["lecturer-cam"]
+  },
+  {
+    "id": "cam-2",
+    "displayName": "Students camera only",
+    "description": "Full-frame students camera, no slides.",
+    "allowedChannels": ["local", "meeting", "streaming"],
+    "kind": "single",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [{ "roleId": "students-cam", "x": 0, "y": 0, "w": 1920, "h": 1080, "z": 0 }],
+    "parametric": false,
+    "outputs": [{ "streamKey": "main", "roleIds": ["students-cam"], "includeAudio": true }],
+    "passthroughEligible": true,
+    "requiredRoles": ["students-cam"]
+  },
+  {
+    "id": "fifty-fifty",
+    "displayName": "Slides + lecturer, 50/50",
+    "description": "Presentation and lecturer camera split evenly.",
+    "allowedChannels": ["local", "streaming"],
+    "kind": "composite",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [
+      { "roleId": "presentation", "x": 0, "y": 270, "w": 960, "h": 540, "z": 0 },
+      { "roleId": "lecturer-cam", "x": 960, "y": 270, "w": 960, "h": 540, "z": 0 }
+    ],
+    "parametric": true,
+    "outputs": [{ "streamKey": "main", "roleIds": ["presentation", "lecturer-cam"], "includeAudio": true }],
+    "passthroughEligible": false,
+    "requiredRoles": ["presentation", "lecturer-cam"]
+  },
+  {
+    "id": "cams-fifty-fifty",
+    "displayName": "Both cameras, 50/50",
+    "description": "Lecturer and students cameras split evenly, no slides.",
+    "allowedChannels": ["meeting"],
+    "kind": "composite",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [
+      { "roleId": "lecturer-cam", "x": 0, "y": 270, "w": 960, "h": 540, "z": 0 },
+      { "roleId": "students-cam", "x": 960, "y": 270, "w": 960, "h": 540, "z": 0 }
+    ],
+    "parametric": true,
+    "outputs": [{ "streamKey": "main", "roleIds": ["lecturer-cam", "students-cam"], "includeAudio": true }],
+    "passthroughEligible": false,
+    "requiredRoles": ["lecturer-cam", "students-cam"]
+  },
+  {
+    "id": "side-by-side",
+    "displayName": "Slides + students, side by side",
+    "description": "Presentation and students camera side by side.",
+    "allowedChannels": ["local", "streaming"],
+    "kind": "composite",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [
+      { "roleId": "presentation", "x": 0, "y": 180, "w": 1280, "h": 720, "z": 0 },
+      { "roleId": "students-cam", "x": 1280, "y": 360, "w": 640, "h": 360, "z": 0 }
+    ],
+    "parametric": true,
+    "outputs": [{ "streamKey": "main", "roleIds": ["presentation", "students-cam"], "includeAudio": true }],
+    "passthroughEligible": false,
+    "requiredRoles": ["presentation", "students-cam"]
+  },
+  {
+    "id": "separate-files",
+    "displayName": "Separate files per source",
+    "description": "Records the presentation and lecturer camera to their own files — local recording only.",
+    "allowedChannels": ["local"],
+    "kind": "multi-file",
+    "canvas": { "width": 1920, "height": 1080 },
+    "tiles": [
+      { "roleId": "presentation", "x": 0, "y": 0, "w": 1920, "h": 1080, "z": 0 },
+      { "roleId": "lecturer-cam", "x": 0, "y": 0, "w": 1920, "h": 1080, "z": 0 }
+    ],
+    "parametric": false,
+    "outputs": [
+      { "streamKey": "presentation", "roleIds": ["presentation"], "includeAudio": false },
+      { "streamKey": "lecturer-cam", "roleIds": ["lecturer-cam"], "includeAudio": true }
+    ],
+    "passthroughEligible": false,
+    "requiredRoles": ["presentation", "lecturer-cam"]
+  }
+]

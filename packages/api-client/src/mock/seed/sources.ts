@@ -1,5 +1,6 @@
 import {
-  zAudioControl, zChannelConfig, zLayoutPreset, zPhysicalInput, zSourceBinding,
+  LAYOUT_PRESETS,
+  zAudioControl, zChannelConfig, zPhysicalInput, zSourceBinding,
   zSourceRole, zSourceStatus,
   type AudioControl, type ChannelConfig, type LayoutPreset, type PhysicalInput,
   type SourceBinding, type SourceRole, type SourceStatus, type StreamTarget,
@@ -116,116 +117,10 @@ export function createSourcesSeed(
     ] as const
   ).map((row) => validated(zChannelConfig, { ...row, updatedAt: SEED_EPOCH }));
 
-  // Every preset's `allowedChannels` is a real subset, never the full
+  // Sourced from the one shared even-16:9 catalog (A-03 gate correction) —
+  // every preset's `allowedChannels` is a real subset, never the full
   // [local, meeting, streaming] list for every row (INV-LP-1).
-  const layoutPresets: LayoutPreset[] = [
-    validated(zLayoutPreset, {
-      id: 'pc-only',
-      displayName: 'Presentation only',
-      description: 'Full-frame presentation capture, no cameras.',
-      allowedChannels: ['streaming'],
-      kind: 'single',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [{ roleId: 'presentation', x: 0, y: 0, w: 1920, h: 1080, z: 0 }],
-      parametric: false,
-      outputs: [{ streamKey: 'main', roleIds: ['presentation'], includeAudio: true }],
-      passthroughEligible: true,
-      requiredRoles: ['presentation'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'cam-1',
-      displayName: 'Lecturer camera only',
-      description: 'Full-frame lecturer camera, no slides.',
-      allowedChannels: ['local', 'meeting', 'streaming'],
-      kind: 'single',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [{ roleId: 'lecturer-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 }],
-      parametric: false,
-      outputs: [{ streamKey: 'main', roleIds: ['lecturer-cam'], includeAudio: true }],
-      passthroughEligible: true,
-      requiredRoles: ['lecturer-cam'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'cam-2',
-      displayName: 'Students camera only',
-      description: 'Full-frame students camera, no slides.',
-      allowedChannels: ['local', 'meeting', 'streaming'],
-      kind: 'single',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [{ roleId: 'students-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 }],
-      parametric: false,
-      outputs: [{ streamKey: 'main', roleIds: ['students-cam'], includeAudio: true }],
-      passthroughEligible: true,
-      requiredRoles: ['students-cam'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'fifty-fifty',
-      displayName: 'Slides + lecturer, 50/50',
-      description: 'Presentation and lecturer camera split evenly.',
-      allowedChannels: ['local', 'streaming'],
-      kind: 'composite',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [
-        { roleId: 'presentation', x: 0, y: 0, w: 960, h: 1080, z: 0 },
-        { roleId: 'lecturer-cam', x: 960, y: 0, w: 960, h: 1080, z: 0 },
-      ],
-      parametric: true,
-      outputs: [{ streamKey: 'main', roleIds: ['presentation', 'lecturer-cam'], includeAudio: true }],
-      passthroughEligible: false,
-      requiredRoles: ['presentation', 'lecturer-cam'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'cams-fifty-fifty',
-      displayName: 'Both cameras, 50/50',
-      description: 'Lecturer and students cameras split evenly, no slides.',
-      allowedChannels: ['meeting'],
-      kind: 'composite',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [
-        { roleId: 'lecturer-cam', x: 0, y: 0, w: 960, h: 1080, z: 0 },
-        { roleId: 'students-cam', x: 960, y: 0, w: 960, h: 1080, z: 0 },
-      ],
-      parametric: true,
-      outputs: [{ streamKey: 'main', roleIds: ['lecturer-cam', 'students-cam'], includeAudio: true }],
-      passthroughEligible: false,
-      requiredRoles: ['lecturer-cam', 'students-cam'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'side-by-side',
-      displayName: 'Slides + students, side by side',
-      description: 'Presentation and students camera side by side.',
-      allowedChannels: ['local', 'streaming'],
-      kind: 'composite',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [
-        { roleId: 'presentation', x: 0, y: 0, w: 1280, h: 1080, z: 0 },
-        { roleId: 'students-cam', x: 1280, y: 0, w: 640, h: 1080, z: 0 },
-      ],
-      parametric: true,
-      outputs: [{ streamKey: 'main', roleIds: ['presentation', 'students-cam'], includeAudio: true }],
-      passthroughEligible: false,
-      requiredRoles: ['presentation', 'students-cam'],
-    } satisfies LayoutPreset),
-    validated(zLayoutPreset, {
-      id: 'separate-files',
-      displayName: 'Separate files per source',
-      description: 'Records the presentation and lecturer camera to their own files — local recording only.',
-      allowedChannels: ['local'],
-      kind: 'multi-file',
-      canvas: { width: 1920, height: 1080 },
-      tiles: [
-        { roleId: 'presentation', x: 0, y: 0, w: 1920, h: 1080, z: 0 },
-        { roleId: 'lecturer-cam', x: 0, y: 0, w: 1920, h: 1080, z: 0 },
-      ],
-      parametric: false,
-      outputs: [
-        { streamKey: 'presentation', roleIds: ['presentation'], includeAudio: false },
-        { streamKey: 'lecturer-cam', roleIds: ['lecturer-cam'], includeAudio: true },
-      ],
-      passthroughEligible: false,
-      requiredRoles: ['presentation', 'lecturer-cam'],
-    } satisfies LayoutPreset),
-  ];
+  const layoutPresets: LayoutPreset[] = LAYOUT_PRESETS.slice();
 
   return { sourceRoles, sourceStatuses, physicalInputs, sourceBindings, audioControls, channels, layoutPresets };
 }

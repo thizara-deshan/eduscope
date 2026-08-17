@@ -74,3 +74,25 @@ class TestOutputPath:
 def test_service_cannot_bind_publicly() -> None:
     with pytest.raises(ValidationError, match="127.0.0.1"):
         Settings(bind_host="0.0.0.0", shared_bearer_token="x" * 32)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SHARED_CATALOG = REPO_ROOT / "packages/shared/src/constants/layout-presets.json"
+GENERATED_CATALOG = (
+    REPO_ROOT
+    / "services/pipeline-manager/src/pipeline_manager/resources/layout-presets.v1.json"
+)
+MOCK_SOURCES_TS = REPO_ROOT / "packages/api-client/src/mock/seed/sources.ts"
+
+
+def test_generated_layout_catalog_is_fresh() -> None:
+    import json
+
+    shared = json.loads(SHARED_CATALOG.read_text(encoding="utf-8"))
+    generated = json.loads(GENERATED_CATALOG.read_text(encoding="utf-8"))
+    assert shared == generated
+
+
+def test_mock_no_longer_declares_a_second_literal_catalog() -> None:
+    text = MOCK_SOURCES_TS.read_text(encoding="utf-8")
+    assert "const layoutPresets: LayoutPreset[] = [" not in text

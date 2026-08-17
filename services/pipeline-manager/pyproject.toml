@@ -24,6 +24,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/pipeline_manager"]
 
+[tool.hatch.build]
+include = ["src/pipeline_manager/**/*.py", "src/pipeline_manager/resources/*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"
 asyncio_mode = "auto"
