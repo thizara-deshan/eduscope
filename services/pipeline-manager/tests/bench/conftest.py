@@ -73,6 +73,12 @@ def run_script(
             tool = var.lower()
             path = FAKEBIN / tool
             if path.exists():
+                # `command -v "$CURL"` in the scripts only succeeds if the fake
+                # tool is executable. A ZIP download (or a checkout that lost
+                # the mode bit) strips +x, so ensure it here — otherwise every
+                # bench script dies at its first `command -v` on Linux.
+                if sys.platform != "win32":
+                    path.chmod(path.stat().st_mode | 0o111)
                 env[var] = _to_posix(str(path)) if sys.platform == "win32" else str(path)
 
     if env_overrides:

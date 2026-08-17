@@ -88,6 +88,12 @@ class HelperClient:
                 reader, writer = await self._connector()
         except TimeoutError as exc:
             raise HelperTimeout("connect timed out") from exc
+        except OSError as exc:
+            # A missing/refused helper socket (FileNotFoundError,
+            # ConnectionRefusedError, …) is a clean HelperError so best-effort
+            # callers (LED) can no-op and the watchdog can log-and-continue,
+            # instead of a raw OSError escaping to a 500.
+            raise HelperError(f"cannot reach helper socket {self._socket_path}: {exc}") from exc
 
         try:
             writer.write(payload.encode("utf-8"))
