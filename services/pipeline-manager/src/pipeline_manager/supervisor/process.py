@@ -43,6 +43,7 @@ class ManagedProcess:
     popen: subprocess.Popen
     observations: "asyncio.Queue[Observation]" = field(default_factory=asyncio.Queue)
     raw_lines: list[str] = field(default_factory=list)
+    eos_seen: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 PopenFactory = Callable[..., subprocess.Popen]
@@ -96,3 +97,5 @@ class ProcessSupervisor:
                 asyncio.run_coroutine_threadsafe(
                     process.observations.put(Observation(kind=kind, raw=text)), loop
                 )
+                if kind == "EOS":
+                    loop.call_soon_threadsafe(process.eos_seen.set)
