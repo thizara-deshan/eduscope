@@ -99,8 +99,8 @@
     ],
     "parametric": false,
     "outputs": [
-      { "streamKey": "presentation", "roleIds": ["presentation"], "includeAudio": false },
-      { "streamKey": "lecturer-cam", "roleIds": ["lecturer-cam"], "includeAudio": true }
+      { "streamKey": "presentation", "roleIds": ["presentation"], "includeAudio": true },
+      { "streamKey": "lecturer-cam", "roleIds": ["lecturer-cam"], "includeAudio": false }
     ],
     "passthroughEligible": false,
     "requiredRoles": ["presentation", "lecturer-cam"]

@@ -79,14 +79,16 @@ describe('Wave 3 — channel snapshot and LP-7 contract', () => {
     });
   });
 
-  it('separate-files has exactly two outputs: Presentation (no audio) and Lecturer Camera (audio)', async () => {
+  it('separate-files has exactly two outputs: Presentation (audio) and Lecturer Camera (no audio)', async () => {
     const { ops } = build();
     const presets = await ops.listLayoutPresets();
     const preset = presets.find((p) => p.id === 'separate-files')!;
     expect(preset.outputs).toHaveLength(2);
     expect(preset.outputs.map((o) => o.roleIds)).toEqual([['presentation'], ['lecturer-cam']]);
-    expect(preset.outputs[0]!.includeAudio).toBe(false);
-    expect(preset.outputs[1]!.includeAudio).toBe(true);
+    // Audio belongs to the USB/presentation source (rec_usb_cam1_separate.sh,
+    // A-04 gate correction) — the camera stream stays a pure H.264 passthrough.
+    expect(preset.outputs[0]!.includeAudio).toBe(true);
+    expect(preset.outputs[1]!.includeAudio).toBe(false);
   });
 
   it('rejects updateChannelConfig with a named 422 when a required role has no enabled binding', async () => {
