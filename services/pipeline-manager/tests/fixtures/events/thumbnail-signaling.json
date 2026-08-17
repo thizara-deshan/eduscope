@@ -1,0 +1,18 @@
+[
+  { "type": "offer", "negotiationId": "01J0THUMB0001", "roleId": "presentation", "sdp": "v=0..." },
+  { "type": "answer", "negotiationId": "01J0THUMB0001", "sdp": "v=0..." },
+  {
+    "type": "ice",
+    "negotiationId": "01J0THUMB0001",
+    "candidate": "candidate:1 1 UDP 2 10.0.0.1 5000 typ host",
+    "sdpMid": "0",
+    "sdpMLineIndex": 0
+  },
+  {
+    "type": "error",
+    "negotiationId": "01J0THUMB0001",
+    "code": "source-offline",
+    "message": "lecturer-cam went offline"
+  },
+  { "type": "close", "negotiationId": "01J0THUMB0001" }
+]
