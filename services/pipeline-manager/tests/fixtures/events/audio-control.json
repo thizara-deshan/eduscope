@@ -1,0 +1,16 @@
+[
+  {
+    "roleId": "mic-lecturer",
+    "appliedGain": 75,
+    "appliedMuted": false,
+    "appliedState": "applied",
+    "lastError": null
+  },
+  {
+    "roleId": "mic-lecturer",
+    "appliedGain": null,
+    "appliedMuted": null,
+    "appliedState": "failed",
+    "lastError": "mixer apply failed"
+  }
+]

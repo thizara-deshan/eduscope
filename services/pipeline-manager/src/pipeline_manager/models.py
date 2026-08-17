@@ -4,6 +4,8 @@ import posixpath
 from enum import Enum
 from pathlib import Path, PurePosixPath
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -134,6 +136,32 @@ class InternalEvent(BaseModel):
     sequence: int = Field(ge=1)
     kind: str
     occurred_at_ms: int = Field(ge=0)
+
+
+class AudioControlRequest(BaseModel):
+    """mic-lecturer only in v1 (LP-9) — the role is the route path, not a body field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gain: int = Field(ge=0, le=100)
+    muted: bool
+
+
+class AudioControlResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: SourceRole
+    applied_gain: int | None = None
+    applied_muted: bool | None = None
+    applied_state: Literal["applied", "failed"]
+    last_error: str | None = None
+
+
+class AudioLevelSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: SourceRole
+    rms: float = Field(ge=0.0, le=1.0)
 
 
 def resolve_output_path(path: Path, recordings_root: Path) -> Path:
