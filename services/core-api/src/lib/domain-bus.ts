@@ -1,4 +1,4 @@
-import type { AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload } from '@eduscope/shared';
+import type { AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -19,10 +19,13 @@ export interface CoreDomainEvents {
   /** Public panel/admin events (contracts/events.md §2) — published here after their owning DB transaction commits; B-35's WS hub fans these out. */
   'recording.state': RecordingStatePayload;
   'recording.segment': RecordingSegmentPayload;
+  'recording.artifact': RecordingArtifactPayload;
   'channel.state': ChannelStatePayload;
   'sources.status': SourcesStatusPayload;
   'audio.levels': AudioLevelsPayload;
   'audio.control': AudioControlPayload;
+  /** Internal only (not in contracts/events.md) — machine 1b → machine 3a/3b (B-17), fired exactly once per recording reaching `ready` (RA-03/RA-02, INV-UJ-2). */
+  'artifact.ready': { recordingId: string; sessionId: string };
 }
 
 export type DomainEventType = keyof CoreDomainEvents;

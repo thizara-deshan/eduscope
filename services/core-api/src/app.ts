@@ -9,6 +9,8 @@ import type { CoreDatabase, DrizzleDb } from './db/client.js';
 import { openDatabase } from './db/client.js';
 import { migrate } from './db/migrate.js';
 import { seed } from './db/seeds.js';
+import type { ArgvRunner } from './lib/argv-worker.js';
+import { ArgvWorker } from './lib/argv-worker.js';
 import type { Clock } from './lib/clock.js';
 import { SystemClock } from './lib/clock.js';
 import { DomainBus } from './lib/domain-bus.js';
@@ -24,6 +26,7 @@ import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.
 import { registerAudioSettingsRoutes } from './modules/settings/audio-routes.js';
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
 import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
+import { ArtifactExecutor } from './modules/library/merge-worker.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -40,6 +43,7 @@ declare module 'fastify' {
     db: DrizzleDb;
     bus: DomainBus;
     pmClient: PipelineManagerClient;
+    artifactExecutor: ArtifactExecutor;
   }
 }
 
@@ -49,6 +53,8 @@ export interface BuildAppOptions {
   ids?: IdGenerator;
   /** CH-02's relay push-target boundary (INV-ST-2) — tests inject a spy; production leaves this unset until B-25 supplies the real renderer. */
   relay?: RelayTargetActivator;
+  /** Machine 1b's ffprobe/ffmpeg boundary (B-13) — tests inject `FakeMediaTools`; production leaves this unset to use the real `ArgvWorker`. */
+  mediaRunner?: ArgvRunner;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -153,6 +159,21 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(recordingExecutor);
   registerRecordingRoutes(app, authService, recordingExecutor);
+
+  const artifactExecutor = new ArtifactExecutor({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    runner: options.mediaRunner ?? new ArgvWorker(),
+    recordingsRoot: config.recordingsRoot,
+    runtimeDir: config.runtimeDir,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(artifactExecutor);
+  app.decorate('artifactExecutor', artifactExecutor);
 
   const channelExecutor = new ChannelExecutor({
     get db(): DrizzleDb {
