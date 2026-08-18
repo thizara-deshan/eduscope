@@ -19,6 +19,7 @@ import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
 import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/machine.js';
 import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
+import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -162,6 +163,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(channelExecutor);
   registerChannelRuntimeRoutes(app, authService, channelExecutor);
+  registerChannelSettingsRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    channelExecutor,
+  });
 
   const sourceExecutor = new SourceExecutor({
     get db(): DrizzleDb {
