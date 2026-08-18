@@ -17,6 +17,8 @@ import { LifecycleRegistry } from './lifecycle.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
+import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/machine.js';
+import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -38,6 +40,8 @@ export interface BuildAppOptions {
   config?: CoreConfig;
   clock?: Clock;
   ids?: IdGenerator;
+  /** CH-02's relay push-target boundary (INV-ST-2) — tests inject a spy; production leaves this unset until B-25 supplies the real renderer. */
+  relay?: RelayTargetActivator;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -142,6 +146,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(recordingExecutor);
   registerRecordingRoutes(app, authService, recordingExecutor);
+
+  const channelExecutor = new ChannelExecutor({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    pm: pmClient,
+    ...(options.relay !== undefined ? { relay: options.relay } : {}),
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(channelExecutor);
+  registerChannelRuntimeRoutes(app, authService, channelExecutor);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

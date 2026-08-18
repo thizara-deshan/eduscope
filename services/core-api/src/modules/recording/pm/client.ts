@@ -14,6 +14,21 @@ export interface StartRecordConsumerBody {
   outputPaths?: Record<string, string>;
 }
 
+/** Machine 1c streaming (CH-02): pipeline-manager.md §3.2 `POST /consumers/live`. */
+export interface StartLiveConsumerBody {
+  preset: string;
+  ratioA?: number;
+  ratioB?: number;
+  streamKey: string;
+}
+
+/** Machine 1c meeting (CH-04): pipeline-manager.md §3.2 `POST /consumers/meeting`. */
+export interface StartMeetingConsumerBody {
+  preset: string;
+  ratioA?: number;
+  ratioB?: number;
+}
+
 const DEFAULT_PROBLEM: PmProblem = { code: 'internal', title: 'pipeline-manager request failed', status: 502 };
 
 /**
@@ -44,6 +59,16 @@ export class PipelineManagerClient {
 
   async startRecordConsumer(body: StartRecordConsumerBody): Promise<PmCommandAccepted> {
     return this.#request<PmCommandAccepted>('POST', '/consumers/record', body);
+  }
+
+  /** CH-02 (preflight already passed): pipeline-manager.md §3.2 `POST /consumers/live`. */
+  async startLiveConsumer(body: StartLiveConsumerBody): Promise<PmCommandAccepted> {
+    return this.#request<PmCommandAccepted>('POST', '/consumers/live', body);
+  }
+
+  /** CH-04: pipeline-manager.md §3.2 `POST /consumers/meeting`. */
+  async startMeetingConsumer(body: StartMeetingConsumerBody): Promise<PmCommandAccepted> {
+    return this.#request<PmCommandAccepted>('POST', '/consumers/meeting', body);
   }
 
   async setLed(mode: 'blink' | 'off'): Promise<void> {

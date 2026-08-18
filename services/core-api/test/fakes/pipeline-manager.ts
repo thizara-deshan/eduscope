@@ -59,7 +59,11 @@ export class FakePipelineManager {
   #sequence = 0;
   #status: PmStatus = defaultStatus();
   #nextRecordResponse: QueuedResponse | null = null;
+  #nextLiveResponse: QueuedResponse | null = null;
+  #nextMeetingResponse: QueuedResponse | null = null;
   #recordIdCounter = 0;
+  #liveIdCounter = 0;
+  #meetingIdCounter = 0;
   #offline = false;
 
   constructor(options: { bearerToken: string; replaySize?: number }) {
@@ -145,6 +149,16 @@ export class FakePipelineManager {
     this.#nextRecordResponse = response;
   }
 
+  /** Makes the next `POST /consumers/live` return this status/body instead of the default 202. */
+  queueLiveResponse(response: QueuedResponse): void {
+    this.#nextLiveResponse = response;
+  }
+
+  /** Makes the next `POST /consumers/meeting` return this status/body instead of the default 202. */
+  queueMeetingResponse(response: QueuedResponse): void {
+    this.#nextMeetingResponse = response;
+  }
+
   /** When true, every request's socket is destroyed with no response — simulates the service being unreachable (connection-refused-like), not a graceful 4xx/5xx. */
   setOffline(offline: boolean): void {
     this.#offline = offline;
@@ -189,6 +203,42 @@ export class FakePipelineManager {
         }
         this.#recordIdCounter += 1;
         const consumerId = `record:${String(this.#recordIdCounter).padStart(8, '0')}`;
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId, state: 'starting' }));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/live') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const queued = this.#nextLiveResponse;
+        this.#nextLiveResponse = null;
+        if (queued) {
+          res.writeHead(queued.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(queued.body));
+          return;
+        }
+        this.#liveIdCounter += 1;
+        const consumerId = `live:${String(this.#liveIdCounter).padStart(8, '0')}`;
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId, state: 'starting' }));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/meeting') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const queued = this.#nextMeetingResponse;
+        this.#nextMeetingResponse = null;
+        if (queued) {
+          res.writeHead(queued.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(queued.body));
+          return;
+        }
+        this.#meetingIdCounter += 1;
+        const consumerId = `meeting:${String(this.#meetingIdCounter).padStart(8, '0')}`;
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ consumerId, state: 'starting' }));
       });

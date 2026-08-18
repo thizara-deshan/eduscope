@@ -1,4 +1,4 @@
-import type { RecordingSegmentPayload, RecordingStatePayload } from '@eduscope/shared';
+import type { ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -19,6 +19,7 @@ export interface CoreDomainEvents {
   /** Public panel/admin events (contracts/events.md §2) — published here after their owning DB transaction commits; B-35's WS hub fans these out. */
   'recording.state': RecordingStatePayload;
   'recording.segment': RecordingSegmentPayload;
+  'channel.state': ChannelStatePayload;
 }
 
 export type DomainEventType = keyof CoreDomainEvents;
