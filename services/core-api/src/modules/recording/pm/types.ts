@@ -49,6 +49,15 @@ export interface PmPublisherCommandAccepted {
   state: string;
 }
 
+/** `PUT /audio/controls/mic-lecturer` (pipeline-manager.md §3.2) — always `200`; a mixer failure is `appliedState:'failed'`, never a thrown Problem (INV-AC-1, B-55's placebo). */
+export interface PmAudioControlResult {
+  roleId: string;
+  appliedGain: number | null;
+  appliedMuted: boolean | null;
+  appliedState: 'applied' | 'failed';
+  lastError: string | null;
+}
+
 /** pipeline-manager.md §3.4 — the `{code, title, status, meta?}` body `app.py`'s exception handler emits. */
 export interface PmProblem {
   code: string;

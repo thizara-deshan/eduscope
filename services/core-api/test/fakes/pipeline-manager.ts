@@ -62,6 +62,7 @@ export class FakePipelineManager {
   #nextLiveResponse: QueuedResponse | null = null;
   #nextMeetingResponse: QueuedResponse | null = null;
   #nextBindingResponse: QueuedResponse | null = null;
+  #nextAudioResponse: QueuedResponse | null = null;
   #recordIdCounter = 0;
   #liveIdCounter = 0;
   #meetingIdCounter = 0;
@@ -163,6 +164,11 @@ export class FakePipelineManager {
   /** Makes the next `PUT /publishers/{id}/binding` return this status/body instead of the default 202. */
   queueBindingResponse(response: QueuedResponse): void {
     this.#nextBindingResponse = response;
+  }
+
+  /** Makes the next `PUT /audio/controls/mic-lecturer` return this status/body instead of the default 200/applied. */
+  queueAudioResponse(response: QueuedResponse): void {
+    this.#nextAudioResponse = response;
   }
 
   /** When true, every request's socket is destroyed with no response — simulates the service being unreachable (connection-refused-like), not a graceful 4xx/5xx. */
@@ -274,6 +280,23 @@ export class FakePipelineManager {
         }
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ publisherId: bindingMatch[1], state: 'offline' }));
+      });
+      return;
+    }
+
+    if (req.method === 'PUT' && url.pathname === '/audio/controls/mic-lecturer') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const queued = this.#nextAudioResponse;
+        this.#nextAudioResponse = null;
+        if (queued) {
+          res.writeHead(queued.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(queued.body));
+          return;
+        }
+        const { gain, muted } = body as { gain: number; muted: boolean };
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ roleId: 'mic-lecturer', appliedGain: gain, appliedMuted: muted, appliedState: 'applied', lastError: null }));
       });
       return;
     }

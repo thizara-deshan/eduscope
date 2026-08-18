@@ -1,4 +1,4 @@
-import type { AudioLevelsPayload, ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload } from '@eduscope/shared';
+import type { AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -22,6 +22,7 @@ export interface CoreDomainEvents {
   'channel.state': ChannelStatePayload;
   'sources.status': SourcesStatusPayload;
   'audio.levels': AudioLevelsPayload;
+  'audio.control': AudioControlPayload;
 }
 
 export type DomainEventType = keyof CoreDomainEvents;

@@ -21,6 +21,7 @@ import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
 import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/machine.js';
 import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
+import { registerAudioSettingsRoutes } from './modules/settings/audio-routes.js';
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
 import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
@@ -199,6 +200,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     secrets: secretStore,
     pm: pmClient,
     sources: sourceExecutor,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+
+  registerAudioSettingsRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    pm: pmClient,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
 

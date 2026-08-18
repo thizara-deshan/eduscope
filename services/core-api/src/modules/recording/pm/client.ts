@@ -1,5 +1,6 @@
 import {
   PipelineManagerError,
+  type PmAudioControlResult,
   type PmCommandAccepted,
   type PmPublisherCommandAccepted,
   type PmPublisherId,
@@ -93,6 +94,11 @@ export class PipelineManagerClient {
   /** HL-09: the one place a source address/credential reaches A (INV-PI-2, B-46). `id ∈ {usb, rtsp, rtsp2, audio}`. */
   async setPublisherBinding(publisherId: PmPublisherId, body: SetPublisherBindingBody): Promise<PmPublisherCommandAccepted> {
     return this.#request<PmPublisherCommandAccepted>('PUT', `/publishers/${publisherId}/binding`, body);
+  }
+
+  /** `mic-lecturer` only in V1 (INV-AC-1) — the readback is the truth; a mixer failure is `appliedState:'failed'` in a `200`, not a thrown Problem. */
+  async setAudioControl(gain: number, muted: boolean): Promise<PmAudioControlResult> {
+    return this.#request<PmAudioControlResult>('PUT', '/audio/controls/mic-lecturer', { gain, muted });
   }
 
   /** R-08/R-11 (pipeline-manager.md §3.2): default `eos` — the manager itself waits up to `timeoutMs` then escalates to SIGKILL; core-api only stops waiting for `evt.pm.consumer.eos` after its own local timer (recovery.ts). */
