@@ -3,6 +3,10 @@ import { ZodError } from 'zod';
 import type { CoreConfig } from './config.js';
 import { loadConfig } from './config.js';
 import { ProblemError } from './contracts/problem.js';
+import type { CoreDatabase, DrizzleDb } from './db/client.js';
+import { openDatabase } from './db/client.js';
+import { migrate } from './db/migrate.js';
+import { seed } from './db/seeds.js';
 import type { Clock } from './lib/clock.js';
 import { SystemClock } from './lib/clock.js';
 import type { IdGenerator } from './lib/ids.js';
@@ -15,6 +19,7 @@ declare module 'fastify' {
     clock: Clock;
     ids: IdGenerator;
     lifecycle: LifecycleRegistry;
+    db: DrizzleDb;
   }
 }
 
@@ -40,6 +45,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const lifecycle = new LifecycleRegistry();
 
   const app = Fastify({ logger: true });
+
+  let core: CoreDatabase | undefined;
+  lifecycle.register({
+    name: 'db',
+    async start(): Promise<void> {
+      core = openDatabase(config.dbPath);
+      migrate(core);
+      seed(core, clock.now(), ids);
+      app.decorate('db', core.db);
+    },
+    async stop(): Promise<void> {
+      core?.close();
+    },
+  });
 
   app.decorate('config', config);
   app.decorate('clock', clock);
