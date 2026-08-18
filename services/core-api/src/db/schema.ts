@@ -110,6 +110,8 @@ export const lectureSessions = sqliteTable(
       .$type<'starting' | 'recording' | 'paused' | 'stopping' | 'finalizing' | 'completed' | 'error'>(),
     startedAt: text('started_at').notNull(),
     endedAt: text('ended_at'),
+    /** T-SESSION-HEARTBEAT (5s), single-column UPDATE outside the executor queue (core-api.md §4.3) — the input to G-RECOVERY-WINDOW in boot recovery (BR-2/3/4/5/8). */
+    lastHeartbeatAt: text('last_heartbeat_at'),
     wallDurationMs: bigint('wall_duration_ms'),
     recordedDurationMs: bigint('recorded_duration_ms'),
     pauseCount: integer('pause_count').notNull(),

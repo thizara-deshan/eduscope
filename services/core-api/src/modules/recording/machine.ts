@@ -330,6 +330,86 @@ export class RecordingMachine {
     });
     return result;
   }
+
+  /** BR-2/3/5/8/9 (state-machines.md §1.4): closes the segment a crash left open (if any) with `endReason=crash`. A no-op transaction when nothing is open — safe to call unconditionally for any non-terminal session state. */
+  closeCrashedSegmentIfOpen(sessionId: string, outputs: readonly OutputSpec[], recordingsRoot: string): CloseActiveSegmentResult | null {
+    const { db, clock, ids } = this.#deps;
+    const now = clock.now();
+
+    let result: CloseActiveSegmentResult | null = null;
+    db.transaction((tx) => {
+      const session = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get();
+      if (!session) {
+        throw new Error(`RecordingMachine.closeCrashedSegmentIfOpen: unknown session ${sessionId}`);
+      }
+      const recording = tx.select().from(recordings).where(eq(recordings.sessionId, sessionId)).get();
+      if (!recording) {
+        throw new Error(`RecordingMachine.closeCrashedSegmentIfOpen: no recording for session ${sessionId}`);
+      }
+      const openSegment = tx
+        .select()
+        .from(recordingSegments)
+        .where(and(eq(recordingSegments.recordingId, recording.id), eq(recordingSegments.state, 'capturing')))
+        .get();
+      if (!openSegment) return;
+
+      closeSegment(tx, {
+        segment: openSegment,
+        recordingId: recording.id,
+        sessionId,
+        now,
+        ids,
+        endReason: 'crash',
+        graceful: false,
+        outputs,
+        recordingsRoot,
+      });
+
+      const recordedDurationMs = sumRecordedDurationMs(tx, recording.id);
+      tx.update(lectureSessions).set({ recordedDurationMs }).where(eq(lectureSessions.id, sessionId)).run();
+
+      const updatedSession = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+      const updatedSegment = tx.select().from(recordingSegments).where(eq(recordingSegments.id, openSegment.id)).get()!;
+      result = { session: updatedSession, recording, segment: updatedSegment };
+    });
+    return result;
+  }
+
+  /** BR-2: `recording` → `starting` (startReason=recovery). Confirmation reuses `confirmRecording` to open the next segment, same as R-10. */
+  enterRecoveryStarting(sessionId: string, recoveredAt: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions)
+        .set({ state: 'starting', recoveredAt, recoveryOutcome: 'auto-resumed' })
+        .where(eq(lectureSessions.id, sessionId))
+        .run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
+
+  /** BR-3/5/8/9: stamps the recovery outcome before the session proceeds through `enterFinalizingNoSegment`/`completeFinalizedSession` (B-06). */
+  markRecoveryFinalized(sessionId: string, recoveredAt: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions).set({ recoveredAt, recoveryOutcome: 'finalized' }).where(eq(lectureSessions.id, sessionId)).run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
+
+  /** BR-4: `paused` stays `paused` — only `recoveredAt` is stamped so the panel banner (J-4) knows a recovery pass touched this session. */
+  markRecoveredPaused(sessionId: string, recoveredAt: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions).set({ recoveredAt }).where(eq(lectureSessions.id, sessionId)).run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
 }
 
 export interface CloseActiveSegmentOptions {

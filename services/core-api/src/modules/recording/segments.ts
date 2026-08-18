@@ -38,8 +38,8 @@ export interface CloseSegmentInput {
   sessionId: string;
   now: Date;
   ids: IdGenerator;
-  endReason: 'pause' | 'stop';
-  /** Whether the consumer confirmed EOS before the local timeout — false marks the segment `truncated` (R-09/R-13) rather than `finalized` (R-08/R-12). */
+  endReason: 'pause' | 'stop' | 'crash';
+  /** Whether the consumer confirmed EOS before the local timeout — false marks the segment `truncated` (R-09/R-13, or `crash` on boot recovery) rather than `finalized` (R-08/R-12). */
   graceful: boolean;
   outputs: readonly OutputSpec[];
   recordingsRoot: string;

@@ -15,6 +15,13 @@
       "when": 1787074208714,
       "tag": "0002_nullable_segment_end_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787079765313,
+      "tag": "0003_add_lecture_session_heartbeat",
+      "breakpoints": true
     }
   ]
 }

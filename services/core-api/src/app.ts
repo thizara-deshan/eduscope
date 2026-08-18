@@ -140,6 +140,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     recordingsRoot: config.recordingsRoot,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
+  lifecycle.register(recordingExecutor);
   registerRecordingRoutes(app, authService, recordingExecutor);
 
   app.addHook('onClose', async () => {

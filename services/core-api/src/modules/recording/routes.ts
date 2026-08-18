@@ -3,7 +3,7 @@ import { requireAuth } from '../auth/guard.js';
 import type { AuthService } from '../auth/service.js';
 import type { RecordingExecutor } from './executor.js';
 
-/** Registers the recording operationIds this task owns (openapi.yaml tag `recording`): `getRecordingState`, `startRecording`, `pauseRecording`, `resumeRecording`, `stopRecording`. */
+/** Registers the recording operationIds this task owns (openapi.yaml tag `recording`): `getRecordingState`, `startRecording`, `pauseRecording`, `resumeRecording`, `stopRecording`, `takeoverRecording`. */
 export function registerRecordingRoutes(app: FastifyInstance, authService: AuthService, executor: RecordingExecutor): void {
   app.get(
     '/api/v1/recording/state',
@@ -45,6 +45,15 @@ export function registerRecordingRoutes(app: FastifyInstance, authService: AuthS
     { config: { operationId: 'stopRecording' }, preHandler: requireAuth(authService, 'stopRecording') },
     async (request, reply) => {
       const result = await executor.stopRecording(request.authContext!);
+      reply.code(202).send(result);
+    },
+  );
+
+  app.post(
+    '/api/v1/recording/takeover',
+    { config: { operationId: 'takeoverRecording' }, preHandler: requireAuth(authService, 'takeoverRecording') },
+    async (request, reply) => {
+      const result = await executor.takeoverRecording(request.authContext!);
       reply.code(202).send(result);
     },
   );

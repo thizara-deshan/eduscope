@@ -1,23 +1,43 @@
 import { LAYOUT_PRESETS, TIMERS, type OutputSpec } from '@eduscope/shared';
 import { eq, inArray } from 'drizzle-orm';
 import type { DrizzleDb } from '../../db/client.js';
-import { lectureSessions, recordings, recordingSegments } from '../../db/schema.js';
-import type { Clock } from '../../lib/clock.js';
+import { channelConfigs, lectureSessions, recordings, recordingSegments } from '../../db/schema.js';
+import type { Cancel, Clock } from '../../lib/clock.js';
 import type { DomainBus } from '../../lib/domain-bus.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import { SerialExecutor } from '../../lib/serial-executor.js';
+import type { LifecycleComponent, LifecycleStopReason } from '../../lifecycle.js';
 import { ProblemError } from '../../contracts/problem.js';
 import type { AuthContext } from '../auth/service.js';
+import { takeoverRecording } from './authority.js';
+import { runBootRecovery, type BootRecoveryAction } from './boot-recovery.js';
 import { assertAuthOwner, assertStorageOk, resolveChannelValid, runStartGuards, type ChannelValidResult } from './guards.js';
 import { RecordingMachine } from './machine.js';
 import type { PipelineManagerClient, StartRecordConsumerBody } from './pm/client.js';
-import { PipelineManagerError } from './pm/types.js';
+import { PipelineManagerError, type PmStatus } from './pm/types.js';
 import { stopConsumerWithEosRace } from './recovery.js';
 import { segmentOutputPaths } from './segments.js';
 import { getRecordingStateSnapshot, toRecordingSegmentPayload, toRecordingStatePayload } from './snapshots.js';
 
 /** state-machines.md §1: the non-terminal vocabulary a "current session" read is scoped to. */
 const NON_TERMINAL_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
+
+type StartReason = 'initial' | 'resume' | 'recovery';
+
+/** Treated as "no live consumer" (G-DEVICE-REBOOTED) when `T-BOOT-RECOVERY` elapses with no `pm.status.resynced` yet. */
+const EMPTY_PM_STATUS: PmStatus = {
+  platform: '',
+  encodeLedger: { capacity: 0, inUse: 0, reservedBy: [] },
+  publishers: {
+    usb: { state: 'unknown', bound: false, fps: null, rms: null, lastError: null },
+    rtsp: { state: 'unknown', bound: false, fps: null, rms: null, lastError: null },
+    rtsp2: { state: 'unknown', bound: false, fps: null, rms: null, lastError: null },
+    audio: { state: 'unknown', bound: false, fps: null, rms: null, lastError: null },
+  },
+  consumers: [],
+  device: { captureCardState: 'absent', led: 'off' },
+  sequence: 0,
+};
 
 export interface RecordingExecutorLogger {
   warn(message: string, meta?: Record<string, unknown>): void;
@@ -40,15 +60,21 @@ export interface StartRecordingResult {
   resolveBySec: number;
 }
 
-export class RecordingExecutor {
+export class RecordingExecutor implements LifecycleComponent {
+  readonly name = 'recording-executor';
+
   readonly #deps: RecordingExecutorDeps;
   readonly #machine: RecordingMachine;
   readonly #serial = new SerialExecutor();
 
-  /** consumerId of the currently-running record consumer, keyed by sessionId — set once R-05 confirms, cleared when the segment closes. Process-local only; restart-time re-attachment is BR-1's job (B-07). */
+  /** consumerId of the currently-running record consumer, keyed by sessionId — set once R-05 confirms (or BR-1 adopts), cleared when the segment closes. Process-local only; a session `recording` after restart with no live PM consumer falls to BR-2/3/8, not this map. */
   readonly #activeConsumerId = new Map<string, string>();
   readonly #inFlightPause = new Set<string>();
   readonly #inFlightStop = new Set<string>();
+
+  #heartbeatCancel: Cancel | null = null;
+  #bootRecoveryAbort: AbortController | null = null;
+  #bootRecoveryPromise: Promise<void> | null = null;
 
   constructor(deps: RecordingExecutorDeps) {
     this.#deps = deps;
@@ -62,6 +88,20 @@ export class RecordingExecutor {
       clock: deps.clock,
       ids: deps.ids,
     });
+  }
+
+  /** Arms the T-SESSION-HEARTBEAT writer and the boot-recovery race; never blocks server startup on either (core-api.md §4.3's "within T-BOOT-RECOVERY" is a background convergence bound, not a listen-blocking one). */
+  async start(): Promise<void> {
+    this.#heartbeatCancel = this.#deps.clock.every(TIMERS['T-SESSION-HEARTBEAT'], () => this.#writeHeartbeat());
+    this.#bootRecoveryPromise = this.#armBootRecovery().catch((error: unknown) => {
+      this.#deps.logger?.warn('boot recovery: pass failed unexpectedly', { error: describeError(error) });
+    });
+  }
+
+  async stop(_reason: LifecycleStopReason): Promise<void> {
+    this.#heartbeatCancel?.cancel();
+    this.#bootRecoveryAbort?.abort();
+    await this.#bootRecoveryPromise?.catch(() => undefined);
   }
 
   getState(): ReturnType<typeof getRecordingStateSnapshot> {
@@ -82,6 +122,10 @@ export class RecordingExecutor {
 
   async stopRecording(actor: AuthContext): Promise<StartRecordingResult> {
     return this.#serial.run(() => this.#doStop(actor));
+  }
+
+  async takeoverRecording(actor: AuthContext): Promise<StartRecordingResult> {
+    return this.#serial.run(() => this.#doTakeover(actor));
   }
 
   async #doStart(actor: AuthContext): Promise<StartRecordingResult> {
@@ -228,6 +272,30 @@ export class RecordingExecutor {
     this.#armConfirmRace(sessionId, accepted.consumerId, TIMERS['T-RESUME-CONFIRM'], 'resume');
   }
 
+  /** BR-2's PM leg: launches a fresh record consumer for the next segment, same shape as resume but without re-checking G-CHANNEL-VALID (BR-2's own guard list is G-DEVICE-REBOOTED/G-RECOVERY-WINDOW/G-STORAGE-OK/G-PROVISIONED only — boot-recovery.ts already checked those before returning this action). */
+  async #launchRecoveryConsumer(sessionId: string): Promise<void> {
+    const recording = this.#loadRecordingBySession(sessionId);
+    const channelConfig = this.#deps.db.select().from(channelConfigs).where(eq(channelConfigs.channelId, 'local')).get()!;
+    const outputs = this.#outputsForPreset(recording.layoutPresetId);
+    const nextIndex = this.#nextSegmentIndex(recording.id);
+    const body: StartRecordConsumerBody = {
+      preset: recording.layoutPresetId,
+      ...buildOutputs(this.#deps.recordingsRoot, sessionId, nextIndex, outputs),
+      ...(channelConfig.ratioA !== null ? { ratioA: channelConfig.ratioA } : {}),
+      ...(channelConfig.ratioB !== null ? { ratioB: channelConfig.ratioB } : {}),
+    };
+
+    let accepted;
+    try {
+      accepted = await this.#deps.pm.startRecordConsumer(body);
+    } catch (error) {
+      const mapped = mapPmError(error);
+      await this.#serial.run(() => this.#failStart(sessionId, mapped, 'recovery'));
+      return;
+    }
+    this.#armConfirmRace(sessionId, accepted.consumerId, TIMERS['T-START-CONFIRM'], 'recovery');
+  }
+
   async #doStop(actor: AuthContext): Promise<StartRecordingResult> {
     const session = this.#loadActiveSessionOrThrow();
     assertAuthOwner(session, actor);
@@ -294,8 +362,106 @@ export class RecordingExecutor {
     }
   }
 
-  /** Races `evt.pm.consumer.running`/`evt.pm.consumer.failed` (filtered by `consumerId`) against `timeoutMs`; whichever settles first re-enters the serial queue to write the outcome (R-05/R-06/R-07). Shared by the initial start (T-START-CONFIRM) and resume (T-RESUME-CONFIRM). */
-  #armConfirmRace(sessionId: string, consumerId: string, timeoutMs: number, startReason: 'initial' | 'resume'): void {
+  /** R-21 (G-ADMIN): synchronous — no PM call, so no background continuation is needed. */
+  async #doTakeover(actor: AuthContext): Promise<StartRecordingResult> {
+    const result = takeoverRecording({ db: this.#deps.db, clock: this.#deps.clock, ids: this.#deps.ids }, actor);
+    const accepted = this.#acceptedResult();
+    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, null));
+    return accepted;
+  }
+
+  /** T-SESSION-HEARTBEAT (5s): a single-column UPDATE outside the serial queue (core-api.md §4.3) — the input `runBootRecovery`'s G-RECOVERY-WINDOW reads on the next boot. */
+  #writeHeartbeat(): void {
+    const session = this.#deps.db
+      .select({ id: lectureSessions.id })
+      .from(lectureSessions)
+      .where(inArray(lectureSessions.state, NON_TERMINAL_STATES))
+      .get();
+    if (!session) return;
+    this.#deps.db
+      .update(lectureSessions)
+      .set({ lastHeartbeatAt: this.#deps.clock.now().toISOString() })
+      .where(eq(lectureSessions.id, session.id))
+      .run();
+  }
+
+  /**
+   * Races the pm-bridge's first `pm.status.resynced` against
+   * `T-BOOT-RECOVERY`; whichever settles first runs the BR-1..BR-9 pass
+   * through the serial queue, same ordering guarantee as `#armConfirmRace`.
+   * `stop()` aborting this wait (PM never reachable, service shutting down
+   * first) resolves with `null` — skipping the pass entirely — rather than
+   * leaving the wait permanently unresolved.
+   */
+  async #armBootRecovery(): Promise<void> {
+    const controller = new AbortController();
+    this.#bootRecoveryAbort = controller;
+
+    const status = await new Promise<PmStatus | null>((resolve) => {
+      let settled = false;
+      const finish = (value: PmStatus | null): void => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        resolve(value);
+      };
+
+      const unsubscribe = this.#deps.bus.subscribe('pm.status.resynced', (value) => {
+        finish(value);
+        controller.abort(); // cancel the now-unnecessary pending sleep
+      });
+      controller.signal.addEventListener('abort', () => finish(null), { once: true });
+      this.#deps.clock.sleep(TIMERS['T-BOOT-RECOVERY'], controller.signal).then(() => finish(EMPTY_PM_STATUS));
+    });
+
+    if (status === null) return; // stop() cancelled the wait before it ever settled
+    await this.#serial.run(() => this.#runBootRecoveryPass(status));
+  }
+
+  #runBootRecoveryPass(pmStatus: PmStatus): void {
+    const actions = runBootRecovery(
+      {
+        db: this.#deps.db,
+        clock: this.#deps.clock,
+        ids: this.#deps.ids,
+        recordingsRoot: this.#deps.recordingsRoot,
+        provisioningPath: this.#deps.provisioningPath,
+      },
+      pmStatus,
+    );
+    for (const action of actions) {
+      this.#applyBootRecoveryAction(action);
+    }
+  }
+
+  #applyBootRecoveryAction(action: BootRecoveryAction): void {
+    switch (action.kind) {
+      case 'none':
+        return;
+      case 'adopted': {
+        this.#activeConsumerId.set(action.sessionId, action.consumerId);
+        const session = this.#loadSession(action.sessionId);
+        this.#deps.bus.publish('recording.state', { ...toRecordingStatePayload(this.#deps.db, session, null), adopted: true });
+        return;
+      }
+      case 'auto-resume': {
+        const session = this.#loadSession(action.sessionId);
+        this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, session, 'recovery'));
+        void this.#launchRecoveryConsumer(action.sessionId).catch((error: unknown) => {
+          this.#deps.logger?.warn('boot recovery: auto-resume launch failed unexpectedly', { error: describeError(error) });
+        });
+        return;
+      }
+      case 'stayed-paused':
+      case 'finalized': {
+        const session = this.#loadSession(action.sessionId);
+        this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, session, null));
+      }
+    }
+  }
+
+  /** Races `evt.pm.consumer.running`/`evt.pm.consumer.failed` (filtered by `consumerId`) against `timeoutMs`; whichever settles first re-enters the serial queue to write the outcome (R-05/R-06/R-07). Shared by the initial start (T-START-CONFIRM), resume (T-RESUME-CONFIRM), and BR-2 auto-resume (T-START-CONFIRM). */
+  #armConfirmRace(sessionId: string, consumerId: string, timeoutMs: number, startReason: StartReason): void {
     const controller = new AbortController();
     let settled = false;
 
@@ -325,7 +491,7 @@ export class RecordingExecutor {
     });
   }
 
-  async #confirmStart(sessionId: string, consumerId: string, startReason: 'initial' | 'resume'): Promise<void> {
+  async #confirmStart(sessionId: string, consumerId: string, startReason: StartReason): Promise<void> {
     const result = this.#machine.confirmRecording(sessionId);
     this.#activeConsumerId.set(sessionId, consumerId);
     this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, startReason));
@@ -336,7 +502,7 @@ export class RecordingExecutor {
   }
 
   /** R-06 (no segments — `error`) / R-07 (segments exist — preserve the lecture, SM-R-4). A resume that fails after prior segments exist has nothing capturing to wait on, so R-07 here proceeds straight through finalizing to completed/error (R-11's "if capturing" branch has no consumer). */
-  async #failStart(sessionId: string, error: { code: string; message: string }, startReason: 'initial' | 'resume'): Promise<void> {
+  async #failStart(sessionId: string, error: { code: string; message: string }, startReason: StartReason): Promise<void> {
     const result = this.#machine.failStart(sessionId, error.code, error.message);
     this.#activeConsumerId.delete(sessionId);
     this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, startReason));
