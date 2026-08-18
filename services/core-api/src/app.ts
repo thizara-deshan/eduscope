@@ -23,6 +23,8 @@ import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
 import { registerRecordingRoutes } from './modules/recording/routes.js';
+import { SourceExecutor } from './modules/sources/status.js';
+import { registerSourceRoutes } from './modules/sources/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -160,6 +162,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(channelExecutor);
   registerChannelRuntimeRoutes(app, authService, channelExecutor);
+
+  const sourceExecutor = new SourceExecutor({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    bus,
+  });
+  lifecycle.register(sourceExecutor);
+  registerSourceRoutes(app, authService, sourceExecutor);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

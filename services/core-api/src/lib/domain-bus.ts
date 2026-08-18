@@ -1,4 +1,4 @@
-import type { ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload } from '@eduscope/shared';
+import type { AudioLevelsPayload, ChannelStatePayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -20,6 +20,8 @@ export interface CoreDomainEvents {
   'recording.state': RecordingStatePayload;
   'recording.segment': RecordingSegmentPayload;
   'channel.state': ChannelStatePayload;
+  'sources.status': SourcesStatusPayload;
+  'audio.levels': AudioLevelsPayload;
 }
 
 export type DomainEventType = keyof CoreDomainEvents;
@@ -50,5 +52,10 @@ export class DomainBus {
     return () => {
       listeners.delete(listener as Listener<DomainEventType>);
     };
+  }
+
+  /** §6 budget gate (e.g. `audio.levels`, INV-G-7): lets a producer skip work entirely while nothing is subscribed. */
+  listenerCount(type: DomainEventType): number {
+    return this.#listeners.get(type)?.size ?? 0;
   }
 }
