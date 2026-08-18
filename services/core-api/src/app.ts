@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { ZodError } from 'zod';
@@ -13,6 +14,7 @@ import { SystemClock } from './lib/clock.js';
 import { DomainBus } from './lib/domain-bus.js';
 import type { IdGenerator } from './lib/ids.js';
 import { UlidGenerator } from './lib/ids.js';
+import { SecretStore } from './lib/secret-store.js';
 import { LifecycleRegistry } from './lifecycle.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { AuthService } from './modules/auth/service.js';
@@ -20,6 +22,7 @@ import type { AccessTokenClaims } from './modules/auth/tokens.js';
 import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/machine.js';
 import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
+import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -180,6 +183,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(sourceExecutor);
   registerSourceRoutes(app, authService, sourceExecutor);
+
+  const secretStore = await SecretStore.create({
+    dir: join(dirname(config.dbPath), 'secrets'),
+    key: config.secretboxKey,
+    clock,
+    ids,
+  });
+  registerSourceSettingsRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    secrets: secretStore,
+    pm: pmClient,
+    sources: sourceExecutor,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

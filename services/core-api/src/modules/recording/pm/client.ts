@@ -1,4 +1,12 @@
-import { PipelineManagerError, type PmCommandAccepted, type PmProblem, type PmSourcesStatus, type PmStatus } from './types.js';
+import {
+  PipelineManagerError,
+  type PmCommandAccepted,
+  type PmPublisherCommandAccepted,
+  type PmPublisherId,
+  type PmProblem,
+  type PmSourcesStatus,
+  type PmStatus,
+} from './types.js';
 
 export interface PipelineManagerClientDeps {
   baseUrl: string;
@@ -27,6 +35,13 @@ export interface StartMeetingConsumerBody {
   preset: string;
   ratioA?: number;
   ratioB?: number;
+}
+
+/** HL-09 (`cmd.admin.set_binding`): pipeline-manager.md §3.2 `PUT /publishers/{id}/binding` — credentials arrive separate from the address, never interpolated into it. */
+export interface SetPublisherBindingBody {
+  address: string;
+  credentials?: { username: string; password: string };
+  devicePath?: string;
 }
 
 const DEFAULT_PROBLEM: PmProblem = { code: 'internal', title: 'pipeline-manager request failed', status: 502 };
@@ -73,6 +88,11 @@ export class PipelineManagerClient {
 
   async setLed(mode: 'blink' | 'off'): Promise<void> {
     await this.#request('POST', '/device/led', { mode });
+  }
+
+  /** HL-09: the one place a source address/credential reaches A (INV-PI-2, B-46). `id ∈ {usb, rtsp, rtsp2, audio}`. */
+  async setPublisherBinding(publisherId: PmPublisherId, body: SetPublisherBindingBody): Promise<PmPublisherCommandAccepted> {
+    return this.#request<PmPublisherCommandAccepted>('PUT', `/publishers/${publisherId}/binding`, body);
   }
 
   /** R-08/R-11 (pipeline-manager.md §3.2): default `eos` — the manager itself waits up to `timeoutMs` then escalates to SIGKILL; core-api only stops waiting for `evt.pm.consumer.eos` after its own local timer (recovery.ts). */
