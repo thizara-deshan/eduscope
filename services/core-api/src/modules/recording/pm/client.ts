@@ -50,6 +50,11 @@ export class PipelineManagerClient {
     await this.#request('POST', '/device/led', { mode });
   }
 
+  /** R-08/R-11 (pipeline-manager.md §3.2): default `eos` — the manager itself waits up to `timeoutMs` then escalates to SIGKILL; core-api only stops waiting for `evt.pm.consumer.eos` after its own local timer (recovery.ts). */
+  async stopConsumer(consumerId: string, body: { mode: 'eos' | 'kill'; timeoutMs?: number }): Promise<void> {
+    await this.#request('POST', `/consumers/${consumerId}/stop`, body);
+  }
+
   /**
    * Opens the raw `GET /events` SSE response for `sse.ts` to line-parse.
    * `lastEventId` maps to the `Last-Event-ID` request header pipeline-manager

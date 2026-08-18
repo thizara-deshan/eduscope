@@ -195,6 +195,16 @@ export class FakePipelineManager {
       return;
     }
 
+    const stopMatch = req.method === 'POST' ? /^\/consumers\/([^/]+)\/stop$/.exec(url.pathname) : null;
+    if (stopMatch) {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId: stopMatch[1], state: 'stopping' }));
+      });
+      return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/device/led') {
       this.#readJsonBody(req).then((body) => {
         call.body = body;

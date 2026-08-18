@@ -154,6 +154,12 @@ export function resolveChannelValid(db: DrizzleDb): ChannelValidResult {
   return { channelConfig, layoutPreset, sourceSnapshot };
 }
 
+/** G-AUTH-OWNER (INV-LS-2): only the session's owner or an admin may pause, resume, stop, or take over. */
+export function assertAuthOwner(session: { ownerUserId: string }, actor: { userId: string; role: 'lecturer' | 'admin' }): void {
+  if (actor.role === 'admin' || actor.userId === session.ownerUserId) return;
+  throw new ProblemError(403, 'not-authorized', 'Only the recording owner or an admin may do this');
+}
+
 export interface StartGuardResult {
   provisioning: DeviceProvisioningSnapshot;
   channel: ChannelValidResult;

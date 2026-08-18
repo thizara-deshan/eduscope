@@ -1,9 +1,11 @@
-import { eq } from 'drizzle-orm';
+import type { OutputSpec } from '@eduscope/shared';
+import { and, eq } from 'drizzle-orm';
 import type { Clock } from '../../lib/clock.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import type { DrizzleDb } from '../../db/client.js';
 import { lectureSessions, recordings, recordingSegments, retentionPolicy } from '../../db/schema.js';
 import type { ChannelValidResult, DeviceProvisioningSnapshot } from './guards.js';
+import { closeSegment, sumRecordedDurationMs } from './segments.js';
 
 export interface RecordingMachineDeps {
   db: DrizzleDb;
@@ -196,4 +198,155 @@ export class RecordingMachine {
     });
     return result;
   }
+
+  /** R-10 step 1: `paused` → `starting` (startReason=resume). No new segment yet — confirmation reuses `confirmRecording` to open the next one (A-12). */
+  enterResuming(sessionId: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions).set({ state: 'starting' }).where(eq(lectureSessions.id, sessionId)).run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
+
+  /** R-11 first phase: `recording`/`paused` → `stopping`, the synchronous acceptance of `cmd.recording.stop` (mirrors R-01's `starting`). */
+  enterStopping(sessionId: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions).set({ state: 'stopping' }).where(eq(lectureSessions.id, sessionId)).run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
+
+  /** `stopping` → `finalizing` with no consumer to wait on (stop issued while already `paused`, or a resume that never confirmed — R-11/R-07's non-capturing path). */
+  enterFinalizingNoSegment(sessionId: string): typeof lectureSessions.$inferSelect {
+    const { db } = this.#deps;
+    let result!: typeof lectureSessions.$inferSelect;
+    db.transaction((tx) => {
+      tx.update(lectureSessions).set({ state: 'finalizing' }).where(eq(lectureSessions.id, sessionId)).run();
+      result = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+    });
+    return result;
+  }
+
+  /** R-08/R-09 (pause) and R-12/R-13 (stop, capturing): closes the open segment (SEG-1/SEG-3) and moves the session to `paused` or `finalizing`. */
+  closeActiveSegment(sessionId: string, options: CloseActiveSegmentOptions): CloseActiveSegmentResult {
+    const { db, clock, ids } = this.#deps;
+    const now = clock.now();
+
+    let result!: CloseActiveSegmentResult;
+    db.transaction((tx) => {
+      const session = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get();
+      if (!session) {
+        throw new Error(`RecordingMachine.closeActiveSegment: unknown session ${sessionId}`);
+      }
+      const recording = tx.select().from(recordings).where(eq(recordings.sessionId, sessionId)).get();
+      if (!recording) {
+        throw new Error(`RecordingMachine.closeActiveSegment: no recording for session ${sessionId}`);
+      }
+      const openSegment = tx
+        .select()
+        .from(recordingSegments)
+        .where(and(eq(recordingSegments.recordingId, recording.id), eq(recordingSegments.state, 'capturing')))
+        .get();
+      if (!openSegment) {
+        throw new Error(`RecordingMachine.closeActiveSegment: no open segment for recording ${recording.id}`);
+      }
+
+      closeSegment(tx, {
+        segment: openSegment,
+        recordingId: recording.id,
+        sessionId,
+        now,
+        ids,
+        endReason: options.endReason,
+        graceful: options.graceful,
+        outputs: options.outputs,
+        recordingsRoot: options.recordingsRoot,
+      });
+
+      const recordedDurationMs = sumRecordedDurationMs(tx, recording.id);
+      tx.update(lectureSessions)
+        .set({
+          state: options.nextState,
+          recordedDurationMs,
+          pauseCount: options.bumpPauseCount ? session.pauseCount + 1 : session.pauseCount,
+        })
+        .where(eq(lectureSessions.id, sessionId))
+        .run();
+
+      const updatedSession = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+      const updatedSegment = tx.select().from(recordingSegments).where(eq(recordingSegments.id, openSegment.id)).get()!;
+      result = { session: updatedSession, recording, segment: updatedSegment };
+    });
+    return result;
+  }
+
+  /** R-14 (segments exist → `completed`) / R-15 (none → `error`, `capture.empty`). No task owns machine 1b yet (B-13), so `recordings.state` is left untouched on R-14 and only defensively marked `failed` on R-15's degenerate zero-segment case. */
+  completeFinalizedSession(sessionId: string): CompleteFinalizedSessionResult {
+    const { db, clock } = this.#deps;
+    const now = clock.now();
+
+    let result!: CompleteFinalizedSessionResult;
+    db.transaction((tx) => {
+      const session = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get();
+      if (!session) {
+        throw new Error(`RecordingMachine.completeFinalizedSession: unknown session ${sessionId}`);
+      }
+      const recording = tx.select().from(recordings).where(eq(recordings.sessionId, sessionId)).get();
+      const segmentsExist = recording
+        ? tx.select({ id: recordingSegments.id }).from(recordingSegments).where(eq(recordingSegments.recordingId, recording.id)).all().length > 0
+        : false;
+
+      const startedAtMs = new Date(session.startedAt).getTime();
+      const wallDurationMs = now.getTime() - startedAtMs;
+
+      if (segmentsExist) {
+        tx.update(lectureSessions)
+          .set({ state: 'completed', endedAt: now.toISOString(), wallDurationMs })
+          .where(eq(lectureSessions.id, sessionId))
+          .run();
+      } else {
+        tx.update(lectureSessions)
+          .set({
+            state: 'error',
+            errorCode: 'capture.empty',
+            errorMessage: 'Recording ended with no captured segments',
+            endedAt: now.toISOString(),
+            wallDurationMs,
+          })
+          .where(eq(lectureSessions.id, sessionId))
+          .run();
+        if (recording) {
+          tx.update(recordings).set({ state: 'failed' }).where(eq(recordings.id, recording.id)).run();
+        }
+      }
+
+      const updated = tx.select().from(lectureSessions).where(eq(lectureSessions.id, sessionId)).get()!;
+      result = { session: updated };
+    });
+    return result;
+  }
+}
+
+export interface CloseActiveSegmentOptions {
+  endReason: 'pause' | 'stop';
+  graceful: boolean;
+  outputs: readonly OutputSpec[];
+  recordingsRoot: string;
+  nextState: 'paused' | 'finalizing';
+  bumpPauseCount: boolean;
+}
+
+export interface CloseActiveSegmentResult {
+  session: typeof lectureSessions.$inferSelect;
+  recording: typeof recordings.$inferSelect;
+  segment: typeof recordingSegments.$inferSelect;
+}
+
+export interface CompleteFinalizedSessionResult {
+  session: typeof lectureSessions.$inferSelect;
 }

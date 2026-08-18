@@ -1,17 +1,23 @@
-import { LAYOUT_PRESETS, TIMERS } from '@eduscope/shared';
-import { eq } from 'drizzle-orm';
+import { LAYOUT_PRESETS, TIMERS, type OutputSpec } from '@eduscope/shared';
+import { eq, inArray } from 'drizzle-orm';
 import type { DrizzleDb } from '../../db/client.js';
-import { lectureSessions } from '../../db/schema.js';
+import { lectureSessions, recordings, recordingSegments } from '../../db/schema.js';
 import type { Clock } from '../../lib/clock.js';
 import type { DomainBus } from '../../lib/domain-bus.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import { SerialExecutor } from '../../lib/serial-executor.js';
+import { ProblemError } from '../../contracts/problem.js';
 import type { AuthContext } from '../auth/service.js';
-import { runStartGuards, type ChannelValidResult } from './guards.js';
+import { assertAuthOwner, assertStorageOk, resolveChannelValid, runStartGuards, type ChannelValidResult } from './guards.js';
 import { RecordingMachine } from './machine.js';
 import type { PipelineManagerClient, StartRecordConsumerBody } from './pm/client.js';
 import { PipelineManagerError } from './pm/types.js';
+import { stopConsumerWithEosRace } from './recovery.js';
+import { segmentOutputPaths } from './segments.js';
 import { getRecordingStateSnapshot, toRecordingSegmentPayload, toRecordingStatePayload } from './snapshots.js';
+
+/** state-machines.md §1: the non-terminal vocabulary a "current session" read is scoped to. */
+const NON_TERMINAL_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
 
 export interface RecordingExecutorLogger {
   warn(message: string, meta?: Record<string, unknown>): void;
@@ -39,6 +45,11 @@ export class RecordingExecutor {
   readonly #machine: RecordingMachine;
   readonly #serial = new SerialExecutor();
 
+  /** consumerId of the currently-running record consumer, keyed by sessionId — set once R-05 confirms, cleared when the segment closes. Process-local only; restart-time re-attachment is BR-1's job (B-07). */
+  readonly #activeConsumerId = new Map<string, string>();
+  readonly #inFlightPause = new Set<string>();
+  readonly #inFlightStop = new Set<string>();
+
   constructor(deps: RecordingExecutorDeps) {
     this.#deps = deps;
     // `deps.db` may itself be a getter resolved only after the DB lifecycle
@@ -61,6 +72,18 @@ export class RecordingExecutor {
     return this.#serial.run(() => this.#doStart(actor));
   }
 
+  async pauseRecording(actor: AuthContext): Promise<StartRecordingResult> {
+    return this.#serial.run(() => this.#doPause(actor));
+  }
+
+  async resumeRecording(actor: AuthContext): Promise<StartRecordingResult> {
+    return this.#serial.run(() => this.#doResume(actor));
+  }
+
+  async stopRecording(actor: AuthContext): Promise<StartRecordingResult> {
+    return this.#serial.run(() => this.#doStop(actor));
+  }
+
   async #doStart(actor: AuthContext): Promise<StartRecordingResult> {
     const { db, clock, ids, bus } = this.#deps;
     const guardResult = runStartGuards(db, this.#deps.provisioningPath);
@@ -79,18 +102,18 @@ export class RecordingExecutor {
     // Class B failures resolve only over the event channel, never the HTTP
     // response (openapi.yaml startRecording description) — deliberately not
     // awaited, so the 202 above is not held up by the PM round trip.
-    void this.#launchPmConsumer(created.sessionId, created.recordingId, guardResult.channel).catch((error: unknown) => {
+    void this.#launchPmConsumer(created.sessionId, guardResult.channel).catch((error: unknown) => {
       this.#deps.logger?.warn('recording start: background launch failed unexpectedly', { error: describeError(error) });
     });
 
     return { commandId, acceptedAt, resolveBySec: TIMERS['T-CMD-RESOLVE'] / 1000 };
   }
 
-  async #launchPmConsumer(sessionId: string, recordingId: string, channel: ChannelValidResult): Promise<void> {
+  async #launchPmConsumer(sessionId: string, channel: ChannelValidResult): Promise<void> {
     const preset = LAYOUT_PRESETS.find((entry) => entry.id === channel.layoutPreset.id);
     const body: StartRecordConsumerBody = {
       preset: channel.layoutPreset.id,
-      ...buildOutputs(this.#deps.recordingsRoot, sessionId, 0, preset?.outputs ?? [{ streamKey: 'main' }]),
+      ...buildOutputs(this.#deps.recordingsRoot, sessionId, 0, preset?.outputs ?? [{ streamKey: 'main', roleIds: [], includeAudio: true }]),
       ...(channel.channelConfig.ratioA !== null ? { ratioA: channel.channelConfig.ratioA } : {}),
       ...(channel.channelConfig.ratioB !== null ? { ratioB: channel.channelConfig.ratioB } : {}),
     };
@@ -100,14 +123,179 @@ export class RecordingExecutor {
       accepted = await this.#deps.pm.startRecordConsumer(body);
     } catch (error) {
       const mapped = mapPmError(error);
-      await this.#serial.run(() => this.#failStart(sessionId, mapped));
+      await this.#serial.run(() => this.#failStart(sessionId, mapped, 'initial'));
       return;
     }
-    this.#armConfirmRace(sessionId, recordingId, accepted.consumerId);
+    this.#armConfirmRace(sessionId, accepted.consumerId, TIMERS['T-START-CONFIRM'], 'initial');
   }
 
-  /** Races `evt.pm.consumer.running`/`evt.pm.consumer.failed` (filtered by `consumerId`) against `T-START-CONFIRM`; whichever settles first re-enters the serial queue to write the outcome (R-05/R-06/R-07). */
-  #armConfirmRace(sessionId: string, recordingId: string, consumerId: string): void {
+  async #doPause(actor: AuthContext): Promise<StartRecordingResult> {
+    const session = this.#loadActiveSessionOrThrow();
+    assertAuthOwner(session, actor);
+
+    if (session.state === 'paused' || this.#inFlightPause.has(session.id)) {
+      return this.#acceptedResult(); // idempotent: already paused, or a pause is already in flight
+    }
+    if (session.state !== 'recording') {
+      throw new ProblemError(409, 'session.not-active', `Cannot pause while ${session.state}`);
+    }
+
+    const recording = this.#loadRecordingBySession(session.id);
+    const consumerId = this.#activeConsumerId.get(session.id);
+    const outputs = this.#outputsForPreset(recording.layoutPresetId);
+    const accepted = this.#acceptedResult();
+
+    this.#inFlightPause.add(session.id);
+    void this.#finishPause(session.id, consumerId, outputs).catch((error: unknown) => {
+      this.#deps.logger?.warn('recording pause: background stop failed unexpectedly', { error: describeError(error) });
+    });
+
+    return accepted;
+  }
+
+  /** R-08 (graceful) / R-09 (T-PAUSE-EOS timeout, segment truncated) — resolves entirely over the event channel, per the 202-is-acceptance rule. */
+  async #finishPause(sessionId: string, consumerId: string | undefined, outputs: readonly OutputSpec[]): Promise<void> {
+    try {
+      const graceful = consumerId
+        ? (await stopConsumerWithEosRace({ bus: this.#deps.bus, clock: this.#deps.clock }, this.#deps.pm, consumerId, TIMERS['T-PAUSE-EOS'])).graceful
+        : false;
+
+      await this.#serial.run(() => {
+        const result = this.#machine.closeActiveSegment(sessionId, {
+          endReason: 'pause',
+          graceful,
+          outputs,
+          recordingsRoot: this.#deps.recordingsRoot,
+          nextState: 'paused',
+          bumpPauseCount: true,
+        });
+        this.#activeConsumerId.delete(sessionId);
+        this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, null));
+        this.#deps.bus.publish('recording.segment', toRecordingSegmentPayload(result.session, result.recording, result.segment));
+        void this.#deps.pm.setLed('off').catch((error: unknown) => {
+          this.#deps.logger?.warn('recording pause: LED update failed', { error: describeError(error) });
+        });
+      });
+    } finally {
+      this.#inFlightPause.delete(sessionId);
+    }
+  }
+
+  async #doResume(actor: AuthContext): Promise<StartRecordingResult> {
+    const session = this.#loadActiveSessionOrThrow();
+    assertAuthOwner(session, actor);
+
+    if (session.state === 'recording') {
+      return this.#acceptedResult(); // idempotent: already resumed
+    }
+    if (session.state !== 'paused') {
+      throw new ProblemError(409, 'session.not-active', `Cannot resume while ${session.state}`);
+    }
+
+    assertStorageOk(this.#deps.db);
+    const channel = resolveChannelValid(this.#deps.db);
+
+    const started = this.#machine.enterResuming(session.id);
+    const accepted = this.#acceptedResult();
+    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, started, 'resume'));
+
+    void this.#launchResumeConsumer(session.id, channel).catch((error: unknown) => {
+      this.#deps.logger?.warn('recording resume: background launch failed unexpectedly', { error: describeError(error) });
+    });
+
+    return accepted;
+  }
+
+  async #launchResumeConsumer(sessionId: string, channel: ChannelValidResult): Promise<void> {
+    const recording = this.#loadRecordingBySession(sessionId);
+    const nextIndex = this.#nextSegmentIndex(recording.id);
+    const outputs = this.#outputsForPreset(channel.layoutPreset.id);
+    const body: StartRecordConsumerBody = {
+      preset: channel.layoutPreset.id,
+      ...buildOutputs(this.#deps.recordingsRoot, sessionId, nextIndex, outputs),
+      ...(channel.channelConfig.ratioA !== null ? { ratioA: channel.channelConfig.ratioA } : {}),
+      ...(channel.channelConfig.ratioB !== null ? { ratioB: channel.channelConfig.ratioB } : {}),
+    };
+
+    let accepted;
+    try {
+      accepted = await this.#deps.pm.startRecordConsumer(body);
+    } catch (error) {
+      const mapped = mapPmError(error);
+      await this.#serial.run(() => this.#failStart(sessionId, mapped, 'resume'));
+      return;
+    }
+    this.#armConfirmRace(sessionId, accepted.consumerId, TIMERS['T-RESUME-CONFIRM'], 'resume');
+  }
+
+  async #doStop(actor: AuthContext): Promise<StartRecordingResult> {
+    const session = this.#loadActiveSessionOrThrow();
+    assertAuthOwner(session, actor);
+
+    if (session.state === 'stopping' || session.state === 'finalizing' || this.#inFlightStop.has(session.id)) {
+      return this.#acceptedResult(); // idempotent: already stopping
+    }
+    if (session.state !== 'recording' && session.state !== 'paused') {
+      throw new ProblemError(409, 'session.not-active', `Cannot stop while ${session.state}`);
+    }
+
+    const wasRecording = session.state === 'recording';
+    const recording = this.#loadRecordingBySession(session.id);
+    const consumerId = this.#activeConsumerId.get(session.id);
+    const outputs = this.#outputsForPreset(recording.layoutPresetId);
+
+    const stopped = this.#machine.enterStopping(session.id);
+    const accepted = this.#acceptedResult();
+    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, stopped, null));
+
+    this.#inFlightStop.add(session.id);
+    void this.#finishStop(session.id, wasRecording, consumerId, outputs).catch((error: unknown) => {
+      this.#deps.logger?.warn('recording stop: background finalize failed unexpectedly', { error: describeError(error) });
+    });
+
+    return accepted;
+  }
+
+  /** R-12 (graceful) / R-13 (T-STOP-EOS timeout) when capturing, else straight through (R-11's "if capturing" branch has nothing to wait for) — then R-14/R-15 (finalizing → completed/error), all resolved over the event channel. */
+  async #finishStop(sessionId: string, wasRecording: boolean, consumerId: string | undefined, outputs: readonly OutputSpec[]): Promise<void> {
+    try {
+      let graceful = false;
+      if (wasRecording && consumerId) {
+        const outcome = await stopConsumerWithEosRace({ bus: this.#deps.bus, clock: this.#deps.clock }, this.#deps.pm, consumerId, TIMERS['T-STOP-EOS']);
+        graceful = outcome.graceful;
+      }
+
+      await this.#serial.run(() => {
+        if (wasRecording) {
+          const closed = this.#machine.closeActiveSegment(sessionId, {
+            endReason: 'stop',
+            graceful,
+            outputs,
+            recordingsRoot: this.#deps.recordingsRoot,
+            nextState: 'finalizing',
+            bumpPauseCount: false,
+          });
+          this.#activeConsumerId.delete(sessionId);
+          this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, closed.session, null));
+          this.#deps.bus.publish('recording.segment', toRecordingSegmentPayload(closed.session, closed.recording, closed.segment));
+        } else {
+          const finalizing = this.#machine.enterFinalizingNoSegment(sessionId);
+          this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, finalizing, null));
+        }
+
+        const completed = this.#machine.completeFinalizedSession(sessionId);
+        this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, completed.session, null));
+        void this.#deps.pm.setLed('off').catch((error: unknown) => {
+          this.#deps.logger?.warn('recording stop: LED update failed', { error: describeError(error) });
+        });
+      });
+    } finally {
+      this.#inFlightStop.delete(sessionId);
+    }
+  }
+
+  /** Races `evt.pm.consumer.running`/`evt.pm.consumer.failed` (filtered by `consumerId`) against `timeoutMs`; whichever settles first re-enters the serial queue to write the outcome (R-05/R-06/R-07). Shared by the initial start (T-START-CONFIRM) and resume (T-RESUME-CONFIRM). */
+  #armConfirmRace(sessionId: string, consumerId: string, timeoutMs: number, startReason: 'initial' | 'resume'): void {
     const controller = new AbortController();
     let settled = false;
 
@@ -124,34 +312,44 @@ export class RecordingExecutor {
 
     const unsubscribeRunning = this.#deps.bus.subscribe('evt.pm.consumer.running', (payload) => {
       if (payload.consumerId !== consumerId) return;
-      finish(() => this.#confirmStart(sessionId, recordingId));
+      finish(() => this.#confirmStart(sessionId, consumerId, startReason));
     });
     const unsubscribeFailed = this.#deps.bus.subscribe('evt.pm.consumer.failed', (payload) => {
       if (payload.consumerId !== consumerId) return;
-      finish(() => this.#failStart(sessionId, { code: payload.code, message: `pipeline-manager reported ${payload.code}` }));
+      finish(() => this.#failStart(sessionId, { code: payload.code, message: `pipeline-manager reported ${payload.code}` }, startReason));
     });
 
-    this.#deps.clock.sleep(TIMERS['T-START-CONFIRM'], controller.signal).then(() => {
+    this.#deps.clock.sleep(timeoutMs, controller.signal).then(() => {
       if (controller.signal.aborted) return; // resolved because the race was already won, not a genuine timeout
-      finish(() => this.#failStart(sessionId, { code: 'confirm_timeout', message: 'pipeline-manager did not confirm the recording in time' }));
+      finish(() => this.#failStart(sessionId, { code: 'confirm_timeout', message: 'pipeline-manager did not confirm the recording in time' }, startReason));
     });
   }
 
-  async #confirmStart(sessionId: string, _recordingId: string): Promise<void> {
+  async #confirmStart(sessionId: string, consumerId: string, startReason: 'initial' | 'resume'): Promise<void> {
     const result = this.#machine.confirmRecording(sessionId);
-    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, 'initial'));
+    this.#activeConsumerId.set(sessionId, consumerId);
+    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, startReason));
     this.#deps.bus.publish('recording.segment', toRecordingSegmentPayload(result.session, result.recording, result.segment));
     void this.#deps.pm.setLed('blink').catch((error: unknown) => {
       this.#deps.logger?.warn('recording confirm: LED update failed', { error: describeError(error) });
     });
   }
 
-  async #failStart(sessionId: string, error: { code: string; message: string }): Promise<void> {
+  /** R-06 (no segments — `error`) / R-07 (segments exist — preserve the lecture, SM-R-4). A resume that fails after prior segments exist has nothing capturing to wait on, so R-07 here proceeds straight through finalizing to completed/error (R-11's "if capturing" branch has no consumer). */
+  async #failStart(sessionId: string, error: { code: string; message: string }, startReason: 'initial' | 'resume'): Promise<void> {
     const result = this.#machine.failStart(sessionId, error.code, error.message);
-    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, 'initial'));
+    this.#activeConsumerId.delete(sessionId);
+    this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, result.session, startReason));
     void this.#deps.pm.setLed('off').catch((ledError: unknown) => {
       this.#deps.logger?.warn('recording fail: LED update failed', { error: describeError(ledError) });
     });
+
+    if (result.segmentsExist) {
+      const finalizing = this.#machine.enterFinalizingNoSegment(sessionId);
+      this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, finalizing, startReason));
+      const completed = this.#machine.completeFinalizedSession(sessionId);
+      this.#deps.bus.publish('recording.state', toRecordingStatePayload(this.#deps.db, completed.session, startReason));
+    }
   }
 
   #loadSession(sessionId: string): typeof lectureSessions.$inferSelect {
@@ -161,6 +359,41 @@ export class RecordingExecutor {
     }
     return session;
   }
+
+  #loadActiveSessionOrThrow(): typeof lectureSessions.$inferSelect {
+    const session = this.#deps.db.select().from(lectureSessions).where(inArray(lectureSessions.state, NON_TERMINAL_STATES)).get();
+    if (!session) {
+      throw new ProblemError(409, 'session.not-active', 'No recording is active');
+    }
+    return session;
+  }
+
+  #loadRecordingBySession(sessionId: string): typeof recordings.$inferSelect {
+    const recording = this.#deps.db.select().from(recordings).where(eq(recordings.sessionId, sessionId)).get();
+    if (!recording) {
+      throw new Error(`recording executor: no recording for session ${sessionId}`);
+    }
+    return recording;
+  }
+
+  #nextSegmentIndex(recordingId: string): number {
+    const rows = this.#deps.db
+      .select({ index: recordingSegments.index })
+      .from(recordingSegments)
+      .where(eq(recordingSegments.recordingId, recordingId))
+      .all();
+    return rows.length > 0 ? Math.max(...rows.map((row) => row.index)) + 1 : 0;
+  }
+
+  #outputsForPreset(layoutPresetId: string): readonly OutputSpec[] {
+    const preset = LAYOUT_PRESETS.find((entry) => entry.id === layoutPresetId);
+    return preset?.outputs ?? [{ streamKey: 'main', roleIds: [], includeAudio: true }];
+  }
+
+  #acceptedResult(): StartRecordingResult {
+    const now = this.#deps.clock.now();
+    return { commandId: this.#deps.ids.next(now), acceptedAt: now.toISOString(), resolveBySec: TIMERS['T-CMD-RESOLVE'] / 1000 };
+  }
 }
 
 /** Deterministic, opaque segment path(s) — never parsed for metadata by any consumer (SEG-7, B-02). */
@@ -168,18 +401,14 @@ function buildOutputs(
   recordingsRoot: string,
   sessionId: string,
   segmentIndex: number,
-  outputs: readonly { streamKey: string }[],
+  outputs: readonly OutputSpec[],
 ): { outputPath?: string; outputPaths?: Record<string, string> } {
-  const paddedIndex = String(segmentIndex).padStart(3, '0');
-  const base = `${recordingsRoot}/sessions/${sessionId}`;
+  const paths = segmentOutputPaths(recordingsRoot, sessionId, segmentIndex, outputs);
   if (outputs.length <= 1) {
-    return { outputPath: `${base}/seg-${paddedIndex}.ts` };
+    const streamKey = outputs[0]?.streamKey ?? 'main';
+    return { outputPath: paths[streamKey]! }; // segmentOutputPaths always keys the single-output case by this same streamKey
   }
-  const outputPaths: Record<string, string> = {};
-  for (const output of outputs) {
-    outputPaths[output.streamKey] = `${base}/seg-${paddedIndex}-${output.streamKey}.ts`;
-  }
-  return { outputPaths };
+  return { outputPaths: paths };
 }
 
 function mapPmError(error: unknown): { code: string; message: string } {
