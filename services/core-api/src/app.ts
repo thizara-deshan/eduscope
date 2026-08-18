@@ -10,12 +10,15 @@ import { migrate } from './db/migrate.js';
 import { seed } from './db/seeds.js';
 import type { Clock } from './lib/clock.js';
 import { SystemClock } from './lib/clock.js';
+import { DomainBus } from './lib/domain-bus.js';
 import type { IdGenerator } from './lib/ids.js';
 import { UlidGenerator } from './lib/ids.js';
 import { LifecycleRegistry } from './lifecycle.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
+import { PipelineManagerClient } from './modules/recording/pm/client.js';
+import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -24,6 +27,8 @@ declare module 'fastify' {
     ids: IdGenerator;
     lifecycle: LifecycleRegistry;
     db: DrizzleDb;
+    bus: DomainBus;
+    pmClient: PipelineManagerClient;
   }
 }
 
@@ -68,6 +73,23 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('clock', clock);
   app.decorate('ids', ids);
   app.decorate('lifecycle', lifecycle);
+
+  const bus = new DomainBus();
+  app.decorate('bus', bus);
+
+  const pmClient = new PipelineManagerClient({
+    baseUrl: config.pipelineManagerBaseUrl,
+    bearerToken: config.internalBearer,
+  });
+  app.decorate('pmClient', pmClient);
+
+  const pmBridge = new PipelineManagerBridge({
+    client: pmClient,
+    bus,
+    clock,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(pmBridge);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ProblemError) {

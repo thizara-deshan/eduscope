@@ -1,0 +1,112 @@
+/**
+ * Wire shapes for pipeline-manager's internal HTTP/SSE API
+ * (docs/design/pipeline-manager.md §3), typed to match A-14's current
+ * response bodies exactly — not the aspirational full status example in
+ * §3.3. Nothing here is public v1 contract (openapi.yaml/events.md); it is
+ * consumed only inside `modules/recording/pm/*`.
+ */
+
+export type PmPublisherId = 'usb' | 'rtsp' | 'rtsp2' | 'audio';
+export type PmPublisherState = 'online' | 'degraded' | 'offline' | 'unknown';
+export type PmConsumerState = 'starting' | 'running' | 'degraded' | 'stopping' | 'exited' | 'failed';
+export type PmCaptureCardState = 'present' | 'absent' | 'recovering' | 'failed';
+
+export interface PmPublisherStatus {
+  state: PmPublisherState;
+  bound: boolean;
+  fps: number | null;
+  rms: number | null;
+  lastError: string | null;
+}
+
+export interface PmConsumerStatus {
+  id: string;
+  state: PmConsumerState;
+  pgid: number | null;
+}
+
+/** `GET /status` — pipeline-manager.md §3.3, as A-14's `routes.py` `get_status` actually returns it. */
+export interface PmStatus {
+  platform: string;
+  encodeLedger: { capacity: number; inUse: number; reservedBy: string[] };
+  publishers: Record<PmPublisherId, PmPublisherStatus>;
+  consumers: PmConsumerStatus[];
+  device: { captureCardState: PmCaptureCardState; led: 'blink' | 'off' };
+  sequence: number;
+}
+
+/** `GET /sources` — pipeline-manager.md §3.2 device/query row. */
+export type PmSourcesStatus = Record<PmPublisherId, { roleId: string; state: PmConsumerState | PmPublisherState; bound: boolean }>;
+
+/** One `202` command-accepted body shared by every consumer-start route. */
+export interface PmCommandAccepted {
+  consumerId: string;
+  state: string;
+}
+
+export interface PmPublisherCommandAccepted {
+  publisherId: string;
+  state: string;
+}
+
+/** pipeline-manager.md §3.4 — the `{code, title, status, meta?}` body `app.py`'s exception handler emits. */
+export interface PmProblem {
+  code: string;
+  title: string;
+  status: number;
+  meta?: Record<string, unknown>;
+}
+
+export class PipelineManagerError extends Error {
+  readonly problem: PmProblem;
+
+  constructor(problem: PmProblem) {
+    super(problem.title);
+    this.name = 'PipelineManagerError';
+    this.problem = problem;
+  }
+}
+
+/** One raw `id:`/`event:`/`data:` frame off `GET /events`, before dispatch. */
+export interface PmSseFrame {
+  id: number | null;
+  event: string;
+  data: unknown;
+}
+
+export interface PmConsumerRunningData {
+  consumerId: string;
+  pgid: number | null;
+}
+
+export interface PmConsumerFailedData {
+  consumerId: string;
+  code: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface PmConsumerEosData {
+  consumerId: string;
+}
+
+export interface PmConsumerExitedData {
+  consumerId: string;
+  code: string;
+}
+
+/**
+ * Typed union over the `evt.pm.*` kinds this bridge understands. Only
+ * `consumer.running` and `resync-required` are ever actually published by
+ * A's current runtime (the rest are the documented §3.4 async-failure
+ * taxonomy A-15/A-16 board bring-up wires in) — the dispatcher decodes all
+ * of them so B-05/B-06 have one stable internal shape to consume as that
+ * wiring lands, without a B-side contract change.
+ */
+export type PmEvent =
+  | { kind: 'evt.pm.consumer.running'; sequence: number; data: PmConsumerRunningData }
+  | { kind: 'evt.pm.consumer.failed'; sequence: number; data: PmConsumerFailedData }
+  | { kind: 'evt.pm.consumer.eos'; sequence: number; data: PmConsumerEosData }
+  | { kind: 'evt.pm.consumer.exited'; sequence: number; data: PmConsumerExitedData }
+  | { kind: 'evt.pm.resync-required'; sequence: number; data: Record<string, never> };
+
+export const PM_RESYNC_EVENT_KIND = 'evt.pm.resync-required';
