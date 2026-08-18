@@ -17,8 +17,10 @@ import { LifecycleRegistry } from './lifecycle.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
+import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
+import { registerRecordingRoutes } from './modules/recording/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -125,6 +127,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     refreshTokenTtlSec: config.refreshTokenTtlSec,
   });
   registerAuthRoutes(app, authService);
+
+  const recordingExecutor = new RecordingExecutor({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    pm: pmClient,
+    provisioningPath: config.provisioningPath,
+    recordingsRoot: config.recordingsRoot,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  registerRecordingRoutes(app, authService, recordingExecutor);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

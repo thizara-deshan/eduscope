@@ -188,7 +188,8 @@ export const recordingSegments = sqliteTable(
     startedAt: text('started_at').notNull(),
     endedAt: text('ended_at'),
     durationMs: bigint('duration_ms'),
-    endReason: text('end_reason').notNull().$type<'pause' | 'stop' | 'crash' | 'error' | 'takeover'>(),
+    /** Null while `state = capturing` — a segment's end reason is only knowable once it has ended (SEG-1); `endedAt`/`durationMs` are nullable for the same reason. */
+    endReason: text('end_reason').$type<'pause' | 'stop' | 'crash' | 'error' | 'takeover'>(),
     state: text('state').notNull().$type<'capturing' | 'finalizing' | 'finalized' | 'truncated' | 'failed'>(),
   },
   (t) => [

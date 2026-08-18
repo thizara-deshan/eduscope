@@ -1,3 +1,4 @@
+import type { RecordingSegmentPayload, RecordingStatePayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -15,6 +16,9 @@ export interface CoreDomainEvents {
   'evt.pm.consumer.eos': { consumerId: string };
   'evt.pm.consumer.exited': { consumerId: string; code: string };
   'pm.status.resynced': PmStatus;
+  /** Public panel/admin events (contracts/events.md §2) — published here after their owning DB transaction commits; B-35's WS hub fans these out. */
+  'recording.state': RecordingStatePayload;
+  'recording.segment': RecordingSegmentPayload;
 }
 
 export type DomainEventType = keyof CoreDomainEvents;
