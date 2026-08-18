@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyJwt from '@fastify/jwt';
 import { ZodError } from 'zod';
 import type { CoreConfig } from './config.js';
 import { loadConfig } from './config.js';
@@ -12,6 +13,9 @@ import { SystemClock } from './lib/clock.js';
 import type { IdGenerator } from './lib/ids.js';
 import { UlidGenerator } from './lib/ids.js';
 import { LifecycleRegistry } from './lifecycle.js';
+import { registerAuthRoutes } from './modules/auth/routes.js';
+import { AuthService } from './modules/auth/service.js';
+import type { AccessTokenClaims } from './modules/auth/tokens.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -82,6 +86,23 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
+
+  await app.register(fastifyJwt, { secret: config.jwtSecret });
+
+  const authService = new AuthService({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    jwt: {
+      sign: (claims: AccessTokenClaims): string => app.jwt.sign(claims, { expiresIn: `${config.accessTokenTtlSec}s` }),
+      verify: (token: string): AccessTokenClaims => app.jwt.verify<AccessTokenClaims>(token),
+    },
+    accessTokenTtlSec: config.accessTokenTtlSec,
+    refreshTokenTtlSec: config.refreshTokenTtlSec,
+  });
+  registerAuthRoutes(app, authService);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();
