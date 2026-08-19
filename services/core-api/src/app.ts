@@ -35,6 +35,8 @@ import { registerExportRoutes } from './modules/export/routes.js';
 import { ExportExecutor, type ExportSourceStream } from './modules/export/worker.js';
 import { registerUploadRoutes } from './modules/uploads/routes.js';
 import { UploadScheduler, type UploadAdapter } from './modules/uploads/scheduler.js';
+import { PlaceholderUploadAdapter } from './modules/uploads/adapters/placeholder.js';
+import type { UploadAdapter as ResumableUploadAdapter } from './modules/uploads/adapters/types.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -72,7 +74,9 @@ export interface BuildAppOptions {
   /** B-16 copy-stream seam; production uses createReadStream with AbortSignal. */
   exportSourceStream?: ExportSourceStream;
   /** B-17 upload boundary. Production stays dormant until B-18 supplies the placeholder adapter. */
-  uploadAdapter?: UploadAdapter;
+  uploadAdapter?: UploadAdapter | ResumableUploadAdapter;
+  /** Loopback fixture/placeholder endpoint; non-loopback endpoints must be HTTPS. */
+  uploadBaseUrl?: string;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -236,12 +240,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('exportExecutor', exportExecutor);
   registerExportRoutes(app, authService, exportExecutor, scopedSubscriptions);
 
+  const uploadAdapter = options.uploadAdapter ?? (config.nodeEnv === 'test' && options.uploadBaseUrl === undefined
+    ? undefined
+    : new PlaceholderUploadAdapter({ baseUrl: options.uploadBaseUrl ?? 'http://127.0.0.1:8094' }));
   const uploadScheduler = new UploadScheduler({
     get db(): DrizzleDb { return app.db; },
     clock,
     ids,
     bus,
-    ...(options.uploadAdapter ? { adapter: options.uploadAdapter } : {}),
+    ...(uploadAdapter ? { adapter: uploadAdapter } : {}),
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(uploadScheduler);
