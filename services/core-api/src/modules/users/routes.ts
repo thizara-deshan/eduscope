@@ -5,7 +5,10 @@ import { ProblemError } from '../../contracts/problem.js';
 import { parseBody } from '../../contracts/validate.js';
 import { requireAuth } from '../auth/guard.js';
 import type { AuthService } from '../auth/service.js';
+import { importUsers } from './import.js';
 import { createUser, deleteUser, listUsers, updateUser, type UsersServiceDeps } from './service.js';
+
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 const DEFAULT_LIST_USERS_LIMIT = 50;
 
@@ -69,6 +72,32 @@ export function registerUsersRoutes(app: FastifyInstance, authService: AuthServi
       const { userId } = request.params as { userId: string };
       deleteUser(deps, request.authContext!, userId);
       reply.code(204).send();
+    },
+  );
+
+  app.post(
+    '/api/v1/users/import',
+    { config: { operationId: 'importUsers' }, preHandler: requireAuth(authService, 'importUsers') },
+    async (request, reply) => {
+      assertAdmin(request.authContext!.role);
+
+      const file = await request.file({ limits: { fileSize: MAX_IMPORT_FILE_BYTES } });
+      if (!file) {
+        throw new ProblemError(422, 'validation.invalid', 'A .xlsx file is required');
+      }
+
+      let buffer: Buffer;
+      try {
+        buffer = await file.toBuffer();
+      } catch (error) {
+        if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
+          throw new ProblemError(422, 'validation.invalid', 'Uploaded file exceeds the maximum size');
+        }
+        throw error;
+      }
+
+      const result = await importUsers(deps, request.authContext!, { filename: file.filename, buffer });
+      reply.code(result.status).send(result.batch);
     },
   );
 }

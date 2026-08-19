@@ -2,6 +2,7 @@ import { basename, dirname, join } from 'node:path';
 import { statfs } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import fastifyMultipart from '@fastify/multipart';
 import { ZodError } from 'zod';
 import type { CoreConfig } from './config.js';
 import { loadConfig } from './config.js';
@@ -83,6 +84,9 @@ declare module 'fastify' {
     helperClient: HelperClient;
     alertStore: AlertStore;
     healthAggregator: HealthAggregator;
+  }
+  interface FastifyContextConfig {
+    operationId?: string;
   }
 }
 
@@ -189,6 +193,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
 
   await app.register(fastifyJwt, { secret: config.jwtSecret });
+  await app.register(fastifyMultipart);
 
   const authService = new AuthService({
     get db(): DrizzleDb {
