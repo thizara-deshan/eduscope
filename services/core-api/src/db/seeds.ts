@@ -5,6 +5,7 @@ import type { CoreDatabase } from './client.js';
 import {
   channelConfigs,
   encodingProfiles,
+  networkConfigs,
   physicalInputs,
   retentionPolicy,
   sourceBindings,
@@ -40,6 +41,9 @@ const PHYSICAL_INPUT_SKELETONS = [
   { roleId: 'students-cam', kind: 'rtsp', address: 'rtsp://192.168.1.102/stream1' },
   { roleId: 'mic-lecturer', kind: 'alsa', address: 'hw:0,0' },
 ] as const;
+
+/** AD-2 (INV-NC-1: wired only, no Wi-Fi fields exist) — the device's one known wired interface; `net.apply`'s `interfaceName ∈ known ifaces` allowlist (design/core-api.md §8.1) is exactly this seeded row set. */
+const WIRED_INTERFACES = [{ interfaceName: 'eth0', kind: 'lan' as const }] as const;
 
 /**
  * Idempotent upserts (design/core-api.md §3.3): closed-enum tables key on their
@@ -116,6 +120,27 @@ export function seed(core: CoreDatabase, now: Date, ids: IdGenerator): void {
         physicalInputId,
         enabled: true,
         updatedAt: nowIso,
+      })
+      .run();
+  }
+
+  for (const iface of WIRED_INTERFACES) {
+    const existing = core.db.select().from(networkConfigs).where(eq(networkConfigs.interfaceName, iface.interfaceName)).get();
+    if (existing) continue;
+    core.db
+      .insert(networkConfigs)
+      .values({
+        id: ids.next(now),
+        interfaceName: iface.interfaceName,
+        kind: iface.kind,
+        vlanId: null,
+        addressMode: 'dhcp',
+        ipv4Address: null,
+        prefixLength: null,
+        gateway: null,
+        dnsServers: [],
+        appliedAt: null,
+        lastApplyError: null,
       })
       .run();
   }

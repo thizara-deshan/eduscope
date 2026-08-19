@@ -26,6 +26,7 @@ import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/m
 import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
 import { registerAudioSettingsRoutes } from './modules/settings/audio-routes.js';
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
+import { registerNetworkSettingsRoutes } from './modules/settings/network-routes.js';
 import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
 import { ArtifactExecutor } from './modules/library/merge-worker.js';
 import { registerMediaRoutes } from './modules/library/media-route.js';
@@ -440,6 +441,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(healthAggregator);
   app.decorate('healthAggregator', healthAggregator);
+  registerNetworkSettingsRoutes(app, authService, {
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    helper: helperClient,
+    alerts: alertStore,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+
   registerDeviceRoutes(app, authService, {
     get db(): DrizzleDb { return app.db; },
     clock,
