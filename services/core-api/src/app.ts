@@ -27,6 +27,7 @@ import { registerAudioSettingsRoutes } from './modules/settings/audio-routes.js'
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
 import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
 import { ArtifactExecutor } from './modules/library/merge-worker.js';
+import { registerMediaRoutes } from './modules/library/media-route.js';
 import { registerLibraryRoutes } from './modules/library/routes.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
@@ -186,6 +187,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     recordingsRoot: config.recordingsRoot,
     artifactExecutor,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+
+  registerMediaRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    recordingsRoot: config.recordingsRoot,
   });
 
   const channelExecutor = new ChannelExecutor({
