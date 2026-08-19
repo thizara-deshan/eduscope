@@ -1,4 +1,4 @@
-import type { AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, ExportJobPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, UsbVolumesPayload } from '@eduscope/shared';
+import type { AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, ExportJobPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, UsbVolumesPayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -26,6 +26,7 @@ export interface CoreDomainEvents {
   'audio.control': AudioControlPayload;
   'export.job': ExportJobPayload;
   'usb.volumes': UsbVolumesPayload;
+  'storage.status': StorageStatusPayload;
   /** Internal only (not in contracts/events.md) — machine 1b → machine 3a/3b (B-17), fired exactly once per recording reaching `ready` (RA-03/RA-02, INV-UJ-2). */
   'artifact.ready': { recordingId: string; sessionId: string };
 }

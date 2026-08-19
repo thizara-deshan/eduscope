@@ -88,8 +88,8 @@ export function assertVolumeMounted(db: DrizzleDb): void {
 
 /**
  * G-STORAGE-OK (INV-DH-3, `[D-15]`). B-19/B-21 own the continuous storage
- * probe that keeps `device_health` fresh; until that probe exists, an absent
- * snapshot is not itself a refusal — only a persisted `critical` reading is.
+ * probe keeps `device_health` fresh and persists probe failures as critical.
+ * B-21 owns the durable health seed, so pre-B-21 databases may have no row.
  */
 export function assertStorageOk(db: DrizzleDb): void {
   const health = db.select({ storagePressure: deviceHealth.storagePressure }).from(deviceHealth).where(eq(deviceHealth.id, 'device-health')).get();

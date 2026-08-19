@@ -25,6 +25,12 @@ export interface LibraryDeleteDeps {
   logger?: { warn(message: string, meta?: Record<string, unknown>): void };
 }
 
+export type RecordingDeleteReason = 'admin' | 'retention' | 'disk-pressure';
+
+export type RecordingDeleteActor =
+  | { kind: 'user'; userId: string }
+  | { kind: 'system' };
+
 function commandAccepted(clock: Clock, ids: IdGenerator): CommandAccepted {
   const now = clock.now();
   return { commandId: ids.next(now), acceptedAt: now.toISOString(), resolveBySec: TIMERS['T-CMD-RESOLVE'] / 1000 };
@@ -49,6 +55,20 @@ export function deleteRecording(deps: LibraryDeleteDeps, recordingId: string, ac
     throw new ProblemError(403, 'not-authorized', 'Only an admin may delete a recording');
   }
 
+  return deleteRecordingInternal(deps, recordingId, { kind: 'user', userId: actor.userId }, 'admin');
+}
+
+/**
+ * Shared RA-06 deletion boundary. Manual and policy-driven deletion use the
+ * same path/file safety checks, upload cancellation, terminal transaction,
+ * audit row, and public artifact event.
+ */
+export function deleteRecordingInternal(
+  deps: LibraryDeleteDeps,
+  recordingId: string,
+  actor: RecordingDeleteActor,
+  reason: RecordingDeleteReason,
+): CommandAccepted {
   const { db, clock, ids, bus, recordingsRoot } = deps;
   const recording = db.select().from(recordings).where(eq(recordings.id, recordingId)).get();
   if (!recording) {
@@ -76,7 +96,12 @@ export function deleteRecording(deps: LibraryDeleteDeps, recordingId: string, ac
   db.transaction((tx) => {
     tx.update(recordingFiles).set({ state: 'deleted' }).where(eq(recordingFiles.recordingId, recordingId)).run();
     tx.update(recordings)
-      .set({ state: 'deleted', deletedAt: nowIso, deletedBy: actor.userId, deleteReason: 'admin' })
+      .set({
+        state: 'deleted',
+        deletedAt: nowIso,
+        deletedBy: actor.kind === 'user' ? actor.userId : null,
+        deleteReason: reason,
+      })
       .where(eq(recordings.id, recordingId))
       .run();
 
@@ -89,15 +114,15 @@ export function deleteRecording(deps: LibraryDeleteDeps, recordingId: string, ac
       .values({
         id: ids.next(now),
         at: nowIso,
-        actorUserId: actor.userId,
-        actorKind: 'user',
+        actorUserId: actor.kind === 'user' ? actor.userId : null,
+        actorKind: actor.kind,
         entityType: 'recording',
         entityId: recordingId,
         action: 'delete',
         sessionId: recording.sessionId,
         before: { state: recording.state },
         after: { state: 'deleted' },
-        reason: null,
+        reason,
       })
       .run();
   });
@@ -109,7 +134,7 @@ export function deleteRecording(deps: LibraryDeleteDeps, recordingId: string, ac
     mergeState: recording.mergeState,
     durationMs: recording.durationMs ?? null,
     totalBytes: recording.totalBytes ?? null,
-    deleteReason: 'admin',
+    deleteReason: reason,
   };
   bus.publish('recording.artifact', payload);
 

@@ -1,4 +1,5 @@
 import { dirname, join } from 'node:path';
+import { statfs } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { ZodError } from 'zod';
@@ -43,6 +44,11 @@ import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
 import { registerRecordingRoutes } from './modules/recording/routes.js';
 import { SourceExecutor } from './modules/sources/status.js';
 import { registerSourceRoutes } from './modules/sources/routes.js';
+import { lectureSessions } from './db/schema.js';
+import { eq } from 'drizzle-orm';
+import { StorageProbe, type StorageStatfs } from './modules/storage/probe.js';
+import { RetentionSweep } from './modules/storage/retention.js';
+import { registerStorageRoutes } from './modules/storage/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -58,6 +64,8 @@ declare module 'fastify' {
     scopedSubscriptions: ScopedSubscriptionRegistry;
     exportExecutor: ExportExecutor;
     uploadScheduler: UploadScheduler;
+    storageProbe: StorageProbe;
+    retentionSweep: RetentionSweep;
   }
 }
 
@@ -77,6 +85,10 @@ export interface BuildAppOptions {
   uploadAdapter?: UploadAdapter | ResumableUploadAdapter;
   /** Loopback fixture/placeholder endpoint; non-loopback endpoints must be HTTPS. */
   uploadBaseUrl?: string;
+  /** B-19 filesystem capacity boundary; tests inject deterministic readings. */
+  storageStatfs?: StorageStatfs;
+  /** B-19 graceful-stop boundary; production delegates to RecordingExecutor. */
+  storageStopRecording?: () => Promise<void>;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -215,6 +227,40 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     recordingsRoot: config.recordingsRoot,
   });
+
+  const storageProbe = new StorageProbe({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    bus,
+    statfs: options.storageStatfs ?? (config.nodeEnv === 'test'
+      ? async () => ({ totalBytes: 1024 ** 4, freeBytes: 512 * 1024 ** 3 })
+      : async () => {
+          const value = await statfs(config.recordingsRoot);
+          return { totalBytes: Number(value.blocks) * Number(value.bsize), freeBytes: Number(value.bavail) * Number(value.bsize) };
+        }),
+    stopRecording: options.storageStopRecording ?? (async () => {
+      const active = app.db.select({ ownerUserId: lectureSessions.ownerUserId }).from(lectureSessions).where(eq(lectureSessions.state, 'recording')).get();
+      if (!active?.ownerUserId) return;
+      await recordingExecutor.stopRecording({ userId: active.ownerUserId, role: 'lecturer', authSessionId: 'storage-pressure', mustResetPassword: false });
+    }),
+    persistHealth: config.nodeEnv !== 'test' || options.storageStatfs !== undefined,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(storageProbe);
+  app.decorate('storageProbe', storageProbe);
+  const retentionSweep = new RetentionSweep({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    recordingsRoot: config.recordingsRoot,
+    artifactExecutor,
+    probe: storageProbe,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(retentionSweep);
+  app.decorate('retentionSweep', retentionSweep);
+  registerStorageRoutes(app, authService, storageProbe);
 
   const blockDevices = options.blockDevices ?? new BlockDeviceMonitor({
     recordingsRoot: config.recordingsRoot,
