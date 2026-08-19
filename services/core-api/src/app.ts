@@ -440,7 +440,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(healthAggregator);
   app.decorate('healthAggregator', healthAggregator);
-  registerDeviceRoutes(app, authService, { provisioning: provisioningReader, health: healthAggregator, alerts: alertStore });
+  registerDeviceRoutes(app, authService, {
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    helper: helperClient,
+    provisioning: provisioningReader,
+    health: healthAggregator,
+    alerts: alertStore,
+  });
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();
