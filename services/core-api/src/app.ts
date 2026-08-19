@@ -61,6 +61,7 @@ import { AlertStore } from './modules/device/alerts.js';
 import { HealthAggregator, type NtpReader } from './modules/device/health.js';
 import { ProvisioningReader } from './modules/device/provisioning.js';
 import { registerDeviceRoutes } from './modules/device/routes.js';
+import { registerFirmwareRoutes } from './modules/firmware/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -495,6 +496,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     provisioning: provisioningReader,
     health: healthAggregator,
     alerts: alertStore,
+  });
+
+  registerFirmwareRoutes(app, authService, {
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    helper: helperClient,
+    get raw() { return core!.raw; },
+    backupDir: join(dirname(config.dbPath), 'firmware-backups'),
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
 
   app.addHook('onClose', async () => {
