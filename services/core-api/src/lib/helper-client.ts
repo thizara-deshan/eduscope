@@ -35,6 +35,9 @@ const zHelperRequest = z.discriminatedUnion('verb', [
       .strict(),
     requestId: z.string().min(1).max(128),
   }).strict(),
+  z.object({ verb: z.literal('relay.reload'), args: z.object({ configDigest: z.string().min(1).max(128) }).strict(), requestId: z.string().min(1).max(128) }).strict(),
+  z.object({ verb: z.literal('firmware.check'), args: z.object({ version: z.string().min(1).max(32).optional() }).strict(), requestId: z.string().min(1).max(128) }).strict(),
+  z.object({ verb: z.literal('firmware.apply'), args: z.object({ version: z.string().min(1).max(32).optional() }).strict(), requestId: z.string().min(1).max(128) }).strict(),
 ]);
 
 const zHelperResponse = z.object({ ok: z.boolean(), detail: z.string() }).strict();

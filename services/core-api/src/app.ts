@@ -29,6 +29,8 @@ import { registerChannelSettingsRoutes } from './modules/settings/channel-routes
 import { registerEncoderSettingsRoutes } from './modules/settings/encoder-routes.js';
 import { registerNetworkSettingsRoutes } from './modules/settings/network-routes.js';
 import { registerSourceSettingsRoutes } from './modules/settings/source-routes.js';
+import { registerStreamTargetRoutes } from './modules/settings/stream-target-routes.js';
+import { RelayConfigActivator } from './modules/relay/config.js';
 import { ArtifactExecutor } from './modules/library/merge-worker.js';
 import { registerMediaRoutes } from './modules/library/media-route.js';
 import { registerLibraryRoutes } from './modules/library/routes.js';
@@ -345,6 +347,21 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('uploadScheduler', uploadScheduler);
   registerUploadRoutes(app, authService, uploadScheduler);
 
+  const relayConfig = new RelayConfigActivator({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    helper: helperClient,
+    clock,
+    ids,
+  });
+  // Same dormant-unless-asked-for shape as the upload adapter above: outside
+  // test env the real relay is always wired; inside test env it only wires
+  // in for suites that actually opted into a helper transport (B-25's own
+  // tests) — the many other suites that enable the streaming channel without
+  // caring about the relay keep getting the channel executor's internal
+  // no-op default.
+  const relay = options.relay ?? (config.nodeEnv === 'test' && options.helperTransport === undefined ? undefined : relayConfig);
   const channelExecutor = new ChannelExecutor({
     get db(): DrizzleDb {
       return app.db;
@@ -353,7 +370,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ids,
     bus,
     pm: pmClient,
-    ...(options.relay !== undefined ? { relay: options.relay } : {}),
+    ...(relay !== undefined ? { relay } : {}),
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(channelExecutor);
@@ -391,6 +408,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     secrets: secretStore,
     pm: pmClient,
     sources: sourceExecutor,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+
+  registerStreamTargetRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    secrets: secretStore,
+    relay: relayConfig,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
 
