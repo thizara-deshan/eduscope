@@ -33,6 +33,8 @@ import { BlockDeviceMonitor, type BlockDeviceMonitorLike } from './modules/expor
 import { ScopedSubscriptionRegistry } from './modules/export/subscriptions.js';
 import { registerExportRoutes } from './modules/export/routes.js';
 import { ExportExecutor, type ExportSourceStream } from './modules/export/worker.js';
+import { registerUploadRoutes } from './modules/uploads/routes.js';
+import { UploadScheduler, type UploadAdapter } from './modules/uploads/scheduler.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -53,6 +55,7 @@ declare module 'fastify' {
     blockDevices: BlockDeviceMonitorLike;
     scopedSubscriptions: ScopedSubscriptionRegistry;
     exportExecutor: ExportExecutor;
+    uploadScheduler: UploadScheduler;
   }
 }
 
@@ -68,6 +71,8 @@ export interface BuildAppOptions {
   blockDevices?: BlockDeviceMonitorLike;
   /** B-16 copy-stream seam; production uses createReadStream with AbortSignal. */
   exportSourceStream?: ExportSourceStream;
+  /** B-17 upload boundary. Production stays dormant until B-18 supplies the placeholder adapter. */
+  uploadAdapter?: UploadAdapter;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -230,6 +235,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   lifecycle.register(exportExecutor);
   app.decorate('exportExecutor', exportExecutor);
   registerExportRoutes(app, authService, exportExecutor, scopedSubscriptions);
+
+  const uploadScheduler = new UploadScheduler({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    ...(options.uploadAdapter ? { adapter: options.uploadAdapter } : {}),
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(uploadScheduler);
+  app.decorate('uploadScheduler', uploadScheduler);
+  registerUploadRoutes(app, authService, uploadScheduler);
 
   const channelExecutor = new ChannelExecutor({
     get db(): DrizzleDb {
