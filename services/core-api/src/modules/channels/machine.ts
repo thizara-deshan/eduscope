@@ -10,8 +10,9 @@ import { SerialExecutor } from '../../lib/serial-executor.js';
 import type { LifecycleComponent, LifecycleStopReason } from '../../lifecycle.js';
 import { assertAuthOwner } from '../recording/guards.js';
 import type { AuthContext } from '../auth/service.js';
-import type { PipelineManagerClient } from '../recording/pm/client.js';
+import { toEncodeProfileOverride, type PipelineManagerClient } from '../recording/pm/client.js';
 import { PipelineManagerError } from '../recording/pm/types.js';
+import { resolveEffectiveProfile } from '../settings/encoder-routes.js';
 
 /** `local` is machine 1a's (B-05) — this executor owns only the two toggleable consumers (state-machines.md §2.2). */
 export type ToggleableChannelId = 'meeting' | 'streaming';
@@ -307,6 +308,7 @@ export class ChannelExecutor implements LifecycleComponent {
               streamKey: record.channelId,
               ...(channel.channelConfig.ratioA !== null ? { ratioA: channel.channelConfig.ratioA } : {}),
               ...(channel.channelConfig.ratioB !== null ? { ratioB: channel.channelConfig.ratioB } : {}),
+              ...toEncodeProfileOverride(resolveEffectiveProfile(this.#deps.db, 'streaming')),
             })
           : await this.#deps.pm.startMeetingConsumer({
               preset: channel.layoutPreset.id,

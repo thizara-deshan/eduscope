@@ -1,5 +1,6 @@
 import {
   PipelineManagerError,
+  type EffectiveEncodeProfile,
   type PmAudioControlResult,
   type PmCommandAccepted,
   type PmPublisherCommandAccepted,
@@ -15,7 +16,16 @@ export interface PipelineManagerClientDeps {
   fetchImpl?: typeof fetch;
 }
 
-export interface StartRecordConsumerBody {
+/** KEEP B-56 gate correction (2026-08-18, resolved) — the five fields mirror `EffectiveEncodeProfile`, all optional; PM applies whichever are present to the composite/re-encode profile and ignores them for passthrough. */
+export interface EncodeProfileOverrideFields {
+  videoBitrateBps?: number;
+  fps?: number;
+  gop?: number;
+  rateControl?: 'cbr' | 'vbr';
+  audioBitrateBps?: number;
+}
+
+export interface StartRecordConsumerBody extends EncodeProfileOverrideFields {
   preset: string;
   ratioA?: number;
   ratioB?: number;
@@ -24,7 +34,7 @@ export interface StartRecordConsumerBody {
 }
 
 /** Machine 1c streaming (CH-02): pipeline-manager.md §3.2 `POST /consumers/live`. */
-export interface StartLiveConsumerBody {
+export interface StartLiveConsumerBody extends EncodeProfileOverrideFields {
   preset: string;
   ratioA?: number;
   ratioB?: number;
@@ -46,6 +56,17 @@ export interface SetPublisherBindingBody {
 }
 
 const DEFAULT_PROBLEM: PmProblem = { code: 'internal', title: 'pipeline-manager request failed', status: 502 };
+
+/** Spreads an `EffectiveEncodeProfile` onto a record/live start body — never called for passthrough call sites. */
+export function toEncodeProfileOverride(profile: EffectiveEncodeProfile): EncodeProfileOverrideFields {
+  return {
+    videoBitrateBps: profile.videoBitrateBps,
+    fps: profile.fps,
+    gop: profile.gop,
+    rateControl: profile.rateControl,
+    audioBitrateBps: profile.audioBitrateBps,
+  };
+}
 
 /**
  * Typed HTTP wrapper for pipeline-manager's internal API

@@ -119,3 +119,18 @@ export type PmEvent =
   | { kind: 'evt.pm.resync-required'; sequence: number; data: Record<string, never> };
 
 export const PM_RESYNC_EVENT_KIND = 'evt.pm.resync-required';
+
+/**
+ * KEEP B-56 gate correction (2026-08-18 flag, resolved) — the per-channel
+ * effective encode profile B-24 resolves and hands to pipeline-manager's
+ * `record`/`live` start bodies, already converted to the Bps units PM's
+ * `get_profile(...)` overrides expect (`services/pipeline-manager/src/pipeline_manager/pipelines/profiles.py`).
+ * Passthrough pipelines never receive this — B never attaches it there.
+ */
+export interface EffectiveEncodeProfile {
+  videoBitrateBps: number;
+  fps: number;
+  gop: number;
+  rateControl: 'cbr' | 'vbr';
+  audioBitrateBps: number;
+}

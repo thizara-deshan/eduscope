@@ -13,11 +13,12 @@ import { takeoverRecording } from './authority.js';
 import { runBootRecovery, type BootRecoveryAction } from './boot-recovery.js';
 import { assertAuthOwner, assertStorageOk, resolveChannelValid, runStartGuards, type ChannelValidResult } from './guards.js';
 import { RecordingMachine } from './machine.js';
-import type { PipelineManagerClient, StartRecordConsumerBody } from './pm/client.js';
+import { toEncodeProfileOverride, type PipelineManagerClient, type StartRecordConsumerBody } from './pm/client.js';
 import { PipelineManagerError, type PmStatus } from './pm/types.js';
 import { stopConsumerWithEosRace } from './recovery.js';
 import { segmentOutputPaths } from './segments.js';
 import { getRecordingStateSnapshot, toRecordingSegmentPayload, toRecordingStatePayload } from './snapshots.js';
+import { resolveEffectiveProfile } from '../settings/encoder-routes.js';
 
 /** state-machines.md §1: the non-terminal vocabulary a "current session" read is scoped to. */
 const NON_TERMINAL_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
@@ -160,6 +161,7 @@ export class RecordingExecutor implements LifecycleComponent {
       ...buildOutputs(this.#deps.recordingsRoot, sessionId, 0, preset?.outputs ?? [{ streamKey: 'main', roleIds: [], includeAudio: true }]),
       ...(channel.channelConfig.ratioA !== null ? { ratioA: channel.channelConfig.ratioA } : {}),
       ...(channel.channelConfig.ratioB !== null ? { ratioB: channel.channelConfig.ratioB } : {}),
+      ...toEncodeProfileOverride(resolveEffectiveProfile(this.#deps.db, 'local')),
     };
 
     let accepted;
@@ -259,6 +261,7 @@ export class RecordingExecutor implements LifecycleComponent {
       ...buildOutputs(this.#deps.recordingsRoot, sessionId, nextIndex, outputs),
       ...(channel.channelConfig.ratioA !== null ? { ratioA: channel.channelConfig.ratioA } : {}),
       ...(channel.channelConfig.ratioB !== null ? { ratioB: channel.channelConfig.ratioB } : {}),
+      ...toEncodeProfileOverride(resolveEffectiveProfile(this.#deps.db, 'local')),
     };
 
     let accepted;
@@ -283,6 +286,7 @@ export class RecordingExecutor implements LifecycleComponent {
       ...buildOutputs(this.#deps.recordingsRoot, sessionId, nextIndex, outputs),
       ...(channelConfig.ratioA !== null ? { ratioA: channelConfig.ratioA } : {}),
       ...(channelConfig.ratioB !== null ? { ratioB: channelConfig.ratioB } : {}),
+      ...toEncodeProfileOverride(resolveEffectiveProfile(this.#deps.db, 'local')),
     };
 
     let accepted;
