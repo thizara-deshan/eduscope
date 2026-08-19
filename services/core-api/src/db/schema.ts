@@ -246,7 +246,7 @@ export const exportJobs = sqliteTable(
     authSessionId: text('auth_session_id')
       .notNull()
       .references(() => authSessions.id),
-    targetVolume: json<{ devicePath: string; mountPath: string; label: string | null; capacityBytes: string }>(
+    targetVolume: json<{ devicePath: string; mountPath: string; label: string | null; capacityBytes: number | string; freeBytes?: number }>(
       'target_volume',
     ).notNull(),
     recordingIds: json<string[]>('recording_ids').notNull(),

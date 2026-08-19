@@ -29,6 +29,10 @@ import { registerSourceSettingsRoutes } from './modules/settings/source-routes.j
 import { ArtifactExecutor } from './modules/library/merge-worker.js';
 import { registerMediaRoutes } from './modules/library/media-route.js';
 import { registerLibraryRoutes } from './modules/library/routes.js';
+import { BlockDeviceMonitor, type BlockDeviceMonitorLike } from './modules/export/udev.js';
+import { ScopedSubscriptionRegistry } from './modules/export/subscriptions.js';
+import { registerExportRoutes } from './modules/export/routes.js';
+import { ExportExecutor, type ExportSourceStream } from './modules/export/worker.js';
 import { RecordingExecutor } from './modules/recording/executor.js';
 import { PipelineManagerClient } from './modules/recording/pm/client.js';
 import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
@@ -46,6 +50,9 @@ declare module 'fastify' {
     bus: DomainBus;
     pmClient: PipelineManagerClient;
     artifactExecutor: ArtifactExecutor;
+    blockDevices: BlockDeviceMonitorLike;
+    scopedSubscriptions: ScopedSubscriptionRegistry;
+    exportExecutor: ExportExecutor;
   }
 }
 
@@ -57,6 +64,10 @@ export interface BuildAppOptions {
   relay?: RelayTargetActivator;
   /** Machine 1b's ffprobe/ffmpeg boundary (B-13) — tests inject `FakeMediaTools`; production leaves this unset to use the real `ArgvWorker`. */
   mediaRunner?: ArgvRunner;
+  /** B-16 block-device boundary; tests inject deterministic hotplug snapshots. */
+  blockDevices?: BlockDeviceMonitorLike;
+  /** B-16 copy-stream seam; production uses createReadStream with AbortSignal. */
+  exportSourceStream?: ExportSourceStream;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -195,6 +206,30 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     recordingsRoot: config.recordingsRoot,
   });
+
+  const blockDevices = options.blockDevices ?? new BlockDeviceMonitor({
+    recordingsRoot: config.recordingsRoot,
+    enabled: config.nodeEnv !== 'test',
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(blockDevices);
+  app.decorate('blockDevices', blockDevices);
+  const scopedSubscriptions = new ScopedSubscriptionRegistry(clock);
+  app.decorate('scopedSubscriptions', scopedSubscriptions);
+  const exportExecutor = new ExportExecutor({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    monitor: blockDevices,
+    subscriptions: scopedSubscriptions,
+    recordingsRoot: config.recordingsRoot,
+    ...(options.exportSourceStream ? { sourceStream: options.exportSourceStream } : {}),
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(exportExecutor);
+  app.decorate('exportExecutor', exportExecutor);
+  registerExportRoutes(app, authService, exportExecutor, scopedSubscriptions);
 
   const channelExecutor = new ChannelExecutor({
     get db(): DrizzleDb {
