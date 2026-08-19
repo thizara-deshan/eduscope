@@ -89,6 +89,11 @@ class RecordStartBody(BaseModel):
     ratioB: int | None = None
     outputPath: str | None = None
     outputPaths: dict[str, str] | None = None
+    videoBitrateBps: int | None = None
+    fps: int | None = None
+    gop: int | None = None
+    rateControl: Literal["cbr", "vbr"] | None = None
+    audioBitrateBps: int | None = None
 
 
 class LiveStartBody(BaseModel):
@@ -97,6 +102,11 @@ class LiveStartBody(BaseModel):
     streamKey: str
     ratioA: int | None = None
     ratioB: int | None = None
+    videoBitrateBps: int | None = None
+    fps: int | None = None
+    gop: int | None = None
+    rateControl: Literal["cbr", "vbr"] | None = None
+    audioBitrateBps: int | None = None
 
 
 class MeetingStartBody(BaseModel):
@@ -214,6 +224,8 @@ async def start_record(body: RecordStartBody, request: Request) -> CommandAccept
     req = RecordRequest(
         preset=preset, ratio_a=body.ratioA, ratio_b=body.ratioB,
         output_path=body.outputPath, output_paths=body.outputPaths,
+        video_bitrate_bps=body.videoBitrateBps, fps=body.fps, gop=body.gop,
+        rate_control=body.rateControl, audio_bitrate_bps=body.audioBitrateBps,
     )
     await consumer.start(req)
     await state.events.publish("evt.pm.consumer.running", {"consumerId": consumer_id, "pgid": consumer.pgid})
@@ -238,7 +250,11 @@ async def start_live(body: LiveStartBody, request: Request) -> CommandAccepted:
         confirmer=state.confirmer,
     )
     state.consumers[consumer_id] = consumer
-    await consumer.start(LiveRequest(preset=preset, stream_key=body.streamKey, ratio_a=body.ratioA, ratio_b=body.ratioB))
+    await consumer.start(LiveRequest(
+        preset=preset, stream_key=body.streamKey, ratio_a=body.ratioA, ratio_b=body.ratioB,
+        video_bitrate_bps=body.videoBitrateBps, fps=body.fps, gop=body.gop,
+        rate_control=body.rateControl, audio_bitrate_bps=body.audioBitrateBps,
+    ))
     await state.events.publish("evt.pm.consumer.running", {"consumerId": consumer_id, "pgid": consumer.pgid})
     return CommandAccepted(consumerId=consumer_id, state="starting")
 

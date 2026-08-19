@@ -25,7 +25,7 @@
 
 - Contract baseline is exactly `contracts/openapi.yaml`, `contracts/quiz-app.yaml`, and `contracts/events.md`, all v1.0.0. Generated zod under `packages/shared/src/schemas/generated/` is never hand-edited.
 - Do not execute B until the Workstream A hardware gate accepts A-15/A-16 evidence and the A-03 catalog correction. Planning and fake-backed tests do not waive that dependency.
-- Before B-24 or B-38 executes, the master-plan **WORKSTREAM B GATE FLAG — pipeline-manager encoder-profile ingress drift (2026-08-18)** must be acknowledged and the A-owned internal correction must be present. B sends `{videoBitrateBps, fps, gop, rateControl, audioBitrateBps}` on record/live starts; passthrough pipelines ignore the profile by design.
+- Before B-24 or B-38 executes, the master-plan **WORKSTREAM B GATE FLAG — pipeline-manager encoder-profile ingress drift (2026-08-18, resolved 2026-08-19)** must be acknowledged and the A-owned internal correction must be present. B sends `{videoBitrateBps, fps, gop, rateControl, audioBitrateBps}` on record/live starts; passthrough pipelines ignore the profile by design. The correction landed 2026-08-19 in `services/pipeline-manager` (see integration-plan.md resolution note); B-24 may proceed.
 - B-18 implements only the pluggable queue plus the local placeholder adapter. The institute payload remains the D-02b boundary and is not inferred.
 - Upload is immediate with no time-window state. Retention uses 14 days, uploaded-oldest-first pressure deletion, never deletes unuploaded media, refuses starts at critical pressure, and gracefully stops at the 4 GiB floor.
 - Panel WS authentication uses only `Sec-WebSocket-Protocol`; query-string tokens are rejected. Quiz-sync uses the provisioned static bearer and `x-eduscope-contract: 1.0`.
@@ -1249,7 +1249,7 @@ git commit -m "feat(core-api): apply network settings"
 
 ### Task B-24: Encoder settings and capabilities
 
-**Execution gate:** Do not start this task until the master-plan Workstream B encoder-ingress flag is acknowledged and the A-owned internal correction is green.
+**Execution gate:** Do not start this task until the master-plan Workstream B encoder-ingress flag is acknowledged and the A-owned internal correction is green. *(Resolved 2026-08-19 — see integration-plan.md gate-flag resolution note.)*
 
 **Files:**
 - Create: `services/core-api/src/modules/settings/encoder-routes.ts`

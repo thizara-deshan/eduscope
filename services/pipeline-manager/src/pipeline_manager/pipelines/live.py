@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Mapping
 
 from ..models import Channel, LayoutPresetId
 from .builder import PipelineBuilder, PipelineSpec, audio_branch, source_branch_normalized
@@ -23,6 +24,26 @@ class LiveRequest:
     stream_key: str
     ratio_a: int | None = None
     ratio_b: int | None = None
+    video_bitrate_bps: int | None = None
+    fps: int | None = None
+    gop: int | None = None
+    rate_control: str | None = None
+    audio_bitrate_bps: int | None = None
+
+
+def _profile_overrides(req: LiveRequest) -> Mapping[str, object] | None:
+    changes: dict[str, object] = {}
+    if req.video_bitrate_bps is not None:
+        changes["video_bitrate_bps"] = req.video_bitrate_bps
+    if req.fps is not None:
+        changes["fps"] = req.fps
+    if req.gop is not None:
+        changes["gop"] = req.gop
+    if req.rate_control is not None:
+        changes["rc_mode"] = req.rate_control
+    if req.audio_bitrate_bps is not None:
+        changes["audio_bitrate_bps"] = req.audio_bitrate_bps
+    return changes or None
 
 
 def _validate_stream_key(stream_key: str) -> None:
@@ -33,7 +54,7 @@ def _validate_stream_key(stream_key: str) -> None:
 def build_live(req: LiveRequest, platform: PlatformProfile) -> PipelineSpec:
     _validate_stream_key(req.stream_key)
     layout = get_layout(req.preset, Channel.STREAMING, req.ratio_a, req.ratio_b)
-    profile = get_profile(ProfileKind.LIVE_COMPOSITE)
+    profile = get_profile(ProfileKind.LIVE_COMPOSITE, _profile_overrides(req))
     builder = PipelineBuilder()
     multi_tile = len(layout.tiles) > 1
 
