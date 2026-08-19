@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { statfs } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
@@ -49,6 +49,8 @@ import { eq } from 'drizzle-orm';
 import { StorageProbe, type StorageStatfs } from './modules/storage/probe.js';
 import { RetentionSweep } from './modules/storage/retention.js';
 import { registerStorageRoutes } from './modules/storage/routes.js';
+import { HelperClient, UnixHelperTransport, type HelperTransport } from './lib/helper-client.js';
+import { registerStorageVolumeRoutes, type StorageBlockDeviceResolver } from './modules/storage/volume-routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -66,6 +68,7 @@ declare module 'fastify' {
     uploadScheduler: UploadScheduler;
     storageProbe: StorageProbe;
     retentionSweep: RetentionSweep;
+    helperClient: HelperClient;
   }
 }
 
@@ -89,6 +92,10 @@ export interface BuildAppOptions {
   storageStatfs?: StorageStatfs;
   /** B-19 graceful-stop boundary; production delegates to RecordingExecutor. */
   storageStopRecording?: () => Promise<void>;
+  /** B-20 helper protocol boundary; tests inject an in-memory ledger. */
+  helperTransport?: HelperTransport;
+  /** B-20 current-device boundary; tests inject UUID/devnode snapshots. */
+  storageBlockDevices?: StorageBlockDeviceResolver;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -129,6 +136,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const bus = new DomainBus();
   app.decorate('bus', bus);
+
+  const helperClient = new HelperClient({ transport: options.helperTransport ?? new UnixHelperTransport(config.helperSocketPath), clock });
+  app.decorate('helperClient', helperClient);
 
   const pmClient = new PipelineManagerClient({
     baseUrl: config.pipelineManagerBaseUrl,
@@ -269,6 +279,28 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(blockDevices);
   app.decorate('blockDevices', blockDevices);
+  const storageBlockDevices = options.storageBlockDevices ?? {
+    async resolveUuid(uuid: string) {
+      const volumes = await blockDevices.refresh();
+      const current = volumes.find((volume) => basename(volume.mountPath) === uuid);
+      return current ? {
+        uuid,
+        devNode: current.devicePath,
+        mountPath: current.mountPath,
+        label: current.label,
+        filesystem: 'unknown',
+        capacityBytes: current.capacityBytes,
+        freeBytes: current.freeBytes,
+      } : null;
+    },
+  } satisfies StorageBlockDeviceResolver;
+  registerStorageVolumeRoutes(app, authService, {
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    helper: helperClient,
+    blockDevices: storageBlockDevices,
+  });
   const scopedSubscriptions = new ScopedSubscriptionRegistry(clock);
   app.decorate('scopedSubscriptions', scopedSubscriptions);
   const exportExecutor = new ExportExecutor({
