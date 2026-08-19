@@ -44,13 +44,19 @@ import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
 import { registerRecordingRoutes } from './modules/recording/routes.js';
 import { SourceExecutor } from './modules/sources/status.js';
 import { registerSourceRoutes } from './modules/sources/routes.js';
-import { lectureSessions } from './db/schema.js';
-import { eq } from 'drizzle-orm';
+import { lectureSessions, storageVolumes } from './db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { StorageProbe, type StorageStatfs } from './modules/storage/probe.js';
 import { RetentionSweep } from './modules/storage/retention.js';
 import { registerStorageRoutes } from './modules/storage/routes.js';
 import { HelperClient, UnixHelperTransport, type HelperTransport } from './lib/helper-client.js';
 import { registerStorageVolumeRoutes, type StorageBlockDeviceResolver } from './modules/storage/volume-routes.js';
+import { AlertStore } from './modules/device/alerts.js';
+import { HealthAggregator, type NtpReader } from './modules/device/health.js';
+import { ProvisioningReader } from './modules/device/provisioning.js';
+import { registerDeviceRoutes } from './modules/device/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -69,6 +75,8 @@ declare module 'fastify' {
     storageProbe: StorageProbe;
     retentionSweep: RetentionSweep;
     helperClient: HelperClient;
+    alertStore: AlertStore;
+    healthAggregator: HealthAggregator;
   }
 }
 
@@ -96,6 +104,8 @@ export interface BuildAppOptions {
   helperTransport?: HelperTransport;
   /** B-20 current-device boundary; tests inject UUID/devnode snapshots. */
   storageBlockDevices?: StorageBlockDeviceResolver;
+  /** B-21 NTP boundary; tests inject a deterministic reading. */
+  ntpReader?: NtpReader;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -392,6 +402,45 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     pm: pmClient,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
+
+  const provisioningReader = new ProvisioningReader(config.provisioningPath);
+  const alertStore = new AlertStore({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(alertStore);
+  app.decorate('alertStore', alertStore);
+
+  const execFileAsync = promisify(execFile);
+  const healthAggregator = new HealthAggregator({
+    get db(): DrizzleDb { return app.db; },
+    clock,
+    ids,
+    bus,
+    helper: helperClient,
+    deviceId: 'local-device',
+    ntp: options.ntpReader ?? (config.nodeEnv === 'test'
+      ? async () => ({ synced: true, offsetMs: 0 })
+      : async () => {
+          try {
+            const { stdout } = await execFileAsync('timedatectl', ['show', '--property=NTPSynchronized', '--value']);
+            return { synced: stdout.trim() === 'yes', offsetMs: null };
+          } catch {
+            return { synced: false, offsetMs: null };
+          }
+        }),
+    smartDevNode: () => {
+      const volume = app.db.select({ devicePath: storageVolumes.devicePath }).from(storageVolumes).where(and(eq(storageVolumes.role, 'recordings'), eq(storageVolumes.state, 'mounted'))).get();
+      return volume?.devicePath ?? null;
+    },
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(healthAggregator);
+  app.decorate('healthAggregator', healthAggregator);
+  registerDeviceRoutes(app, authService, { provisioning: provisioningReader, health: healthAggregator, alerts: alertStore });
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

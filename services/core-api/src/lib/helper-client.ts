@@ -7,10 +7,34 @@ const zUuid = z.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 const zDevNode = z.string().min(6).max(128).regex(/^\/dev\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes('..'));
 const zLabel = z.string().min(1).max(64).regex(/^[^\u0000-\u001f\u007f]+$/);
 
+const zSmartDevNode = zDevNode;
+
 const zHelperRequest = z.discriminatedUnion('verb', [
   z.object({ verb: z.literal('volume.mount'), args: z.object({ uuid: zUuid }).strict(), requestId: z.string().min(1).max(128) }).strict(),
   z.object({ verb: z.literal('volume.unmount'), args: z.object({ uuid: zUuid }).strict(), requestId: z.string().min(1).max(128) }).strict(),
   z.object({ verb: z.literal('volume.format'), args: z.object({ devNode: zDevNode, fs: z.literal('ext4'), label: zLabel }).strict(), requestId: z.string().min(1).max(128) }).strict(),
+  z.object({ verb: z.literal('smart.read'), args: z.object({ devNode: zSmartDevNode }).strict(), requestId: z.string().min(1).max(128) }).strict(),
+  z.object({ verb: z.literal('system.poweroff'), args: z.object({}).strict(), requestId: z.string().min(1).max(128) }).strict(),
+  z.object({
+    verb: z.literal('net.apply'),
+    args: z
+      .object({
+        interfaceName: z.string().min(1).max(32).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+        config: z
+          .object({
+            kind: z.enum(['lan', 'vlan']),
+            vlanId: z.number().int().nullable(),
+            addressMode: z.enum(['dhcp', 'static']),
+            ipv4Address: z.string().nullable(),
+            prefixLength: z.number().int().nullable(),
+            gateway: z.string().nullable(),
+            dnsServers: z.array(z.string()),
+          })
+          .strict(),
+      })
+      .strict(),
+    requestId: z.string().min(1).max(128),
+  }).strict(),
 ]);
 
 const zHelperResponse = z.object({ ok: z.boolean(), detail: z.string() }).strict();

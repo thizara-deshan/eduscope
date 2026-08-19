@@ -251,22 +251,21 @@ describe('POST /recording/start (R-01) and GET /recording/state', () => {
 
     it('storage.critical: refuses when device_health reports critical pressure', async () => {
       ctx = await createContext();
-      ctx.app.db
-        .insert(deviceHealth)
-        .values({
-          id: 'device-health',
-          deviceId: 'device-1',
-          observedAt: NOW.toISOString(),
-          storageTotalBytes: 1_000_000_000_000,
-          storageFreeBytes: 1_000_000_000,
-          storagePressure: 'critical',
-          diskHealth: 'good',
-          captureCardState: 'present',
-          publisherStates: {},
-          ntpSynced: true,
-          lastBootAt: NOW.toISOString(),
-        })
-        .run();
+      const criticalHealth = {
+        id: 'device-health' as const,
+        deviceId: 'device-1',
+        observedAt: NOW.toISOString(),
+        storageTotalBytes: 1_000_000_000_000,
+        storageFreeBytes: 1_000_000_000,
+        storagePressure: 'critical' as const,
+        diskHealth: 'good' as const,
+        captureCardState: 'present' as const,
+        publisherStates: {},
+        ntpSynced: true,
+        lastBootAt: NOW.toISOString(),
+      };
+      // B-21's HealthAggregator already seeds this singleton row at app startup — upsert rather than insert.
+      ctx.app.db.insert(deviceHealth).values(criticalHealth).onConflictDoUpdate({ target: deviceHealth.id, set: criticalHealth }).run();
 
       const { statusCode, body } = await startRecording(ctx);
 
