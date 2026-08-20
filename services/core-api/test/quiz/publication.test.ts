@@ -165,24 +165,13 @@ async function startAndConfirm(ctx: TestContext): Promise<string> {
   return currentSession(ctx).id;
 }
 
-/** Stands in for B-33's Z-01/Z-02 (mint session) — inserts an already-`open` `QuizSessionProjection` directly, matching the row shape B-33 will produce. */
-function openQuizSession(ctx: TestContext, lectureSessionId: string): string {
-  const id = ctx.app.ids.next(ctx.clock.now());
-  ctx.app.db
-    .insert(quizSessionProjections)
-    .values({
-      id,
-      lectureSessionId,
-      deviceId: 'device-1',
-      hallDisplayName: 'Lecture Hall 1',
-      joinCode: 'AB12CD',
-      joinUrl: 'https://quiz.example.edu/j/AB12CD',
-      state: 'open',
-      openedAt: ctx.clock.now().toISOString(),
-      closedAt: null,
-    })
-    .run();
-  return id;
+/** Waits for B-33's real Z-01/Z-02 (mint session, fired automatically off `recording.state{recording}`) to reach `open` against the fixture quiz-service, then returns the projection row id. */
+async function openQuizSession(ctx: TestContext, lectureSessionId: string): Promise<string> {
+  await waitFor(() => {
+    const row = ctx.app.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, lectureSessionId)).get();
+    return row?.state === 'open';
+  });
+  return ctx.app.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, lectureSessionId)).get()!.id;
 }
 
 function createBody(prompt = 'What is 2+2?'): Record<string, unknown> {
@@ -222,7 +211,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-30/Q-31: creates a publishing row, publishes correctOptionId to quiz-service, then switches the projector only after the 201 ack', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const questionId = await createDraftQuestion(ctx);
 
     const { statusCode } = await sendToProjector(ctx, questionId);
@@ -243,7 +232,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     const projectorBody = projectorCall.body as { mode: string; questionPayload: { correctOptionId?: string; joinUrl: string | null; joinCode: string | null } };
     expect(projectorBody.mode).toBe('question');
     expect(projectorBody.questionPayload.correctOptionId).toBeUndefined();
-    expect(projectorBody.questionPayload.joinUrl).toBe('https://quiz.example.edu/j/AB12CD');
+    expect(projectorBody.questionPayload.joinUrl).toMatch(/^https:\/\/quiz\.example\.edu\/j\//);
     expect(projectorBody.questionPayload.joinCode).toBe('AB12CD');
 
     // PM call happens only after the D ack: no projector call recorded before the quiz-service call resolved.
@@ -263,7 +252,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-31: sending a second question closes the previous open publication (closeReason=next-question) and enforces exactly one isShowing', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const firstId = await createDraftQuestion(ctx, 'First?');
     await sendToProjector(ctx, firstId);
     await waitFor(() => publicationFor(ctx, firstId).state === 'open');
@@ -286,12 +275,12 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-32: no ack within T-PUBLISH-ACK plus one retry fails the publication and the PM projector call never happens', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const questionId = await createDraftQuestion(ctx);
     ctx.quiz.setOffline(true);
 
     await sendToProjector(ctx, questionId);
-    await waitFor(() => ctx.quiz.calls.length === 0); // offline: fetch fails immediately, no recorded call
+    await waitFor(() => ctx.quiz.calls.every((call) => call.path !== '/device/v1/publications')); // offline: fetch fails immediately, no recorded publish call
     ctx.clock.advance(5_000); // first attempt's T-PUBLISH-ACK
     await delay(20);
     ctx.clock.advance(2_000); // retry backoff
@@ -307,7 +296,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-35: closePublication carries the authoritative closedAt and is idempotent on a second call', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const questionId = await createDraftQuestion(ctx);
     await sendToProjector(ctx, questionId);
     await waitFor(() => publicationFor(ctx, questionId).state === 'open');
@@ -333,7 +322,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-36: withdrawing and re-showing a closed publication renders reveal mode without reopening acceptance', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const questionId = await createDraftQuestion(ctx);
     await sendToProjector(ctx, questionId);
     await waitFor(() => publicationFor(ctx, questionId).state === 'open');
@@ -364,7 +353,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-15/Q-22: sending the only question of a ready set to the projector reviews the set once it is sent', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
 
     // Fabricate a `ready` generated set with one draft question — the state this task's own step-1 fixture would leave B-30 in, without re-driving generation here.
     const setId = ctx.app.ids.next(ctx.clock.now());
@@ -426,7 +415,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
   it('Q-17/Q-34: ending the session discards a still-ready set and closes the open publication (closeReason=session-ended)', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
-    openQuizSession(ctx, sessionId);
+    await openQuizSession(ctx, sessionId);
     const questionId = await createDraftQuestion(ctx);
     await sendToProjector(ctx, questionId);
     await waitFor(() => publicationFor(ctx, questionId).state === 'open');

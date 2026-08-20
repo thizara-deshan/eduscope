@@ -1,0 +1,1 @@
+ALTER TABLE `quiz_session_projections` ADD `last_answer_seq` integer DEFAULT 0 NOT NULL;

@@ -72,6 +72,8 @@ import { registerAiRoutes } from './modules/ai/routes.js';
 import { registerQuestionRoutes } from './modules/ai/question-routes.js';
 import { HttpQuizSyncClient, PublicationOrchestrator } from './modules/quiz/projector.js';
 import { registerPublicationRoutes } from './modules/quiz/publication-routes.js';
+import { QuizSessionMachine } from './modules/quiz/session.js';
+import { registerQuizRoutes } from './modules/quiz/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -646,6 +648,45 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   lifecycle.register(publicationOrchestrator);
 
   registerPublicationRoutes(app, authService, publicationOrchestrator);
+
+  const deviceId = (): string => {
+    try {
+      return provisioningReader.read().deviceId;
+    } catch {
+      return '';
+    }
+  };
+  const hallDisplayName = (): string => {
+    try {
+      return provisioningReader.read().hallDisplayName;
+    } catch {
+      return '';
+    }
+  };
+
+  const quizSessionMachine = new QuizSessionMachine({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    quizSync: quizSyncClient,
+    alerts: alertStore,
+    isAiEnabled,
+    quizServerBaseUrl: quizSyncBaseUrl,
+    deviceId,
+    hallDisplayName,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(quizSessionMachine);
+
+  registerQuizRoutes(app, authService, quizSessionMachine, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+  });
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

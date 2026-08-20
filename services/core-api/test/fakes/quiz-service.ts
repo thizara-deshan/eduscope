@@ -144,7 +144,8 @@ export class FakeQuizService {
         return;
       }
       this.#sessionIdCounter += 1;
-      const id = `quiz-session-${String(this.#sessionIdCounter).padStart(4, '0')}`;
+      // `zUlid` requires exactly 26 Crockford-base32 chars — a real quiz-service mints a genuine ULID here.
+      const id = `01QZSESS${String(this.#sessionIdCounter).padStart(18, '0')}`;
       res.writeHead(201, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({

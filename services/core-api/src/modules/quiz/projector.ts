@@ -1,5 +1,5 @@
 import { and, eq, inArray, ne } from 'drizzle-orm';
-import { TIMERS, type PublicationCloseReason, type PublicationWithQuestion, type QuestionPublication, type RecordingStatePayload } from '@eduscope/shared';
+import { TIMERS, type PublicationCloseReason, type PublicationWithQuestion, type QuestionPublication, type QuizSessionCreateRequest, type QuizSessionCreateResponse, type RecordingStatePayload } from '@eduscope/shared';
 import { ProblemError } from '../../contracts/problem.js';
 import type { DrizzleDb } from '../../db/client.js';
 import { answerProjections, auditLogEntries, lectureSessions, questionOptions, questionPublications, questions, questionSets, quizSessionProjections } from '../../db/schema.js';
@@ -57,18 +57,22 @@ export interface QuizClosePublicationInput {
 
 /**
  * The device→quiz-service half of the quiz-sync REST family (contracts/openapi.yaml
- * tag `quiz-sync`, events.md §4) this machine needs: `quizSyncPublish` (Q-30/31)
- * and `quizSyncClosePublication` (Q-33/34/35). B-32 depends on this port rather
+ * tag `quiz-sync`, events.md §4): `quizSyncPublish`/`quizSyncClosePublication`
+ * (Q-30/31, Q-33/34/35, B-32's call sites) and `quizSyncCreateSession`/
+ * `quizSyncCloseSession` (Z-01/Z-05, B-33's call site in `session.ts`) — one
+ * port for the whole family since every operation shares the same deviceAuth
+ * bearer/`x-eduscope-contract` mechanics. B-32/B-33 depend on this port rather
  * than a concrete client shape; `HttpQuizSyncClient` below is the real
- * implementation B-32's own fake-server tests exercise. `quizSyncCreateSession`/
- * `quizSyncCloseSession` (Z-01/Z-05) are B-33's call sites; the provisioned
- * device credential this client sends is resolved live (nullable until B-34
- * wires the deploy-minted static bearer, DR-03) rather than baked in at
+ * implementation their own fake-server tests exercise. The provisioned device
+ * credential this client sends is resolved live (nullable until B-34 wires
+ * the deploy-minted static bearer, DR-03) rather than baked in at
  * construction, matching `countdown.ts`'s `llmEndpoint` seam.
  */
 export interface QuizSyncPort {
   publish(input: QuizPublishInput, signal?: AbortSignal): Promise<void>;
   closePublication(input: QuizClosePublicationInput, signal?: AbortSignal): Promise<void>;
+  createSession(input: QuizSessionCreateRequest, signal?: AbortSignal): Promise<QuizSessionCreateResponse>;
+  closeSession(quizSessionId: string, signal?: AbortSignal): Promise<void>;
 }
 
 export interface HttpQuizSyncClientDeps {
@@ -93,7 +97,15 @@ export class HttpQuizSyncClient implements QuizSyncPort {
     await this.#request('POST', `/device/v1/publications/${input.publicationId}/close`, input, signal);
   }
 
-  async #request(method: string, path: string, body: unknown, signal?: AbortSignal): Promise<void> {
+  async createSession(input: QuizSessionCreateRequest, signal?: AbortSignal): Promise<QuizSessionCreateResponse> {
+    return this.#request<QuizSessionCreateResponse>('POST', '/device/v1/quiz-sessions', input, signal);
+  }
+
+  async closeSession(quizSessionId: string, signal?: AbortSignal): Promise<void> {
+    await this.#request('POST', `/device/v1/quiz-sessions/${quizSessionId}/close`, undefined, signal);
+  }
+
+  async #request<T = void>(method: string, path: string, body: unknown, signal?: AbortSignal): Promise<T> {
     const baseUrl = this.#deps.baseUrl();
     if (baseUrl === null) throw new Error('quiz-sync: quizServerBaseUrl is not provisioned');
     const bearer = this.#deps.bearerToken();
@@ -103,14 +115,22 @@ export class HttpQuizSyncClient implements QuizSyncPort {
       headers: {
         authorization: `Bearer ${bearer ?? ''}`,
         'x-eduscope-contract': '1.0',
-        'content-type': 'application/json',
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
-      body: JSON.stringify(body),
+      body: body !== undefined ? JSON.stringify(body) : null,
       ...(signal !== undefined ? { signal } : {}),
     });
     if (!response.ok) {
       throw new Error(`quiz-sync: ${method} ${path} failed with status ${String(response.status)}`);
     }
+    // `quizSyncPublish` (201) and `quizSyncClosePublication`/`quizSyncCloseSession` (204/idempotent) declare no
+    // response body (openapi.yaml) — only `quizSyncCreateSession`'s 201 carries one, so an empty body is read as
+    // text first rather than assumed-absent by status code alone.
+    const text = await response.text();
+    if (text.length === 0) {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
 }
 
@@ -130,7 +150,7 @@ export interface PublicationOrchestratorDeps {
   ids: IdGenerator;
   bus: DomainBus;
   pm: Pick<PipelineManagerClient, 'setProjectorConsumer'>;
-  quizSync: QuizSyncPort;
+  quizSync: Pick<QuizSyncPort, 'publish' | 'closePublication'>;
   alerts: AlertStore;
   isAiEnabled: () => boolean;
   logger?: PublicationOrchestratorLogger;

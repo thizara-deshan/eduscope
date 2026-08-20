@@ -797,6 +797,8 @@ export const quizSessionProjections = sqliteTable(
     state: text('state').notNull().$type<'absent' | 'requesting' | 'open' | 'closed' | 'failed'>(),
     openedAt: text('opened_at'),
     closedAt: text('closed_at'),
+    /** B-33/B-34 — `sync.hello`'s `answerWatermark` (events.md §4): the highest `sync.answers` `seq` durably ingested for this quiz session, so a reconnect resumes replay above it instead of from zero (Z-31). Internal only — never echoed in `QuizSessionProjection`/`AnswerProjection`. */
+    lastAnswerSeq: integer('last_answer_seq').notNull().default(0),
   },
   (t) => [
     uniqueIndex('one_quiz_projection_per_lecture').on(t.lectureSessionId),

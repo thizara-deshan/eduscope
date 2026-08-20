@@ -3,22 +3,23 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyInstance } from 'fastify';
-import { zClosePublicationResponse, zListPublicationsResponse, zProblem, zSendToProjectorResponse, zSetProjectorResponse } from '@eduscope/shared';
+import { zGetLeaderboardResponse, zGetQuizSessionResponse, zListPublicationResponsesResponse, zProblem } from '@eduscope/shared';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { lectureSessions, questions, quizSessionProjections, storageVolumes, users } from '../../src/db/schema.js';
+import { lectureSessions, questionOptions, questionPublications, questions, quizSessionProjections, storageVolumes, users } from '../../src/db/schema.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
+import { ingestAnswers } from '../../src/modules/quiz/responses.js';
 import { FakeAiServices } from '../fakes/ai-services.js';
 import { FakeClock } from '../fakes/clock.js';
 import { FakePipelineManager } from '../fakes/pipeline-manager.js';
 import { FakeQuizService } from '../fakes/quiz-service.js';
 
 const NOW = new Date('2026-08-20T00:00:00.000Z');
-const BEARER = 'contract-test-internal-bearer-publications';
-const QUIZ_BEARER = 'contract-test-device-bearer-publications';
+const BEARER = 'contract-test-internal-bearer-quiz-projections';
+const QUIZ_BEARER = 'contract-test-device-bearer-quiz-projections';
 const FIRST_CONSUMER_ID = 'record:00000001';
 
 function writeProvisioning(dir: string): string {
@@ -63,7 +64,7 @@ interface TestApp {
 }
 
 async function startTestApp(): Promise<TestApp> {
-  const dir = mkdtempSync(join(tmpdir(), 'core-api-publications-contract-'));
+  const dir = mkdtempSync(join(tmpdir(), 'core-api-quiz-projections-contract-'));
   const pm = new FakePipelineManager({ bearerToken: BEARER });
   const pmBaseUrl = await pm.listen();
   const ai = new FakeAiServices({ bearerToken: BEARER });
@@ -75,7 +76,7 @@ async function startTestApp(): Promise<TestApp> {
   const config = loadConfig({
     NODE_ENV: 'test',
     CORE_API_DB_PATH: join(dir, 'core.db'),
-    CORE_API_JWT_SECRET: 'publications-contract-secret',
+    CORE_API_JWT_SECRET: 'quiz-projections-contract-secret',
     CORE_API_PROVISIONING_PATH: provisioningPath,
     CORE_API_RECORDINGS_ROOT: join(dir, 'recordings'),
     CORE_API_RUNTIME_DIR: join(dir, 'runtime'),
@@ -83,7 +84,8 @@ async function startTestApp(): Promise<TestApp> {
     CORE_API_INTERNAL_BEARER: BEARER,
   });
   const ids = new UlidGenerator();
-  const app = await buildApp({ config, clock: new FakeClock(NOW), ids, aiBaseUrls, quizServiceBaseUrl: quizBaseUrl, quizDeviceBearer: QUIZ_BEARER });
+  const clock = new FakeClock(NOW);
+  const app = await buildApp({ config, clock, ids, aiBaseUrls, quizServiceBaseUrl: quizBaseUrl, quizDeviceBearer: QUIZ_BEARER });
   await app.lifecycle.start();
   await waitFor(() => pm.openConnectionCount === 1);
 
@@ -141,28 +143,31 @@ async function startAndConfirmRecording(testApp: TestApp): Promise<string> {
   return testApp.app.db.select().from(lectureSessions).all()[0]!.id;
 }
 
-function createBody(prompt = 'What is 2+2?'): Record<string, unknown> {
-  return {
-    prompt,
-    options: [
-      { text: '3', isCorrect: false },
-      { text: '4', isCorrect: true },
-    ],
-  };
-}
-
-async function createDraftQuestion(testApp: TestApp, prompt = 'What is 2+2?'): Promise<string> {
-  const response = await testApp.app.inject({ method: 'POST', url: '/api/v1/ai/questions', headers: { authorization: `Bearer ${testApp.token}` }, payload: createBody(prompt) });
-  expect(response.statusCode).toBe(202);
-  return testApp.app.db.select().from(questions).where(eq(questions.prompt, prompt)).all().at(-1)!.id;
-}
-
-/** Waits for B-33's real Z-01/Z-02 (mint session, fired automatically off `recording.state{recording}`) to reach `open` against the fixture quiz-service. */
-async function openQuizSession(testApp: TestApp, lectureSessionId: string): Promise<void> {
+async function waitForOpenQuizSession(testApp: TestApp, lectureSessionId: string): Promise<string> {
   await waitFor(() => testApp.app.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, lectureSessionId)).get()?.state === 'open');
+  return testApp.app.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, lectureSessionId)).get()!.id;
 }
 
-describe('publications contract (openapi.yaml tag: ai — sendToProjector, listPublications, closePublication, setProjector)', () => {
+async function createOpenPublication(testApp: TestApp): Promise<{ publicationId: string; optionAId: string }> {
+  const prompt = 'What is 2+2?';
+  const create = await testApp.app.inject({
+    method: 'POST',
+    url: '/api/v1/ai/questions',
+    headers: { authorization: `Bearer ${testApp.token}` },
+    payload: { prompt, options: [{ text: '3', isCorrect: false }, { text: '4', isCorrect: true }] },
+  });
+  expect(create.statusCode).toBe(202);
+  const question = testApp.app.db.select().from(questions).where(eq(questions.prompt, prompt)).get()!;
+  const options = testApp.app.db.select().from(questionOptions).where(eq(questionOptions.questionId, question.id)).orderBy(questionOptions.position).all();
+
+  const send = await testApp.app.inject({ method: 'POST', url: `/api/v1/ai/questions/${question.id}/send-to-projector`, headers: { authorization: `Bearer ${testApp.token}` } });
+  expect(send.statusCode).toBe(202);
+  await waitFor(() => testApp.app.db.select().from(questionPublications).where(eq(questionPublications.questionId, question.id)).get()?.state === 'open');
+  const publication = testApp.app.db.select().from(questionPublications).where(eq(questionPublications.questionId, question.id)).get()!;
+  return { publicationId: publication.id, optionAId: options[0]!.id };
+}
+
+describe('quiz projections contract (openapi.yaml tag: quiz — getQuizSession, listPublicationResponses, getLeaderboard)', () => {
   let testApp: TestApp;
 
   afterEach(async () => {
@@ -170,55 +175,43 @@ describe('publications contract (openapi.yaml tag: ai — sendToProjector, listP
     await stopTestApp(testApp);
   });
 
-  it('sendToProjector: 404 parses zProblem for an unknown question id', async () => {
+  it('getQuizSession: 200 parses zGetQuizSessionResponse when absent (unconfigured/no active recording)', async () => {
     testApp = await startTestApp();
-    await startAndConfirmRecording(testApp);
-    const response = await testApp.app.inject({ method: 'POST', url: '/api/v1/ai/questions/01UNKNOWNQUESTIONID000000/send-to-projector', headers: { authorization: `Bearer ${testApp.token}` } });
+    const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/quiz/session', headers: { authorization: `Bearer ${testApp.token}` } });
+    expect(response.statusCode).toBe(200);
+    const parsed = zGetQuizSessionResponse.parse(response.json());
+    expect(parsed.state).toBe('absent');
+  });
+
+  it('listPublicationResponses: 404 parses zProblem for an unknown publication id', async () => {
+    testApp = await startTestApp();
+    const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/quiz/publications/01UNKNOWNPUBLICATIONID000/responses', headers: { authorization: `Bearer ${testApp.token}` } });
     expect(response.statusCode).toBe(404);
     expect(() => zProblem.parse(response.json())).not.toThrow();
   });
 
-  it('sendToProjector: 409 quiz.unavailable parses zProblem when no quiz session is open', async () => {
-    testApp = await startTestApp();
-    testApp.quiz.setOffline(true); // guarantees Z-01/Z-02 never reaches `open`, deterministically
-    await startAndConfirmRecording(testApp);
-    const questionId = await createDraftQuestion(testApp);
-    const response = await testApp.app.inject({ method: 'POST', url: `/api/v1/ai/questions/${questionId}/send-to-projector`, headers: { authorization: `Bearer ${testApp.token}` } });
-    expect(response.statusCode).toBe(409);
-    expect(() => zProblem.parse(response.json())).not.toThrow();
-  });
-
-  it('sendToProjector/listPublications/closePublication/setProjector: 200/202 parse their contract shapes', async () => {
+  it('getQuizSession/listPublicationResponses/getLeaderboard: 200 parse their contract shapes once open with answers', async () => {
     testApp = await startTestApp();
     const sessionId = await startAndConfirmRecording(testApp);
-    await openQuizSession(testApp, sessionId);
-    const questionId = await createDraftQuestion(testApp);
+    await waitForOpenQuizSession(testApp, sessionId);
 
-    const send = await testApp.app.inject({ method: 'POST', url: `/api/v1/ai/questions/${questionId}/send-to-projector`, headers: { authorization: `Bearer ${testApp.token}` } });
-    expect(send.statusCode).toBe(202);
-    expect(() => zSendToProjectorResponse.parse(send.json())).not.toThrow();
-    await waitFor(() => testApp.app.db.select().from(questions).where(eq(questions.id, questionId)).get()!.state === 'sent');
+    const sessionResponse = await testApp.app.inject({ method: 'GET', url: '/api/v1/quiz/session', headers: { authorization: `Bearer ${testApp.token}` } });
+    expect(sessionResponse.statusCode).toBe(200);
+    expect(() => zGetQuizSessionResponse.parse(sessionResponse.json())).not.toThrow();
 
-    const list = await testApp.app.inject({ method: 'GET', url: `/api/v1/ai/publications?sessionId=${encodeURIComponent(sessionId)}`, headers: { authorization: `Bearer ${testApp.token}` } });
-    expect(list.statusCode).toBe(200);
-    const listParsed = zListPublicationsResponse.parse(list.json());
-    expect(listParsed.items).toHaveLength(1);
-    const publicationId = listParsed.items[0]!.id;
+    const { publicationId, optionAId } = await createOpenPublication(testApp);
+    const quizSessionRow = testApp.app.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, sessionId)).get()!;
+    ingestAnswers({ db: testApp.app.db, clock: testApp.app.clock, bus: testApp.app.bus }, quizSessionRow.id, [
+      { seq: 1, answerId: testApp.app.ids.next(NOW), publicationId, studentIdNumber: 'S001', studentDisplayName: 'Alice', selectedOptionId: optionAId, isCorrect: false, responseTimeMs: 1000, submittedAt: NOW.toISOString() },
+    ]);
 
-    const project = await testApp.app.inject({ method: 'PUT', url: '/api/v1/ai/projector', headers: { authorization: `Bearer ${testApp.token}` }, payload: { publicationId: null } });
-    expect(project.statusCode).toBe(202);
-    expect(() => zSetProjectorResponse.parse(project.json())).not.toThrow();
+    const responsesResponse = await testApp.app.inject({ method: 'GET', url: `/api/v1/quiz/publications/${publicationId}/responses`, headers: { authorization: `Bearer ${testApp.token}` } });
+    expect(responsesResponse.statusCode).toBe(200);
+    expect(() => zListPublicationResponsesResponse.parse(responsesResponse.json())).not.toThrow();
 
-    const close = await testApp.app.inject({ method: 'POST', url: `/api/v1/ai/publications/${publicationId}/close`, headers: { authorization: `Bearer ${testApp.token}` } });
-    expect(close.statusCode).toBe(202);
-    expect(() => zClosePublicationResponse.parse(close.json())).not.toThrow();
-  });
-
-  it('closePublication: 404 parses zProblem for an unknown publication id', async () => {
-    testApp = await startTestApp();
-    await startAndConfirmRecording(testApp);
-    const response = await testApp.app.inject({ method: 'POST', url: '/api/v1/ai/publications/01UNKNOWNPUBLICATIONID000/close', headers: { authorization: `Bearer ${testApp.token}` } });
-    expect(response.statusCode).toBe(404);
-    expect(() => zProblem.parse(response.json())).not.toThrow();
+    const leaderboardResponse = await testApp.app.inject({ method: 'GET', url: `/api/v1/quiz/leaderboard?sessionId=${encodeURIComponent(sessionId)}`, headers: { authorization: `Bearer ${testApp.token}` } });
+    expect(leaderboardResponse.statusCode).toBe(200);
+    const leaderboard = zGetLeaderboardResponse.parse(leaderboardResponse.json());
+    expect(leaderboard.entries).toHaveLength(1);
   });
 });
