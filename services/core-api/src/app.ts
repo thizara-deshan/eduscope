@@ -69,6 +69,7 @@ import { AiIngest } from './modules/ai/ingest.js';
 import { AiCountdown } from './modules/ai/countdown.js';
 import { QuestionSetGenerator } from './modules/ai/generation.js';
 import { registerAiRoutes } from './modules/ai/routes.js';
+import { registerQuestionRoutes } from './modules/ai/question-routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -599,6 +600,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     get db(): DrizzleDb {
       return app.db;
     },
+  });
+
+  registerQuestionRoutes(app, authService, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    isAiEnabled,
   });
 
   app.addHook('onClose', async () => {

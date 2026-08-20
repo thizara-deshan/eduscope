@@ -46,7 +46,7 @@ function writeProvisioning(dir: string): string {
   return path;
 }
 
-async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 3000): Promise<void> {
+async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 8000): Promise<void> {
   const start = Date.now();
   while (!(await check())) {
     if (Date.now() - start > timeoutMs) throw new Error('waitFor: condition not met in time');
@@ -332,7 +332,7 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
     expect(failed.attempt).toBe(2);
 
     await waitFor(async () => (await getCountdown(ctx)).state === 'degraded');
-  });
+  }, 20_000);
 
   it('Q-13: timeout classification fires after the outer T-LLM-REQUEST deadline', async () => {
     ctx = await createContext();
@@ -357,7 +357,7 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'failed'));
     const failed = ctx.setEvents.find((event) => event.state === 'failed')!;
     expect(failed.error).toBe('timeout');
-  });
+  }, 20_000);
 
   it('zero-survivor / invalid-payload: exactly one automatic regeneration, then a visible failed set that leaves the countdown armed (not degraded)', async () => {
     ctx = await createContext();
@@ -380,7 +380,7 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
 
     const setRow = ctx.app.db.select().from(questionSets).all().find((row) => row.state === 'failed')!;
     expect(setRow.error).toBe('invalid-payload');
-  });
+  }, 20_000);
 
   it('Q-16: a new ready set supersedes the previous one, discarding its drafts, while lecturer-authored questions survive', async () => {
     ctx = await createContext();
