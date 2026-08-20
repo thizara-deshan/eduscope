@@ -70,6 +70,8 @@ import { AiCountdown } from './modules/ai/countdown.js';
 import { QuestionSetGenerator } from './modules/ai/generation.js';
 import { registerAiRoutes } from './modules/ai/routes.js';
 import { registerQuestionRoutes } from './modules/ai/question-routes.js';
+import { HttpQuizSyncClient, PublicationOrchestrator } from './modules/quiz/projector.js';
+import { registerPublicationRoutes } from './modules/quiz/publication-routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -125,6 +127,10 @@ export interface BuildAppOptions {
   ntpReader?: NtpReader;
   /** B-29 AI-services boundary; production uses the fixed ai-services.md §0 ports, tests inject loopback fixture URLs. */
   aiBaseUrls?: { stt: string; slide: string; question: string };
+  /** B-32 quiz-sync boundary; production resolves `provisioning.quizServerBaseUrl` live, tests inject a loopback fixture URL. */
+  quizServiceBaseUrl?: string;
+  /** B-32 quiz-sync boundary; tests inject a fixture bearer. Production resolves `null` (dormant) until B-34 wires the deploy-minted device credential (DR-03). */
+  quizDeviceBearer?: string;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -611,6 +617,35 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     bus,
     isAiEnabled,
   });
+
+  const quizSyncBaseUrl = (): string | null => {
+    if (options.quizServiceBaseUrl) return options.quizServiceBaseUrl;
+    try {
+      return provisioningReader.read().quizServerBaseUrl;
+    } catch {
+      return null;
+    }
+  };
+  // B-34 resolves the deploy-minted per-device static bearer (DR-03, quiz-service.md §6.2) alongside `quizServerBaseUrl`; production stays dormant until then.
+  const quizDeviceBearer = (): string | null => options.quizDeviceBearer ?? null;
+  const quizSyncClient = new HttpQuizSyncClient({ baseUrl: quizSyncBaseUrl, bearerToken: quizDeviceBearer });
+
+  const publicationOrchestrator = new PublicationOrchestrator({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    pm: pmClient,
+    quizSync: quizSyncClient,
+    alerts: alertStore,
+    isAiEnabled,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(publicationOrchestrator);
+
+  registerPublicationRoutes(app, authService, publicationOrchestrator);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

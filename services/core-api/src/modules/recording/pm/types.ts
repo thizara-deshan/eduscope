@@ -58,6 +58,21 @@ export interface PmAudioControlResult {
   lastError: string | null;
 }
 
+/** `POST /consumers/projector` (pipeline-manager.md §3.2) — HDMI-out #1; a mode switch is not a restart (A-22). `correctOptionId` is present only for reveal mode (a re-projected `closed` publication, Q-36). */
+export type PmProjectorRequest =
+  | { mode: 'passthrough' }
+  | {
+      mode: 'question';
+      questionPayload: {
+        publicationId: string;
+        prompt: string;
+        options: Array<{ id: string; label: 'A' | 'B' | 'C' | 'D'; text: string }>;
+        correctOptionId?: string;
+        joinUrl: string | null;
+        joinCode: string | null;
+      };
+    };
+
 /** pipeline-manager.md §3.4 — the `{code, title, status, meta?}` body `app.py`'s exception handler emits. */
 export interface PmProblem {
   code: string;

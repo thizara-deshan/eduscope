@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { Question, QuestionOption, QuestionSet, QuestionSetDetail, QuestionState } from '@eduscope/shared';
+import type { AiSetPayload, Question, QuestionOption, QuestionSet, QuestionSetDetail, QuestionState } from '@eduscope/shared';
 import type { DrizzleDb } from '../../db/client.js';
+import type { DomainBus } from '../../lib/domain-bus.js';
 import { questionOptions, questions, questionSets } from '../../db/schema.js';
 
 type QuestionSetRow = typeof questionSets.$inferSelect;
@@ -82,4 +83,37 @@ export function listQuestions(db: DrizzleDb, sessionId: string, state?: Question
   const where = state !== undefined ? and(eq(questions.sessionId, sessionId), eq(questions.state, state)) : eq(questions.sessionId, sessionId);
   const rows = db.select().from(questions).where(where).all();
   return loadQuestionsWithOptions(db, rows);
+}
+
+/**
+ * Q-15 (state-machines.md §3.2): a `ready` set becomes `reviewed` once every
+ * one of its generated questions has left `draft` (via Q-22 send or Q-21
+ * discard) — a terminal, historical record of what the batch produced. A
+ * no-op for lecturer-authored questions (`questionSetId = null`, structurally
+ * excluded from `questionSetId = setId` below) and for a set Q-16 already
+ * superseded to `discarded` directly. Callers invoke this after committing
+ * whichever transaction flipped a member question to `sent`/`discarded` —
+ * `questions.ts`'s `discardQuestion` (B-31) and `projector.ts`'s publish flow
+ * (B-32, Q-22) are its two call sites.
+ */
+export function checkQuestionSetReviewed(db: DrizzleDb, bus: DomainBus, setId: string | null): void {
+  if (setId === null) return;
+  const set = db.select().from(questionSets).where(eq(questionSets.id, setId)).get();
+  if (!set || set.state !== 'ready') return;
+
+  const stillDraft = db.select({ id: questions.id }).from(questions).where(and(eq(questions.questionSetId, setId), eq(questions.state, 'draft'))).all();
+  if (stillDraft.length > 0) return;
+
+  db.update(questionSets).set({ state: 'reviewed' }).where(eq(questionSets.id, setId)).run();
+  const updated = db.select().from(questionSets).where(eq(questionSets.id, setId)).get()!;
+  const payload: AiSetPayload = {
+    setId: updated.id,
+    sessionId: updated.sessionId,
+    state: updated.state,
+    trigger: updated.trigger,
+    count: updated.returnedCount,
+    error: null,
+    attempt: 0,
+  };
+  bus.publish('ai.set', payload);
 }

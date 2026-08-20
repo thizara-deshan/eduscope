@@ -3,6 +3,7 @@ import {
   type EffectiveEncodeProfile,
   type PmAudioControlResult,
   type PmCommandAccepted,
+  type PmProjectorRequest,
   type PmPublisherCommandAccepted,
   type PmPublisherId,
   type PmProblem,
@@ -120,6 +121,11 @@ export class PipelineManagerClient {
   /** `mic-lecturer` only in V1 (INV-AC-1) — the readback is the truth; a mixer failure is `appliedState:'failed'` in a `200`, not a thrown Problem. */
   async setAudioControl(gain: number, muted: boolean): Promise<PmAudioControlResult> {
     return this.#request<PmAudioControlResult>('PUT', '/audio/controls/mic-lecturer', { gain, muted });
+  }
+
+  /** Q-31/Q-34/Q-35/Q-36 (pipeline-manager.md §3.2 `POST /consumers/projector`): HDMI-out #1 slides↔question switch; not a restart (A-22). */
+  async setProjectorConsumer(body: PmProjectorRequest): Promise<PmCommandAccepted> {
+    return this.#request<PmCommandAccepted>('POST', '/consumers/projector', body);
   }
 
   /** R-08/R-11 (pipeline-manager.md §3.2): default `eos` — the manager itself waits up to `timeoutMs` then escalates to SIGKILL; core-api only stops waiting for `evt.pm.consumer.eos` after its own local timer (recovery.ts). */

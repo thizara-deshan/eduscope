@@ -63,6 +63,7 @@ export class FakePipelineManager {
   #nextMeetingResponse: QueuedResponse | null = null;
   #nextBindingResponse: QueuedResponse | null = null;
   #nextAudioResponse: QueuedResponse | null = null;
+  #nextProjectorResponse: QueuedResponse | null = null;
   #recordIdCounter = 0;
   #liveIdCounter = 0;
   #meetingIdCounter = 0;
@@ -169,6 +170,11 @@ export class FakePipelineManager {
   /** Makes the next `PUT /audio/controls/mic-lecturer` return this status/body instead of the default 200/applied. */
   queueAudioResponse(response: QueuedResponse): void {
     this.#nextAudioResponse = response;
+  }
+
+  /** Makes the next `POST /consumers/projector` return this status/body instead of the default 202. */
+  queueProjectorResponse(response: QueuedResponse): void {
+    this.#nextProjectorResponse = response;
   }
 
   /** When true, every request's socket is destroyed with no response — simulates the service being unreachable (connection-refused-like), not a graceful 4xx/5xx. */
@@ -297,6 +303,22 @@ export class FakePipelineManager {
         const { gain, muted } = body as { gain: number; muted: boolean };
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ roleId: 'mic-lecturer', appliedGain: gain, appliedMuted: muted, appliedState: 'applied', lastError: null }));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/projector') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const queued = this.#nextProjectorResponse;
+        this.#nextProjectorResponse = null;
+        if (queued) {
+          res.writeHead(queued.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(queued.body));
+          return;
+        }
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId: 'projector:00000001', state: 'running' }));
       });
       return;
     }

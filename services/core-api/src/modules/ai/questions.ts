@@ -9,6 +9,7 @@ import type { DomainBus } from '../../lib/domain-bus.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import { assertAuthOwner } from '../recording/guards.js';
 import type { AuthContext } from '../auth/service.js';
+import { checkQuestionSetReviewed } from './question-sets.js';
 
 const NON_TERMINAL_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
 /** `zQuestionUpdate`'s zod-inferred type carries explicit `| undefined` on optional fields; the generated static `QuestionUpdate` type does not, which conflicts under `exactOptionalPropertyTypes` (mirrors `helper-client.ts`'s `z.infer` pattern). */
@@ -269,7 +270,7 @@ export function editQuestion(deps: QuestionsDeps, actor: AuthContext, questionId
   return accepted(deps);
 }
 
-/** Q-21 (`cmd.ai.discard_question`) — an audited disposition, not a deletion; only a `draft` question has this transition. */
+/** Q-21 (`cmd.ai.discard_question`) — an audited disposition, not a deletion; only a `draft` question has this transition. Q-15: discarding the last undispositioned member of a `ready` set reviews it (`question-sets.ts`'s `checkQuestionSetReviewed`). */
 export function discardQuestion(deps: QuestionsDeps, actor: AuthContext, questionId: string): QuestionsAccepted {
   const row = deps.db.select().from(questions).where(eq(questions.id, questionId)).get();
   if (!row) throw new ProblemError(404, 'not-found', 'Question not found');
@@ -317,5 +318,6 @@ export function discardQuestion(deps: QuestionsDeps, actor: AuthContext, questio
   });
 
   publishQuestion(deps, currentRow(deps.db, questionId));
+  checkQuestionSetReviewed(deps.db, deps.bus, row.questionSetId);
   return accepted(deps);
 }
