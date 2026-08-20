@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import WebSocket, { WebSocketServer } from 'ws';
 
 export interface RecordedCall {
   method: string;
@@ -12,6 +13,13 @@ export interface RecordedCall {
 interface QueuedResponse {
   status: number;
   body?: unknown;
+}
+
+export interface FakeWsConnection {
+  readonly socket: WebSocket;
+  readonly authorization: string | null;
+  readonly contractVersion: string | null;
+  readonly receivedFrames: unknown[];
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -37,7 +45,10 @@ export class FakeQuizService {
   readonly calls: RecordedCall[] = [];
 
   readonly #server: Server;
+  readonly #wss: WebSocketServer;
+  readonly wsConnections: FakeWsConnection[] = [];
   #offline = false;
+  #wsOffline = false;
   #delayMs = 0;
   #nextPublishResponse: QueuedResponse | null = null;
   #nextCloseResponse: QueuedResponse | null = null;
@@ -49,6 +60,28 @@ export class FakeQuizService {
     this.#server = createServer((req, res) => {
       void this.#handle(req, res);
     });
+    this.#wss = new WebSocketServer({ server: this.#server, path: '/api/device/v1/stream' });
+    this.#wss.on('connection', (socket, req) => {
+      if (this.#wsOffline) {
+        socket.terminate();
+        return;
+      }
+      const authorization = req.headers.authorization ?? null;
+      if (authorization !== `Bearer ${this.bearerToken}`) {
+        socket.close(1008, 'unauthorized');
+        return;
+      }
+      const contractVersion = (req.headers['x-eduscope-contract'] as string | undefined) ?? null;
+      const connection: FakeWsConnection = { socket, authorization, contractVersion, receivedFrames: [] };
+      this.wsConnections.push(connection);
+      socket.on('message', (data: WebSocket.RawData) => {
+        try {
+          connection.receivedFrames.push(JSON.parse(data.toString()));
+        } catch {
+          connection.receivedFrames.push(data.toString());
+        }
+      });
+    });
   }
 
   async listen(): Promise<string> {
@@ -58,9 +91,41 @@ export class FakeQuizService {
   }
 
   async close(): Promise<void> {
+    for (const connection of this.wsConnections) {
+      connection.socket.terminate();
+    }
+    const wssClosed = new Promise<void>((resolve) => this.#wss.close(() => resolve()));
     const closed = new Promise<void>((resolve) => this.#server.close(() => resolve()));
     this.#server.closeAllConnections();
-    await closed;
+    await Promise.all([wssClosed, closed]);
+  }
+
+  /** The most recently opened WS connection — most tests only ever have one. */
+  get latestWsConnection(): FakeWsConnection | undefined {
+    return this.wsConnections.at(-1);
+  }
+
+  /** Every `type: 'sync.hello'` frame received across all connections, in arrival order. */
+  get receivedHelloFrames(): Array<{ type: string; deviceId: string; quizSessionId: string; answerWatermark: number }> {
+    return this.wsConnections.flatMap((connection) => connection.receivedFrames).filter((frame): frame is { type: string; deviceId: string; quizSessionId: string; answerWatermark: number } => (frame as { type?: string }).type === 'sync.hello');
+  }
+
+  /** Simulates the quiz server's stream endpoint being unreachable — every upgrade attempt is dropped. */
+  setWsOffline(offline: boolean): void {
+    this.#wsOffline = offline;
+  }
+
+  sendToLatestConnection(message: unknown): void {
+    const connection = this.latestWsConnection;
+    if (!connection) throw new Error('FakeQuizService: no WS connection to send to');
+    connection.socket.send(JSON.stringify(message));
+  }
+
+  /** Ungraceful drop (no close handshake) — exercises the client's reconnect path. */
+  dropLatestConnection(): void {
+    const connection = this.latestWsConnection;
+    if (!connection) throw new Error('FakeQuizService: no WS connection to drop');
+    connection.socket.terminate();
   }
 
   /** Simulates the quiz server being unreachable — every connection is destroyed with no response. */

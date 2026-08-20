@@ -74,6 +74,8 @@ import { HttpQuizSyncClient, PublicationOrchestrator } from './modules/quiz/proj
 import { registerPublicationRoutes } from './modules/quiz/publication-routes.js';
 import { QuizSessionMachine } from './modules/quiz/session.js';
 import { registerQuizRoutes } from './modules/quiz/routes.js';
+import { readQuizDeviceCredential } from './modules/quiz/sync/rest.js';
+import { QuizSyncStream } from './modules/quiz/sync/stream.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -628,8 +630,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return null;
     }
   };
-  // B-34 resolves the deploy-minted per-device static bearer (DR-03, quiz-service.md §6.2) alongside `quizServerBaseUrl`; production stays dormant until then.
-  const quizDeviceBearer = (): string | null => options.quizDeviceBearer ?? null;
+  // DR-03/quiz-service.md §6.2 — the deploy-minted per-device static bearer, read from the raw provisioning file (never the public DeviceProvisioning projection, INV-DP-1).
+  const quizDeviceBearer = (): string | null => options.quizDeviceBearer ?? readQuizDeviceCredential(config.provisioningPath);
   const quizSyncClient = new HttpQuizSyncClient({ baseUrl: quizSyncBaseUrl, bearerToken: quizDeviceBearer });
 
   const publicationOrchestrator = new PublicationOrchestrator({
@@ -687,6 +689,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     clock,
   });
+
+  const quizSyncStream = new QuizSyncStream({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    bus,
+    sessionMachine: quizSessionMachine,
+    quizServerBaseUrl: quizSyncBaseUrl,
+    bearerToken: quizDeviceBearer,
+    deviceId,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(quizSyncStream);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

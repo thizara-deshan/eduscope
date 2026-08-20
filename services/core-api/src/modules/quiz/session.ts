@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { TIMERS, type QuizPublicationPayload, type QuizResponsesPayload, type QuizSessionPayload, type QuizSessionProjection, type QuizSyncState, type RecordingStatePayload } from '@eduscope/shared';
 import type { DrizzleDb } from '../../db/client.js';
-import { questionPublications, quizSessionProjections } from '../../db/schema.js';
+import { lectureSessions, questionPublications, quizSessionProjections } from '../../db/schema.js';
 import type { Clock } from '../../lib/clock.js';
 import type { DomainBus, Unsubscribe } from '../../lib/domain-bus.js';
 import type { IdGenerator } from '../../lib/ids.js';
@@ -12,6 +12,7 @@ import type { QuizSyncPort } from './projector.js';
 const CREATE_ATTEMPTS = 3; // T-QUIZ-CREATE (8s) × 1 initial attempt + 2 retries (Z-03)
 const SYNC_STALE_ALERT_CODE = 'quiz.sync-stale';
 const JOINED_COUNT_COALESCE_MS = 1_000;
+const NON_TERMINAL_SESSION_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
 
 type QuizSessionRow = typeof quizSessionProjections.$inferSelect;
 
@@ -84,6 +85,52 @@ export class QuizSessionMachine implements LifecycleComponent {
     this.#unsubscribeRecording = this.#deps.bus.subscribe('recording.state', (payload) => {
       this.#onRecordingState(payload);
     });
+    this.#adoptExistingSessionAtBoot();
+  }
+
+  /**
+   * Boot-time BR-1-style adoption: if a lecture session is still non-terminal
+   * across a core-api restart, its `QuizSessionProjection` row (if any)
+   * already exists — this in-memory record starts fresh (`freshRecord()`)
+   * every boot, so without this it would re-run Z-01 and mint a second,
+   * conflicting remote session the next time `recording.state{recording}`
+   * re-fires (boot-recovery's own BR-1 re-publish, `executor.ts`). Adopting
+   * here also means `QuizSyncStream` (registered after this component) sees
+   * an already-`open` snapshot the moment its own `start()` runs.
+   */
+  #adoptExistingSessionAtBoot(): void {
+    const active = this.#deps.db.select({ id: lectureSessions.id }).from(lectureSessions).where(inArray(lectureSessions.state, NON_TERMINAL_SESSION_STATES)).get();
+    if (!active) return;
+    const row = this.#deps.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, active.id)).get();
+    if (!row) return;
+    this.#adoptRow(row);
+  }
+
+  #adoptRow(row: QuizSessionRow): void {
+    this.#record.lectureSessionId = row.lectureSessionId;
+    this.#record.rowId = row.id;
+    this.#record.joinCode = row.joinCode;
+    this.#record.joinUrl = row.joinUrl;
+
+    if (row.state === 'open') {
+      this.#record.state = 'open';
+      this.#record.syncState = 'synced';
+      this.#publishSession();
+      this.#armSyncTimers();
+      return;
+    }
+    if (row.state === 'requesting') {
+      this.#record.state = 'requesting';
+      this.#publishSession();
+      void this.#attemptCreate(row.lectureSessionId);
+      return;
+    }
+    if (row.state === 'failed') {
+      this.#record.state = 'failed';
+      this.#publishSession();
+      this.#armProbeTimer();
+    }
+    // 'closed'/'absent' rows belong to a since-ended session and are not adopted (a non-terminal lecture session never owns one).
   }
 
   async stop(_reason: LifecycleStopReason): Promise<void> {
@@ -158,6 +205,16 @@ export class QuizSessionMachine implements LifecycleComponent {
   #onRecordingState(payload: RecordingStatePayload): void {
     if (payload.state === 'recording') {
       if (this.#record.state !== 'absent' || payload.sessionId === null) return;
+
+      // Boot-recovery's BR-1 re-publishes `recording.state{recording}` (executor.ts) for a session this
+      // instance's in-memory record hasn't seen yet — adopt its existing row rather than re-running Z-01
+      // and minting a second, conflicting remote session (INV-QZ-1: at most one open session per lecture).
+      const existing = this.#deps.db.select().from(quizSessionProjections).where(eq(quizSessionProjections.lectureSessionId, payload.sessionId)).get();
+      if (existing) {
+        this.#adoptRow(existing);
+        return;
+      }
+
       if (!this.#deps.isAiEnabled() || this.#deps.quizServerBaseUrl() === null) return;
 
       this.#record.lectureSessionId = payload.sessionId;
