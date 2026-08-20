@@ -64,6 +64,10 @@ import { ProvisioningReader } from './modules/device/provisioning.js';
 import { registerDeviceRoutes } from './modules/device/routes.js';
 import { registerFirmwareRoutes } from './modules/firmware/routes.js';
 import { registerUsersRoutes } from './modules/users/routes.js';
+import { QuestionClient, SlideClient, SttClient } from './modules/ai/clients.js';
+import { AiIngest } from './modules/ai/ingest.js';
+import { AiCountdown } from './modules/ai/countdown.js';
+import { registerAiRoutes } from './modules/ai/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -84,6 +88,7 @@ declare module 'fastify' {
     helperClient: HelperClient;
     alertStore: AlertStore;
     healthAggregator: HealthAggregator;
+    aiCountdown: AiCountdown;
   }
   interface FastifyContextConfig {
     operationId?: string;
@@ -116,6 +121,8 @@ export interface BuildAppOptions {
   storageBlockDevices?: StorageBlockDeviceResolver;
   /** B-21 NTP boundary; tests inject a deterministic reading. */
   ntpReader?: NtpReader;
+  /** B-29 AI-services boundary; production uses the fixed ai-services.md §0 ports, tests inject loopback fixture URLs. */
+  aiBaseUrls?: { stt: string; slide: string; question: string };
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -522,6 +529,57 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     clock,
     ids,
   });
+
+  const aiBaseUrls = options.aiBaseUrls ?? { stt: 'http://127.0.0.1:7101', slide: 'http://127.0.0.1:7102', question: 'http://127.0.0.1:7103' };
+  const sttClient = new SttClient({ baseUrl: aiBaseUrls.stt, bearerToken: config.internalBearer });
+  const slideClient = new SlideClient({ baseUrl: aiBaseUrls.slide, bearerToken: config.internalBearer });
+  const questionClient = new QuestionClient({ baseUrl: aiBaseUrls.question, bearerToken: config.internalBearer });
+
+  const isAiEnabled = (): boolean => {
+    try {
+      const provisioning = provisioningReader.read();
+      return provisioning.featureFlags.aiQuizEnabled && provisioning.llmEndpoint !== null;
+    } catch {
+      return false;
+    }
+  };
+  const llmEndpoint = (): string | null => {
+    try {
+      return provisioningReader.read().llmEndpoint;
+    } catch {
+      return null;
+    }
+  };
+
+  const aiIngest = new AiIngest({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    stt: sttClient,
+    slide: slideClient,
+    recordingsRoot: config.recordingsRoot,
+    runtimeDir: config.runtimeDir,
+    isAiEnabled,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(aiIngest);
+
+  const aiCountdown = new AiCountdown({
+    clock,
+    ids,
+    bus,
+    question: questionClient,
+    alerts: alertStore,
+    isAiEnabled,
+    llmEndpoint,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(aiCountdown);
+  app.decorate('aiCountdown', aiCountdown);
+  registerAiRoutes(app, authService, aiCountdown);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();
