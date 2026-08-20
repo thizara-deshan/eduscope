@@ -67,6 +67,7 @@ import { registerUsersRoutes } from './modules/users/routes.js';
 import { QuestionClient, SlideClient, SttClient } from './modules/ai/clients.js';
 import { AiIngest } from './modules/ai/ingest.js';
 import { AiCountdown } from './modules/ai/countdown.js';
+import { QuestionSetGenerator } from './modules/ai/generation.js';
 import { registerAiRoutes } from './modules/ai/routes.js';
 
 declare module 'fastify' {
@@ -579,7 +580,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(aiCountdown);
   app.decorate('aiCountdown', aiCountdown);
-  registerAiRoutes(app, authService, aiCountdown);
+
+  const questionSetGenerator = new QuestionSetGenerator({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    question: questionClient,
+    llmEndpoint,
+    countdown: aiCountdown,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(questionSetGenerator);
+
+  registerAiRoutes(app, authService, aiCountdown, {
+    get db(): DrizzleDb {
+      return app.db;
+    },
+  });
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

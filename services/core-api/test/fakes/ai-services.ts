@@ -107,12 +107,19 @@ class FakeSseService {
  * lifecycle for stt/slide, and `GET /probe` for question-service. Records
  * every call so B-29 tests can assert exactly what core-api sent.
  */
+/** One-shot behavior for a `POST /generate` call — B-30's retry/timeout/classification tests pop these off a queue. */
+export type GenerateBehavior =
+  | { kind: 'hang' }
+  | { kind: 'status'; status: number; body: unknown }
+  | { kind: 'response'; body: unknown };
+
 export class FakeAiServices {
   readonly bearerToken: string;
   readonly #stt: FakeSseService;
   readonly #slide: FakeSseService;
   readonly #question: Server;
   readonly questionCalls: RecordedCall[] = [];
+  readonly #generateBehaviors: GenerateBehavior[] = [];
   #questionReachable = true;
   #questionOffline = false;
 
@@ -246,6 +253,11 @@ export class FakeAiServices {
     this.#questionOffline = offline;
   }
 
+  /** Queues `POST /generate` behaviors, consumed one per call (FIFO); once exhausted, calls fall back to the canned default 200 response. */
+  queueGenerateBehaviors(behaviors: GenerateBehavior[]): void {
+    this.#generateBehaviors.push(...behaviors);
+  }
+
   async #handleQuestion(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (this.#questionOffline) {
       req.socket.destroy();
@@ -271,9 +283,24 @@ export class FakeAiServices {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/generate') {
-      await readJsonBody(req);
+      this.questionCalls[this.questionCalls.length - 1]!.body = await readJsonBody(req);
+      // Unconfigured calls hang by default (never resolve) rather than returning a canned
+      // response — B-29's tests drive machine 2b's outcome manually via
+      // `aiCountdown.reportGenerationSettled`, and a real (B-30) generator now also
+      // subscribes to `ai.generation.requested` in production; hanging keeps that
+      // automatic path from racing those tests' manual simulation. B-30's own tests
+      // queue explicit behaviors, so this default never applies to them.
+      const behavior = this.#generateBehaviors.shift() ?? { kind: 'hang' as const };
+      if (behavior.kind === 'hang') {
+        return; // never responds; the caller's own T-LLM-REQUEST deadline (or test cleanup) ends it.
+      }
+      if (behavior.kind === 'status') {
+        res.writeHead(behavior.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(behavior.body));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ questionSetId: 'fake', promptVersion: 'mcq/v1', modelId: 'fake-model', requested: 3, returned: 3, droppedInvalid: 0, questions: [] }));
+      res.end(JSON.stringify(behavior.body));
       return;
     }
 

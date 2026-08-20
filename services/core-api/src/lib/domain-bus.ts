@@ -1,4 +1,4 @@
-import type { AiCountdownPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UsbVolumesPayload } from '@eduscope/shared';
+import type { AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UsbVolumesPayload } from '@eduscope/shared';
 import type { PmStatus } from '../modules/recording/pm/types.js';
 
 /**
@@ -31,6 +31,8 @@ export interface CoreDomainEvents {
   'system.alert': SystemAlert;
   'firmware.state': FirmwareUpdate;
   'ai.countdown': AiCountdownPayload;
+  'ai.set': AiSetPayload;
+  'ai.question': AiQuestionPayload;
   /** Internal only (not in contracts/events.md) — machine 1b → machine 3a/3b (B-17), fired exactly once per recording reaching `ready` (RA-03/RA-02, INV-UJ-2). */
   'artifact.ready': { recordingId: string; sessionId: string };
   /** Internal only — machine 2a → machine 2b (B-30), fired on Q-02/Q-03 (state-machines.md §3.1) once the countdown decides a generation cycle should start. */
