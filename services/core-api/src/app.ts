@@ -3,6 +3,7 @@ import { statfs } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyWebsocket from '@fastify/websocket';
 import { ZodError } from 'zod';
 import type { CoreConfig } from './config.js';
 import { loadConfig } from './config.js';
@@ -76,6 +77,7 @@ import { QuizSessionMachine } from './modules/quiz/session.js';
 import { registerQuizRoutes } from './modules/quiz/routes.js';
 import { readQuizDeviceCredential } from './modules/quiz/sync/rest.js';
 import { QuizSyncStream } from './modules/quiz/sync/stream.js';
+import { PanelHub, registerPanelHub } from './modules/ws/panel-hub.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -97,6 +99,7 @@ declare module 'fastify' {
     alertStore: AlertStore;
     healthAggregator: HealthAggregator;
     aiCountdown: AiCountdown;
+    panelHub: PanelHub;
   }
   interface FastifyContextConfig {
     operationId?: string;
@@ -213,6 +216,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await app.register(fastifyJwt, { secret: config.jwtSecret });
   await app.register(fastifyMultipart);
+  await app.register(fastifyWebsocket);
 
   const authService = new AuthService({
     get db(): DrizzleDb {
@@ -703,6 +707,28 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(quizSyncStream);
+
+  const panelHub = new PanelHub({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    bus,
+    scopedSubscriptions,
+    recording: recordingExecutor,
+    channels: channelExecutor,
+    sources: sourceExecutor,
+    storage: storageProbe,
+    health: healthAggregator,
+    countdown: aiCountdown,
+    quizSession: quizSessionMachine,
+    alerts: alertStore,
+    publications: publicationOrchestrator,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(panelHub);
+  app.decorate('panelHub', panelHub);
+  registerPanelHub(app, authService, panelHub);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();
