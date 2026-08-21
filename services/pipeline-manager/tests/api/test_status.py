@@ -19,14 +19,14 @@ async def test_status_lists_all_four_publishers(client, auth_headers) -> None:
 
 
 @pytest.mark.asyncio
-async def test_status_sequence_is_monotonic_and_starts_at_zero(client, auth_headers) -> None:
+async def test_status_sequence_is_monotonic_and_starts_at_zero(client, auth_headers, tmp_path) -> None:
     first = (await client.get("/status", headers=auth_headers)).json()
     assert first["sequence"] == 0
 
     await client.post(
         "/consumers/snapshot/start",
         headers=auth_headers,
-        json={"intervalSec": 5, "outputPath": "/media/eduscope/slides/out.png"},
+        json={"intervalSec": 5, "outputPath": str(tmp_path / "out.png")},
     )
 
     second = (await client.get("/status", headers=auth_headers)).json()

@@ -5,6 +5,7 @@ import itertools
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .api.events import EventBroker
@@ -20,7 +21,9 @@ from .hardware.helper_client import HelperClient
 from .hardware.led import LedController
 from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, run_watchdog_loop
 from .models import PublisherId
+from .pipelines.builder import UnsupportedPipeline
 from .pipelines.layouts import InvalidRatio, PresetChannelMismatch
+from .pipelines.live import InvalidStreamKey
 from .pipelines.platforms.rk3588 import RK3588Profile
 from .pipelines.preflight import as_preflight_check
 from .publishers.base import ROLE_PUBLISHERS, PublisherController
@@ -38,11 +41,20 @@ DOMAIN_EXCEPTIONS = (
     ConsumerNotRunning,
     CaptureCardRecovering,
     RoleNotPreviewable,
+    UnsupportedPipeline,
+    InvalidStreamKey,
+    ValueError,
 )
 
 
 def _to_problem(exc: Exception) -> DomainProblem:
-    """The one conversion point from typed domain errors to a Problem body."""
+    """The one conversion point from typed domain errors to a Problem body.
+
+    Checked most-specific first: `UnsupportedPipeline` and `InvalidStreamKey`
+    are themselves `ValueError` subclasses, so the plain `ValueError` branch
+    (the catch-all for `resolve_output_path` and other request-time checks)
+    stays last.
+    """
     if isinstance(exc, DomainProblem):
         return exc
     if isinstance(exc, InvalidRatio):
@@ -61,6 +73,12 @@ def _to_problem(exc: Exception) -> DomainProblem:
         return DomainProblem("capture_card_absent", "Capture card is absent or recovering", 503)
     if isinstance(exc, RoleNotPreviewable):
         return DomainProblem("publisher_not_running", str(exc), 409)
+    if isinstance(exc, UnsupportedPipeline):
+        return DomainProblem("unsupported_pipeline", str(exc), 400)
+    if isinstance(exc, InvalidStreamKey):
+        return DomainProblem("invalid_stream_key", str(exc), 400)
+    if isinstance(exc, ValueError):
+        return DomainProblem("invalid_output_path", str(exc), 400)
     raise exc  # pragma: no cover - defensive; every registered type is handled above
 
 
@@ -70,6 +88,18 @@ async def _domain_problem_handler(request: Request, exc: Exception) -> JSONRespo
     if problem.meta:
         body["meta"] = problem.meta
     return JSONResponse(status_code=problem.status, content=body)
+
+
+async def _request_validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Pydantic request-body rejections (bad types, `extra=\"forbid\"` fields,
+    missing required fields) previously fell through to FastAPI's default
+    `{"detail": [...]}` body — not Problem-shaped, so callers had two error
+    formats to handle. Route through the same `{code, title, status}` shape.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={"code": "invalid_request", "title": "Request validation failed", "status": 422},
+    )
 
 
 # ── lifespan seams ─────────────────────────────────────────────────────────
@@ -167,6 +197,7 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
 
     for exc_type in DOMAIN_EXCEPTIONS:
         app.add_exception_handler(exc_type, _domain_problem_handler)
+    app.add_exception_handler(RequestValidationError, _request_validation_handler)
 
     app.state.platform = RK3588Profile()
     app.state.supervisor = ProcessSupervisor(popen=popen) if popen is not None else ProcessSupervisor()
