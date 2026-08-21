@@ -216,12 +216,29 @@ closed until A's hardware gate + the encoder-ingress flag close.
 ```bash
 sudo pacman -S --needed python python-pip gstreamer gst-plugins-base \
   gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav \
-  v4l-utils alsa-utils ffmpeg jq
+  v4l-utils alsa-utils ffmpeg jq gobject-introspection cairo pkgconf
 # per-service venv:
 cd services/pipeline-manager
 python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'      # or: pip install -e . && pip install pytest
+pip install -e '.[dev]'      # builds PyGObject + pycairo into the venv itself
 ```
+
+The snapshot/projector/thumbnails workers are real PyGObject (`gi`)
+processes spawned via `sys.executable` — i.e. this venv's own Python.
+`PyGObject` is declared as a normal dev dependency in `pyproject.toml` and
+builds from source against the system's GObject-introspection typelibs
+(`gobject-introspection`/`cairo`/`pkgconf` from the pacman line above), so a
+plain `python -m venv .venv && pip install -e '.[dev]'` is self-sufficient —
+**no `pyvenv.cfg` editing, no `include-system-site-packages` flag, nothing to
+redo when the venv is recreated.** (An earlier draft of this doc worked
+around a missing PyGObject by flipping `include-system-site-packages` to
+`true` and pulling in the system package instead; that flag isn't
+git-tracked and resets on every `python -m venv .venv`, so it silently broke
+again on each fresh checkout — the worker subprocess would die on `import
+gi` before ever printing `PLAYING`, surfacing only as a confusing
+`ConfirmTimeout: no PLAYING observation before T-START-CONFIRM` in the
+parent. Installing PyGObject as a real pip dependency removes the footgun
+entirely.)
 
 Sanity checks (prove Tier-2/3-on-Arch works before writing fixes):
 
@@ -229,6 +246,7 @@ Sanity checks (prove Tier-2/3-on-Arch works before writing fixes):
 gst-launch-1.0 videotestsrc num-buffers=30 ! videoconvert ! fakesink   # GStreamer OK
 python -c "import os,signal; print(os.setsid, signal.SIGKILL)"          # POSIX PGID OK
 gst-inspect-1.0 x264enc >/dev/null && echo "sw encoder present"         # test-source encode
+python -c "import gi; gi.require_version('Gst','1.0'); from gi.repository import Gst; Gst.init(None); print('PyGObject OK')"
 ```
 
 Notes:
