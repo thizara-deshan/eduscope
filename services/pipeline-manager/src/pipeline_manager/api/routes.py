@@ -249,6 +249,7 @@ async def start_record(body: RecordStartBody, request: Request) -> CommandAccept
         platform=state.platform,
         is_publisher_running=state.is_publisher_running,
         is_capture_card_recovering=state.is_capture_card_recovering,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     req = RecordRequest(
@@ -276,6 +277,7 @@ async def start_live(body: LiveStartBody, request: Request) -> CommandAccepted:
         supervisor=state.supervisor,
         ledger=state.ledger,
         confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     await consumer.start(LiveRequest(preset=preset, stream_key=body.streamKey, ratio_a=body.ratioA, ratio_b=body.ratioB))
@@ -299,6 +301,7 @@ async def start_meeting(body: MeetingStartBody, request: Request) -> CommandAcce
         supervisor=state.supervisor,
         ledger=state.ledger,
         confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     await consumer.start(MeetingRequest(preset=preset, hdmi2_alsa_device=state.settings.hdmi2_alsa_device, ratio_a=body.ratioA, ratio_b=body.ratioB))
@@ -332,6 +335,7 @@ async def start_snapshot(body: SnapshotStartBody, request: Request) -> CommandAc
     consumer = SnapshotConsumer(
         consumer_id, platform=state.platform, has_ai_subscription=state.has_ai_subscription,
         supervisor=state.supervisor, ledger=state.ledger, confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     try:

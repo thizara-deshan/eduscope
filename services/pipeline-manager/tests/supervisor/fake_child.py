@@ -7,6 +7,9 @@ Modes (argv[1]):
   qos            - prints PLAYING then a few QOS lines, then waits for SIGINT.
   hang           - never prints PLAYING; waits for SIGINT.
   ignore-sigint  - never honors SIGINT (for SIGKILL-escalation tests, A-08).
+  eos-then-hang  - honors SIGINT with "Got EOS" but then never actually exits
+                   (a hung downstream muxer/sink) — for the single monotonic
+                   EOS+exit deadline test, A-REV-006.
 """
 
 from __future__ import annotations
@@ -63,6 +66,15 @@ def main() -> None:
         while not eos_requested:
             time.sleep(0.05)
         print("Got EOS", flush=True)
+        return
+
+    if mode == "eos-then-hang":
+        print("PLAYING", flush=True)
+        while not eos_requested:
+            time.sleep(0.05)
+        print("Got EOS", flush=True)
+        while True:
+            time.sleep(0.05)
         return
 
     if mode == "qos":

@@ -20,9 +20,19 @@ OUT_2 = "/media/eduscope/recordings/seg-002.ts"
 
 @dataclass
 class FakePopen:
-    returncode: int | None = 0
+    # `None` means "still running" until a test simulates an exit — see
+    # tests/consumers/conftest.py's FakePopen for why.
+    returncode: int | None = None
+    stdin: object | None = None
+    stdout: object | None = None
+    stderr: object | None = None
 
     def wait(self, timeout: float | None = None) -> int:
+        if self.returncode is None:
+            self.returncode = 0
+        return self.returncode
+
+    def poll(self) -> int | None:
         return self.returncode
 
 
@@ -30,12 +40,17 @@ class FakePopen:
 class FakeSupervisor:
     calls: list = field(default_factory=list)
     next_pid: int = 1000
+    processes: dict = field(default_factory=dict)
 
     async def start(self, spec, identity):
         process = ManagedProcess(identity=identity, pid=self.next_pid, pgid=self.next_pid, popen=FakePopen())
         self.calls.append((spec, identity))
+        self.processes[identity] = process
         self.next_pid += 1
         return process
+
+    def forget(self, identity: str) -> None:
+        self.processes.pop(identity, None)
 
 
 @dataclass

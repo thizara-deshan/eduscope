@@ -271,6 +271,7 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
         supervisor=app.state.supervisor,
         ledger=app.state.ledger,
         confirmer=app.state.confirmer,
+        events=app.state.events,
     )
     app.state.thumbnails = ThumbnailController(
         supervisor=app.state.supervisor,

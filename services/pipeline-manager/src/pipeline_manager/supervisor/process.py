@@ -44,6 +44,9 @@ class ManagedProcess:
     observations: "asyncio.Queue[Observation]" = field(default_factory=asyncio.Queue)
     raw_lines: list[str] = field(default_factory=list)
     eos_seen: asyncio.Event = field(default_factory=asyncio.Event)
+    # stdout/stderr reader futures (populated by `ProcessSupervisor.start`) so a
+    # failed-start rollback can cancel them once the pipes are closed (A-REV-005).
+    reader_futures: list = field(default_factory=list)
 
 
 PopenFactory = Callable[..., subprocess.Popen]
@@ -81,9 +84,16 @@ class ProcessSupervisor:
         loop = asyncio.get_running_loop()
         for stream in (popen.stdout, popen.stderr):
             if stream is not None:
-                loop.run_in_executor(None, self._read_stream, stream, process, loop)
+                process.reader_futures.append(loop.run_in_executor(None, self._read_stream, stream, process, loop))
 
         return process
+
+    def forget(self, identity: str) -> None:
+        """Drop the registry entry for a child that has reached a terminal
+        state (stopped, crashed, or rolled back after a failed confirm) — a
+        dead identity must never linger and read as still-owned (A-REV-004/005).
+        """
+        self.processes.pop(identity, None)
 
     def _read_stream(self, stream, process: ManagedProcess, loop: asyncio.AbstractEventLoop) -> None:
         for line in iter(stream.readline, ""):
