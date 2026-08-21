@@ -98,3 +98,47 @@ async def test_shutdown_leaves_an_actively_adopted_record_untouched() -> None:
 
     assert adopted_record.stopped is False  # left running for core-api recovery
     assert "record:1" in app.state.consumers
+
+
+@pytest.mark.asyncio
+async def test_startup_calls_the_audio_meter_seam() -> None:
+    """A-REV-012: `_run_startup` calls `start_audio_meter` (no-op off-board,
+    but the seam itself must always be exercised)."""
+    app = _app()
+    called = []
+
+    async def spy_start_audio_meter() -> None:
+        called.append(1)
+
+    app.state.start_audio_meter = spy_start_audio_meter
+
+    await _run_startup(app)
+    try:
+        assert called == [1]
+    finally:
+        await _run_shutdown(app)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_open_audio_subscriptions_and_stops_the_meter() -> None:
+    """A-REV-012: a subscriber left open at shutdown must not leak the
+    sampler's background task, and a real meter tap's subprocess must be
+    stopped."""
+    app = _app()
+    await app.state.audio_sampler.__aenter__()
+    app.state.audio_subscriptions["sub-1"] = True
+
+    stopped = []
+
+    class FakeMeter:
+        async def stop(self) -> None:
+            stopped.append(1)
+
+    app.state.audio_meter = FakeMeter()
+
+    await _run_startup(app)
+    await _run_shutdown(app)
+
+    assert app.state.audio_subscriptions == {}
+    assert app.state.audio_sampler.subscriber_count == 0
+    assert stopped == [1]

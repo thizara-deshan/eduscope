@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from pipeline_manager.hardware.helper_client import (
+    MAX_RESPONSE_BYTES,
     HelperClient,
     HelperResponseTooLarge,
     HelperTimeout,
@@ -23,6 +24,7 @@ class FakeStreamWriter:
     def __init__(self) -> None:
         self.written = b""
         self.closed = False
+        self.wait_closed_called = False
 
     def write(self, data: bytes) -> None:
         self.written += data
@@ -33,12 +35,23 @@ class FakeStreamWriter:
     def close(self) -> None:
         self.closed = True
 
+    async def wait_closed(self) -> None:
+        self.wait_closed_called = True
+
 
 class FakeStreamReader:
-    def __init__(self, line: bytes) -> None:
-        self._line = line
+    """Mimics a real bounded `asyncio.StreamReader.readuntil`: a line at or
+    under `limit` bytes is returned whole; a longer one (with or without a
+    separator ever appearing) raises `LimitOverrunError`, same as the real
+    reader constructed with `limit=MAX_RESPONSE_BYTES` (A-REV-015)."""
 
-    async def readline(self) -> bytes:
+    def __init__(self, line: bytes, *, limit: int = MAX_RESPONSE_BYTES) -> None:
+        self._line = line
+        self._limit = limit
+
+    async def readuntil(self, separator: bytes = b"\n") -> bytes:
+        if len(self._line) > self._limit:
+            raise asyncio.LimitOverrunError("separator not found", self._limit)
         return self._line
 
 
@@ -131,7 +144,7 @@ async def test_connect_timeout_raises_helper_timeout() -> None:
 @pytest.mark.asyncio
 async def test_response_timeout_raises_helper_timeout() -> None:
     class HangingReader:
-        async def readline(self):
+        async def readuntil(self, separator: bytes = b"\n"):
             await asyncio.sleep(10)
             return b""
 
@@ -158,6 +171,42 @@ async def test_writer_is_always_closed() -> None:
     client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector)
     await client.set_led("on")
     assert writer.closed is True
+    assert writer.wait_closed_called is True
+
+
+@pytest.mark.asyncio
+async def test_over_limit_response_with_no_newline_is_rejected_cleanly() -> None:
+    """A-REV-015: a broken/malicious helper streaming more than
+    MAX_RESPONSE_BYTES with no newline yet must fail fast and clean as
+    `HelperResponseTooLarge` — never an unbounded buffer or a raw
+    `asyncio.LimitOverrunError` escaping the client."""
+
+    class OverLimitNoNewlineReader:
+        async def readuntil(self, separator: bytes = b"\n"):
+            raise asyncio.LimitOverrunError("separator not found", MAX_RESPONSE_BYTES + 1)
+
+    async def connector():
+        return OverLimitNoNewlineReader(), FakeStreamWriter()
+
+    client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector)
+    with pytest.raises(HelperResponseTooLarge):
+        await client.set_led("on")
+
+
+@pytest.mark.asyncio
+async def test_connection_closed_before_a_full_response_is_a_clean_helper_error() -> None:
+    from pipeline_manager.hardware.helper_client import HelperError
+
+    class EofReader:
+        async def readuntil(self, separator: bytes = b"\n"):
+            raise asyncio.IncompleteReadError(partial=b"", expected=None)
+
+    async def connector():
+        return EofReader(), FakeStreamWriter()
+
+    client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector)
+    with pytest.raises(HelperError):
+        await client.set_led("on")
 
 
 # ── real Unix-domain-socket integration test (POSIX only) ──────────────────

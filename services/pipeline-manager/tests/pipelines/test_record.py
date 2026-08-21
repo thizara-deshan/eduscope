@@ -182,3 +182,25 @@ class TestEarlyRefusal:
     def test_invalid_preset_string_raises_before_lookup(self) -> None:
         with pytest.raises(ValueError):
             LayoutPresetId("not-a-real-preset")
+
+
+class TestEffectiveFps:
+    """A-REV-014: `RECORD_COMPOSITE`'s effective fps must reach both the
+    per-tile normalization caps and the composited canvas caps — not just
+    live unused on `EncodeProfile.fps`. (Every LOCAL-channel single-tile
+    preset is either passthrough-eligible or channel-restricted away from
+    `record`, so the composite/multi-tile path is where both cap sites are
+    reachable together.)"""
+
+    def test_composite_normalization_and_canvas_caps_use_profile_fps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from pipeline_manager.pipelines import record as record_module
+        from pipeline_manager.pipelines.profiles import ProfileKind, get_profile
+
+        def _fps24(kind: ProfileKind) -> object:
+            return get_profile(kind, {"fps": 24})
+
+        monkeypatch.setattr(record_module, "get_profile", _fps24)
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        spec = build_record(req, RK3588Profile())
+        assert spec.argv.count("video/x-raw,framerate=24/1") == 2  # once per tile
+        assert "video/x-raw,width=1920,height=1080,framerate=24/1" in spec.argv

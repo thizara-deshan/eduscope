@@ -22,6 +22,16 @@ def build_rtsp_publisher(
     (decode happens only inside consumers that need pixels). Credentials
     arrive separately from the address and are inserted only as discrete
     GStreamer property tokens, never interpolated into the URL string.
+
+    Argv matches the proven bench oracle (`scripts/bash/pub_rtsp.sh`,
+    A-REV-018): `config-interval=-1` makes `h264parse` re-insert SPS/PPS
+    before every IDR frame (a mid-stream shm consumer attach otherwise
+    starts on a non-decodable frame), the caps carry no fixed
+    width/height/framerate (negotiated from the actual RTP stream, not
+    assumed — a consumer re-asserts its own caps on the shm side via
+    `platform.shm_video_caps`), and the bounded `leaky=downstream` queue
+    matches the oracle's shed-oldest-first backpressure policy. `-m` is the
+    same intentional health-confirm addition documented in `usb.py`.
     """
     if publisher_id not in (PublisherId.RTSP, PublisherId.RTSP2):
         raise ValueError(f"{publisher_id.value} is not an RTSP publisher")
@@ -37,13 +47,19 @@ def build_rtsp_publisher(
         "rtph264depay",
         "!",
         "h264parse",
+        "config-interval=-1",
         "!",
-        "video/x-h264,stream-format=byte-stream,alignment=au,width=1920,height=1080,framerate=30/1",
+        "video/x-h264,stream-format=byte-stream,alignment=au",
+        "!",
+        "queue",
+        "leaky=downstream",
+        "max-size-buffers=200",
         "!",
         "shmsink",
         f"socket-path={socket}",
         f"shm-size={ring}",
         "wait-for-connection=false",
+        "sync=false",
     )
     return PipelineSpec(
         argv=builder.build(),

@@ -104,12 +104,20 @@ def source_branch_normalized(
     sink_pad: str | None,
     sink_queue_props: Sequence[str] = (),
     healthy: bool = True,
+    fps: int = 30,
 ) -> None:
     """shmsrc -> (decode if camera) -> normalize -> (scale+queue if apply_scale).
 
     A full-canvas single tile (apply_scale=False) chains straight from the
     framerate caps into whatever the caller adds next (an encoder) — matching
     live_cam1.sh/live_usb.sh, which have no redundant scale or queue there.
+
+    `fps` (A-REV-014) is the profile's *effective* encode fps, threaded into
+    the post-`videorate` normalization caps (and the placeholder's own
+    framerate, so a lost source doesn't force an up/down-convert the real
+    branch wouldn't have needed) — every existing caller that omits it gets
+    the original hardcoded-30 behavior byte-for-byte (every base profile's
+    `fps` is 30), so this is additive: no existing argv changes.
 
     `healthy=False` (R-SRC-1, A-REV-003) swaps the real `shmsrc` branch for a
     `videotestsrc` placeholder fronted by a named `input-selector` — the
@@ -149,7 +157,7 @@ def source_branch_normalized(
             "is-live=true",
             "pattern=black",
             "!",
-            f"video/x-raw,format={_PLACEHOLDER_VIDEO_FORMAT},width={target_width},height={target_height},framerate=30/1",
+            f"video/x-raw,format={_PLACEHOLDER_VIDEO_FORMAT},width={target_width},height={target_height},framerate={fps}/1",
             "!",
             f"{sel}.sink_0",
             "input-selector",
@@ -166,7 +174,7 @@ def source_branch_normalized(
         "videorate",
         "drop-only=true",
         "!",
-        "video/x-raw,framerate=30/1",
+        f"video/x-raw,framerate={fps}/1",
         "!",
     )
     if apply_scale:

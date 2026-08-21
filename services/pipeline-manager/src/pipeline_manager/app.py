@@ -13,8 +13,8 @@ from fastapi.responses import JSONResponse
 from .api.events import EventBroker
 from .api.problems import DomainProblem
 from .api.routes import public_router, router
-from .audio.control import ExecResult
-from .audio.levels import AudioLevelSampler
+from .audio.control import ExecResult, real_amixer_exec
+from .audio.levels import AudioLevelSampler, GstLevelMeterTap
 from .config import Settings
 from .consumers.base import CaptureCardRecovering, ConsumerNotRunning, PublisherNotRunning
 from .consumers.projector import ProjectorConsumer
@@ -22,14 +22,14 @@ from .consumers.record import RecordConsumer
 from .consumers.thumbnails import RoleNotPreviewable, ThumbnailController
 from .hardware.helper_client import HelperClient
 from .hardware.led import LedController
-from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, run_watchdog_loop
+from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, real_v4l2_probe, run_watchdog_loop
 from .models import ConsumerState, PublisherId
 from .pipelines.builder import UnsupportedPipeline
 from .pipelines.layouts import InvalidRatio, PresetChannelMismatch
 from .pipelines.live import InvalidStreamKey
 from .pipelines.platforms.rk3588 import RK3588Profile
 from .pipelines.preflight import as_preflight_check
-from .publishers.base import ROLE_PUBLISHERS, PublisherController
+from .publishers.base import PUBLISHER_SOCKETS, ROLE_PUBLISHERS, PublisherController
 from .publishers.coordinator import start_publisher as real_start_publisher
 from .publishers.coordinator import stop_publisher as real_stop_publisher
 from .supervisor.health import HealthConfirmer
@@ -134,6 +134,10 @@ async def _no_preflight_source():
     return None  # off-board: gst-inspect is board-only, so preflight stays unset
 
 
+async def _noop_start_audio_meter() -> None:
+    return None  # off-board: no shm ring to tap; the hermetic sampler stays read_rms=0.0
+
+
 def _reconstruct_adopted_record(state, adopted: AdoptedProcess) -> RecordConsumer:
     """Rebuild a `RecordConsumer` around a live pid this instance never
     spawned (A-REV-007): same collaborators `start_record` would inject, but
@@ -195,8 +199,14 @@ async def _run_startup(app: FastAPI) -> None:
     for controller in state.publishers.values():
         if controller.has_binding:
             await state.start_publisher(controller)
-    # 4. Start the capture-card watchdog probe loop.
-    state.watchdog_task = asyncio.create_task(run_watchdog_loop(state.watchdog))
+    # 3b. Start the real RMS meter tap (A-REV-012; no-op off-board — the
+    # hermetic sampler keeps its read_rms=0.0 default).
+    await state.start_audio_meter()
+    # 4. Start the capture-card watchdog probe loop. `events` is real
+    # infrastructure present on every app instance (not a hardware seam,
+    # A-REV-013) — only `watchdog.probe` swaps between the no-op default and
+    # `real_v4l2_probe` (create_production_app).
+    state.watchdog_task = asyncio.create_task(run_watchdog_loop(state.watchdog, events=state.events))
 
 
 async def _run_shutdown(app: FastAPI) -> None:
@@ -228,6 +238,15 @@ async def _run_shutdown(app: FastAPI) -> None:
 
     for negotiation_id in list(state.thumbnails.negotiations):
         await state.thumbnails.close(negotiation_id)
+
+    # Drain every open `/audio/levels/subscriptions` entry (A-REV-012) —
+    # otherwise the sampler's background task, and a real meter tap's
+    # subprocess, leak past process lifetime.
+    state.audio_subscriptions.clear()
+    await state.audio_sampler.drain()
+    meter = getattr(state, "audio_meter", None)
+    if meter is not None:
+        await meter.stop()
 
     state.flush_sidecars()
 
@@ -338,6 +357,8 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
     app.state.audio_exec = _default_audio_exec
     app.state.audio_sampler = AudioLevelSampler(read_rms=lambda: 0.0)
     app.state.audio_subscriptions = {}
+    app.state.audio_meter = None
+    app.state.start_audio_meter = _noop_start_audio_meter
 
     app.include_router(public_router)
     app.include_router(router)
@@ -346,14 +367,16 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
 
 
 def create_production_app(settings: Settings | None = None) -> FastAPI:
-    """The real Uvicorn entrypoint (A-REV-001/A-REV-011/A-REV-007): injects a
-    real `Popen`, the real `start_publisher`/`stop_publisher` coordinators,
-    and the real sidecar/`proc` adapters behind `create_app`'s seams.
+    """The real Uvicorn entrypoint (A-REV-001/A-REV-011/A-REV-007/A-REV-012/
+    A-REV-013): injects a real `Popen`, the real `start_publisher`/
+    `stop_publisher` coordinators, the real sidecar/`proc` adapters, the
+    real argv-only `amixer`/`v4l2-ctl` adapters, and the real RMS meter tap
+    behind `create_app`'s seams.
 
-    The remaining seams (`preflight_source`, `audio_exec`, `watchdog.probe`)
-    stay the hermetic no-op defaults `create_app` sets until their own
-    batches (B6) add real adapters for them — this factory grows
-    incrementally with the remediation plan, it does not jump ahead of it.
+    The one remaining seam (`preflight_source`) stays the hermetic no-op
+    default `create_app` sets — `gst-inspect` preflight has no batch of its
+    own yet — this factory grows incrementally with the remediation plan,
+    it does not jump ahead of it.
     """
     settings = settings or Settings()
     app = create_app(settings, popen=subprocess.Popen, runtime_dir=settings.runtime_dir)
@@ -370,4 +393,14 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.proc_scanner = real_proc_scanner
     app.state.expected_processes = partial(real_expected_processes, settings.runtime_dir)
+    app.state.watchdog.probe = real_v4l2_probe
+    app.state.audio_exec = real_amixer_exec
+
+    async def _start_real_audio_meter() -> None:
+        meter = GstLevelMeterTap(PUBLISHER_SOCKETS[PublisherId.AUDIO])
+        await meter.start()
+        app.state.audio_meter = meter
+        app.state.audio_sampler = AudioLevelSampler(read_rms=meter.read_rms)
+
+    app.state.start_audio_meter = _start_real_audio_meter
     return app
