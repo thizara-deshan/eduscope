@@ -67,11 +67,18 @@ class RecordConsumer(_ChildOwner):
         self._init_ownership()
 
     async def start(self, request: RecordRequest) -> ConsumerEvent:
-        spec = build_record(request, self._platform)
+        spec = build_record(request, self._platform, is_role_healthy=self._is_publisher_running)
 
-        for role in spec.required_roles:
-            if not self._is_publisher_running(role):
-                raise PublisherNotRunning(role)
+        if spec.degraded_start_ok:
+            # A-REV-003: every required role already has an in-pipeline
+            # fallback branch — refuse only if *none* of them are usable,
+            # not merely because one dropped out (R-SRC-1).
+            if not any(self._is_publisher_running(role) for role in spec.required_roles):
+                raise PublisherNotRunning(spec.required_roles[0])
+        else:
+            for role in spec.required_roles:
+                if not self._is_publisher_running(role):
+                    raise PublisherNotRunning(role)
         if SourceRole.PRESENTATION in spec.required_roles and self._is_capture_card_recovering():
             raise CaptureCardRecovering("capture card is recovering")
 

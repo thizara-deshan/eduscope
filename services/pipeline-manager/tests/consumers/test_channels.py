@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from pipeline_manager.consumers.base import RestartClass
+from pipeline_manager.consumers.base import PublisherNotRunning, RestartClass
 from pipeline_manager.consumers.live import LiveConsumer
 from pipeline_manager.consumers.meeting import MeetingConsumer
 from pipeline_manager.consumers.record import RecordConsumer
-from pipeline_manager.models import ConsumerState, LayoutPresetId
+from pipeline_manager.models import ConsumerState, LayoutPresetId, SourceRole
 from pipeline_manager.pipelines.builder import PipelineSpec
 from pipeline_manager.pipelines.live import LiveRequest
 from pipeline_manager.pipelines.meeting import MeetingRequest
@@ -90,6 +90,34 @@ class TestMeetingStart:
         assert consumer.placement is not None
         assert consumer.placement.fullscreen is True
 
+    @pytest.mark.asyncio
+    async def test_composite_starts_degraded_when_only_one_required_role_is_running(self) -> None:
+        consumer = MeetingConsumer(
+            "meeting:1",
+            platform=RK3588Profile(),
+            is_publisher_running=lambda role: role is SourceRole.LECTURER_CAM,
+            supervisor=FakeSupervisor(),
+            ledger=EncodeLedger(),
+            confirmer=FakeConfirmer(),
+        )
+        event = await consumer.start(
+            MeetingRequest(preset=LayoutPresetId.CAMS_FIFTY_FIFTY, hdmi2_alsa_device=HDMI2_DEVICE, ratio_a=50, ratio_b=50)
+        )
+        assert event.state is ConsumerState.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_still_refuses_when_every_required_role_is_offline(self) -> None:
+        consumer = MeetingConsumer(
+            "meeting:1",
+            platform=RK3588Profile(),
+            is_publisher_running=lambda role: False,
+            supervisor=FakeSupervisor(),
+            ledger=EncodeLedger(),
+            confirmer=FakeConfirmer(),
+        )
+        with pytest.raises(PublisherNotRunning):
+            await consumer.start(MeetingRequest(preset=LayoutPresetId.CAM_1, hdmi2_alsa_device=HDMI2_DEVICE))
+
 
 @pytest.mark.asyncio
 async def test_killing_live_leaves_record_pid_and_state_unchanged(tmp_path, monkeypatch) -> None:
@@ -124,7 +152,9 @@ async def test_killing_live_leaves_record_pid_and_state_unchanged(tmp_path, monk
     import pipeline_manager.consumers.live as live_module
     import pipeline_manager.consumers.record as record_module
 
-    monkeypatch.setattr(record_module, "build_record", lambda request, platform: _child_spec_grow(request.output_path))
+    monkeypatch.setattr(
+        record_module, "build_record", lambda request, platform, **_: _child_spec_grow(request.output_path)
+    )
     monkeypatch.setattr(live_module, "build_live", lambda request, platform: _child_spec("playing"))
 
     try:

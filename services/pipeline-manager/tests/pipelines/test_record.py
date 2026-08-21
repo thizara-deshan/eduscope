@@ -100,6 +100,72 @@ class TestStructuralInvariants:
         assert SourceRole.PRESENTATION not in spec.required_roles
 
 
+class TestSourceLossFallback:
+    """A-REV-003: a role reported unhealthy at build time gets a placeholder
+    branch instead of a doomed `shmsrc` pointed at a socket nothing writes
+    to; a role omitted from `is_role_healthy` (default: everyone healthy)
+    produces byte-identical argv to the golden fixtures above."""
+
+    def test_default_health_lookup_matches_golden_fixture(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        without_kwarg = build_record(req, RK3588Profile())
+        with_default = build_record(req, RK3588Profile(), is_role_healthy=lambda role: True)
+        assert without_kwarg.argv == with_default.argv
+
+    def test_composite_marks_degraded_start_ok(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        spec = build_record(req, RK3588Profile())
+        assert spec.degraded_start_ok is True
+
+    def test_passthrough_and_separate_do_not_mark_degraded_start_ok(self) -> None:
+        cam1 = build_record(RecordRequest(preset=LayoutPresetId.CAM_1, output_path=OUT), RK3588Profile())
+        separate = build_record(
+            RecordRequest(preset=LayoutPresetId.SEPARATE_FILES, output_paths={"presentation": USB_OUT, "lecturer-cam": CAM_OUT}),
+            RK3588Profile(),
+        )
+        assert cam1.degraded_start_ok is False
+        assert separate.degraded_start_ok is False
+
+    def test_unhealthy_role_gets_placeholder_instead_of_its_shmsrc(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        spec = build_record(
+            req, RK3588Profile(), is_role_healthy=lambda role: role is not SourceRole.LECTURER_CAM
+        )
+        assert "socket-path=/tmp/rtsp.sock" not in spec.argv
+        assert "videotestsrc" in spec.argv
+        assert "input-selector" in spec.argv
+        # The other (healthy) role and the mux/output are unaffected.
+        assert "socket-path=/tmp/usb.sock" in spec.argv
+        assert f"location={OUT}" in spec.argv
+
+    def test_healthy_role_is_untouched_by_a_sibling_going_offline(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        all_healthy = build_record(req, RK3588Profile())
+        one_offline = build_record(
+            req, RK3588Profile(), is_role_healthy=lambda role: role is not SourceRole.LECTURER_CAM
+        )
+        assert "socket-path=/tmp/usb.sock" in all_healthy.argv
+        assert "socket-path=/tmp/usb.sock" in one_offline.argv
+
+    def test_offline_mic_gets_silent_placeholder(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        spec = build_record(
+            req, RK3588Profile(), is_role_healthy=lambda role: role is not SourceRole.MIC_LECTURER
+        )
+        assert "socket-path=/tmp/audio.sock" not in spec.argv
+        assert "audiotestsrc" in spec.argv
+        assert "wave=silence" in spec.argv
+
+    def test_all_roles_offline_still_yields_a_pipeline_with_only_placeholders(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
+        spec = build_record(req, RK3588Profile(), is_role_healthy=lambda role: False)
+        assert "socket-path=/tmp/usb.sock" not in spec.argv
+        assert "socket-path=/tmp/rtsp.sock" not in spec.argv
+        assert "socket-path=/tmp/audio.sock" not in spec.argv
+        assert spec.argv.count("videotestsrc") == 2
+        assert spec.argv.count("audiotestsrc") == 1
+
+
 class TestEarlyRefusal:
     def test_pc_only_refused_on_local(self) -> None:
         with pytest.raises(PresetChannelMismatch):

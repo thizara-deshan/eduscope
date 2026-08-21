@@ -112,6 +112,24 @@ class TestStartReadinessRefusal:
         assert sup.calls == []
 
     @pytest.mark.asyncio
+    async def test_composite_starts_degraded_when_only_one_required_role_is_running(self) -> None:
+        """A-REV-003: FIFTY_FIFTY needs presentation + lecturer-cam; losing
+        one no longer refuses the whole record — the other role's fallback
+        branch (built into `build_record`) covers it."""
+        consumer, sup, _, _ = _consumer(publisher_running=False)
+        consumer._is_publisher_running = lambda role: role is SourceRole.PRESENTATION
+        event = await consumer.start(RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT_1))
+        assert event.state is ConsumerState.RUNNING
+        assert len(sup.calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_composite_still_refuses_when_every_required_role_is_offline(self) -> None:
+        consumer, sup, _, _ = _consumer(publisher_running=False)
+        with pytest.raises(PublisherNotRunning):
+            await consumer.start(RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT_1))
+        assert sup.calls == []
+
+    @pytest.mark.asyncio
     async def test_capture_card_recovering_does_not_block_camera_only_preset(self) -> None:
         consumer, sup, _, _ = _consumer(capture_card_recovering=True)
         event = await consumer.start(RecordRequest(preset=LayoutPresetId.CAM_1, output_path=OUT_1))

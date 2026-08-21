@@ -85,7 +85,7 @@ async def test_manager_restart_adopts_a_live_record_from_real_proc(tmp_path, mon
     import pipeline_manager.consumers.record as record_module
 
     output_path = str(tmp_path / "seg.ts")
-    monkeypatch.setattr(record_module, "build_record", lambda request, platform: _spec_grow(output_path))
+    monkeypatch.setattr(record_module, "build_record", lambda request, platform, **_: _spec_grow(output_path))
 
     runtime_dir = tmp_path / "runtime"
     settings = Settings(shared_bearer_token=TOKEN, recordings_root=tmp_path, runtime_dir=runtime_dir)

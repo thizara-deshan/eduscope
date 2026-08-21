@@ -407,7 +407,10 @@ async def thumbnail_offer(body: ThumbnailOfferBody, request: Request) -> Command
 @router.post("/consumers/thumbnails/{negotiation_id}/ice", status_code=202)
 async def thumbnail_ice(negotiation_id: str, body: ThumbnailIceBody, request: Request) -> Response:
     state = request.app.state
-    if negotiation_id not in state.thumbnails.negotiations:
+    forwarded = state.thumbnails.send_ice(
+        negotiation_id, candidate=body.candidate, sdp_mid=body.sdpMid, sdp_mline_index=body.sdpMLineIndex
+    )
+    if not forwarded:
         raise NegotiationNotFound(negotiation_id)
     return Response(status_code=202)
 

@@ -327,6 +327,8 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
     app.state.thumbnails = ThumbnailController(
         supervisor=app.state.supervisor,
         ledger=app.state.ledger,
+        events=app.state.events,
+        platform=app.state.platform,
         is_role_online_and_bound=is_publisher_running,
     )
 

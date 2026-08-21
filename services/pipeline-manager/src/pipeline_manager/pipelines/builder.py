@@ -20,6 +20,16 @@ ROLE_SOCKETS: dict[SourceRole, str] = {
 
 CAMERA_ROLES = (SourceRole.LECTURER_CAM, SourceRole.STUDENTS_CAM)
 
+# Placeholder caps for a lost source (R-SRC-1): raw video/audio the normalize
+# suffix and the platform's own convert()/encoder() can always consume,
+# independent of which role/caps the real branch would have used.
+_PLACEHOLDER_VIDEO_FORMAT = "I420"
+_PLACEHOLDER_AUDIO_CAPS = "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved"
+
+
+def _selector_name(role: SourceRole) -> str:
+    return f"sel_{role.value.replace('-', '_')}"
+
 
 class InvalidToken(ValueError):
     pass
@@ -64,6 +74,11 @@ class PipelineSpec:
     encode_slots: int
     outputs: tuple[str, ...]
     placement: Any | None = None
+    # True when every required role in `argv` has an in-pipeline fallback
+    # branch (A-REV-003) — the consumer may start with a subset of required
+    # roles offline instead of refusing outright. False (the default) keeps
+    # every existing pipeline kind's original all-required-roles-online gate.
+    degraded_start_ok: bool = False
 
 
 @dataclass(frozen=True)
@@ -88,28 +103,61 @@ def source_branch_normalized(
     apply_scale: bool,
     sink_pad: str | None,
     sink_queue_props: Sequence[str] = (),
+    healthy: bool = True,
 ) -> None:
     """shmsrc -> (decode if camera) -> normalize -> (scale+queue if apply_scale).
 
     A full-canvas single tile (apply_scale=False) chains straight from the
     framerate caps into whatever the caller adds next (an encoder) — matching
     live_cam1.sh/live_usb.sh, which have no redundant scale or queue there.
+
+    `healthy=False` (R-SRC-1, A-REV-003) swaps the real `shmsrc` branch for a
+    `videotestsrc` placeholder fronted by a named `input-selector` — the
+    caller decides `healthy` once per build from debounced publisher health,
+    so a role already known offline never spawns a doomed `shmsrc` bound to a
+    socket nothing is writing to (which fails pipeline preroll outright,
+    proven experimentally: `shmsrc` posts a fatal bus ERROR the moment its
+    control socket is missing or closes, and `gst-launch-1.0` treats any bus
+    ERROR as fatal to the whole process — there is no stock element that
+    auto-switches a *running* pipeline on source timeout without an
+    app-embedded controller, which is out of scope for this argv-only tier).
+    A role that drops out mid-session still ends the child; recovery is the
+    existing restart-with-backoff path (B3), which re-`build_record`s with
+    the now-offline role routed through this same placeholder branch instead
+    of refusing to start.
     """
-    socket = ROLE_SOCKETS[role]
-    builder.add("shmsrc", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!")
-    if role in CAMERA_ROLES:
+    if healthy:
+        socket = ROLE_SOCKETS[role]
+        builder.add("shmsrc", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!")
+        if role in CAMERA_ROLES:
+            builder.add(
+                platform.shm_video_caps(role),
+                "!",
+                "h264parse",
+                "!",
+                *platform.decoder(),
+                "!",
+                *platform.convert(),
+                "!",
+            )
+        else:
+            builder.add(platform.shm_video_caps(role), "!")
+    else:
+        sel = _selector_name(role)
         builder.add(
-            platform.shm_video_caps(role),
+            "videotestsrc",
+            "is-live=true",
+            "pattern=black",
             "!",
-            "h264parse",
+            f"video/x-raw,format={_PLACEHOLDER_VIDEO_FORMAT},width={target_width},height={target_height},framerate=30/1",
             "!",
-            *platform.decoder(),
+            f"{sel}.sink_0",
+            "input-selector",
+            f"name={sel}",
             "!",
             *platform.convert(),
             "!",
         )
-    else:
-        builder.add(platform.shm_video_caps(role), "!")
     builder.add(
         "queue",
         "max-size-buffers=6",
@@ -135,6 +183,35 @@ def source_branch_normalized(
             builder.add(sink_pad)
 
 
+def audio_source_tokens(builder: PipelineBuilder, platform: PlatformProfile, *, healthy: bool = True) -> None:
+    """The mic-lecturer source stage only — `shmsrc` when healthy, a silent
+    `audiotestsrc` placeholder behind a named `input-selector` otherwise
+    (R-SRC-1, A-REV-003; same rationale as `source_branch_normalized`).
+    Shared by `audio_branch` (record/live, feeds a mux pad) and `meeting`'s
+    direct-to-ALSA mic branch — both continue with their own
+    `queue ! audioconvert ! audioresample ! ...` after this.
+    """
+    if healthy:
+        socket = ROLE_SOCKETS[SourceRole.MIC_LECTURER]
+        builder.add(
+            "shmsrc", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!", platform.audio_caps(), "!"
+        )
+    else:
+        sel = _selector_name(SourceRole.MIC_LECTURER)
+        builder.add(
+            "audiotestsrc",
+            "is-live=true",
+            "wave=silence",
+            "!",
+            _PLACEHOLDER_AUDIO_CAPS,
+            "!",
+            f"{sel}.sink_0",
+            "input-selector",
+            f"name={sel}",
+            "!",
+        )
+
+
 def audio_branch(
     builder: PipelineBuilder,
     platform: PlatformProfile,
@@ -142,16 +219,14 @@ def audio_branch(
     mux_pad: str,
     *,
     queue_props: Sequence[str] = (),
+    healthy: bool = True,
 ) -> None:
-    socket = ROLE_SOCKETS[SourceRole.MIC_LECTURER]
+    """`healthy=False` swaps the mic `shmsrc` for a silent `audiotestsrc`
+    placeholder (same rationale as `source_branch_normalized`) so a lost mic
+    never breaks record/live's shared mux the way a dead-socket `shmsrc`
+    would (R-SRC-1)."""
+    audio_source_tokens(builder, platform, healthy=healthy)
     builder.add(
-        "shmsrc",
-        f"socket-path={socket}",
-        "is-live=true",
-        "do-timestamp=true",
-        "!",
-        platform.audio_caps(),
-        "!",
         "queue",
         "!",
         "audioconvert",

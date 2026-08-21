@@ -185,7 +185,7 @@ async def test_concurrent_double_stop_on_a_real_child_is_safe_and_idempotent(tmp
     import pipeline_manager.consumers.record as record_module
 
     monkeypatch.setattr(
-        record_module, "build_record", lambda request, platform: _spec_grow(request.output_path)
+        record_module, "build_record", lambda request, platform, **_: _spec_grow(request.output_path)
     )
 
     supervisor = ProcessSupervisor()
