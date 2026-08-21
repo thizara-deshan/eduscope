@@ -113,7 +113,7 @@ def project_health(health: PublisherHealth, now: float) -> PublisherState:
     return health.state
 
 
-PublisherEventKind = Literal["running", "degraded", "exited", "failed"]
+PublisherEventKind = Literal["running", "degraded", "exited", "failed", "stopped"]
 
 
 @dataclass(frozen=True)
@@ -142,6 +142,7 @@ class PublisherController:
         self.restart_budget = RestartBudget(clock=clock)
         self.health = PublisherHealth()
         self.binding: PublisherBinding | str | None = None
+        self.pid: int | None = None
 
     def bind(self, binding: "PublisherBinding | str") -> None:
         """A binding change or manual retry resets the restart budget. Accepts
@@ -165,6 +166,22 @@ class PublisherController:
             publisher_id=self.publisher_id, role_id=self.role, kind="running", state=PublisherState.ONLINE
         )
 
+    def mark_online(self, pid: int) -> PublisherEvent:
+        """Called by the `start_publisher` coordinator once `HealthConfirmer`
+        has actually seen PLAYING — never before (accepted-before-health,
+        §3.1: the 202 response precedes this by definition)."""
+        self.pid = pid
+        return self.observe_running()
+
+    def mark_offline(self) -> PublisherEvent:
+        """A requested stop, distinct from `on_unexpected_exit` (which is the
+        unexpected-death/restart path, B3)."""
+        self.pid = None
+        self.health.state = PublisherState.OFFLINE
+        return PublisherEvent(
+            publisher_id=self.publisher_id, role_id=self.role, kind="stopped", state=PublisherState.OFFLINE
+        )
+
     def observe_telemetry(self, *, fps: float | None = None, rms: float | None = None) -> None:
         self.health.fps = fps
         self.health.rms = rms
@@ -174,6 +191,7 @@ class PublisherController:
         return project_health(self.health, self.clock())
 
     def on_unexpected_exit(self, error: str | None = None) -> PublisherEvent:
+        self.pid = None
         self.health.last_error = error
         if self.restart_budget.exhausted:
             self.health.state = PublisherState.OFFLINE

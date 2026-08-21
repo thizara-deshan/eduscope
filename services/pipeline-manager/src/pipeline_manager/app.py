@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import subprocess
 from contextlib import asynccontextmanager, suppress
+from functools import partial
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -27,6 +29,8 @@ from .pipelines.live import InvalidStreamKey
 from .pipelines.platforms.rk3588 import RK3588Profile
 from .pipelines.preflight import as_preflight_check
 from .publishers.base import ROLE_PUBLISHERS, PublisherController
+from .publishers.coordinator import start_publisher as real_start_publisher
+from .publishers.coordinator import stop_publisher as real_stop_publisher
 from .supervisor.health import HealthConfirmer
 from .supervisor.ledger import EncodeLedger, EncoderBudgetExceeded
 from .supervisor.process import ProcessSupervisor
@@ -121,6 +125,10 @@ async def _noop_start_publisher(controller) -> None:
     return None  # off-board: real GStreamer spawn is board bring-up (Workstream F)
 
 
+async def _noop_stop_publisher(controller) -> None:
+    return None  # off-board: nothing was ever spawned, so there is nothing to signal
+
+
 async def _no_preflight_source():
     return None  # off-board: gst-inspect is board-only, so preflight stays unset
 
@@ -209,6 +217,10 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
     )
 
     app.state.publishers = {pid: PublisherController(pid) for pid in PublisherId}
+    # One lock per publisher identity so a start/stop command dispatched from
+    # a route (§3.1: 202-then-event) never races a concurrent command on the
+    # same publisher; unrelated publishers never block each other.
+    app.state.publisher_locks = {pid: asyncio.Lock() for pid in PublisherId}
     app.state.consumers = {}
 
     def is_publisher_running(role) -> bool:
@@ -229,6 +241,7 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
     app.state.proc_scanner = _default_proc_scanner
     app.state.expected_processes = _default_expected_processes
     app.state.start_publisher = _noop_start_publisher
+    app.state.stop_publisher = _noop_stop_publisher
     app.state.preflight_source = _no_preflight_source
     app.state.flush_sidecars = lambda: None
     app.state.watchdog_task = None
@@ -275,4 +288,31 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
     app.include_router(public_router)
     app.include_router(router)
 
+    return app
+
+
+def create_production_app(settings: Settings | None = None) -> FastAPI:
+    """The real Uvicorn entrypoint (A-REV-001/A-REV-011): injects a real
+    `Popen` and the real `start_publisher`/`stop_publisher` coordinators
+    behind `create_app`'s seams.
+
+    Only the publisher-lifecycle seams this batch (B2) delivers are wired
+    here. The remaining seams (`proc_scanner`, `expected_processes`,
+    `preflight_source`, `flush_sidecars`, `audio_exec`, `watchdog.probe`)
+    stay the hermetic no-op defaults `create_app` sets until their own
+    batches (B4/B6) add real adapters for them — this factory grows
+    incrementally with the remediation plan, it does not jump ahead of it.
+    """
+    app = create_app(settings, popen=subprocess.Popen)
+    app.state.start_publisher = partial(
+        real_start_publisher,
+        supervisor=app.state.supervisor,
+        confirmer=app.state.confirmer,
+        events=app.state.events,
+    )
+    app.state.stop_publisher = partial(
+        real_stop_publisher,
+        supervisor=app.state.supervisor,
+        events=app.state.events,
+    )
     return app

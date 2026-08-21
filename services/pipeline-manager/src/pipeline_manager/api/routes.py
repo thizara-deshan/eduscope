@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Literal
 
@@ -172,22 +173,40 @@ class ThumbnailIceBody(BaseModel):
 # ── publishers ───────────────────────────────────────────────────────────
 
 
+def _dispatch_publisher_command(request: Request, publisher_id: PublisherId, action) -> None:
+    """Run `action(controller)` in the background under this publisher's
+    lock so the route can return 202 immediately (§3.1: accepted, then
+    resolved by `evt.pm.publisher.*` / `GET /status`) while same-identity
+    commands still serialize against each other.
+    """
+    state = request.app.state
+    controller = state.publishers[publisher_id]
+    lock = state.publisher_locks[publisher_id]
+
+    async def _run() -> None:
+        async with lock:
+            await action(controller)
+
+    asyncio.create_task(_run())
+
+
 @router.post("/publishers/{publisher_id}/start", status_code=202)
 async def start_publisher(publisher_id: str, request: Request) -> PublisherCommandAccepted:
     try:
         pid = PublisherId(publisher_id)
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
-    _ = request.app.state.publishers[pid]  # validated the id resolves to a real controller
+    _dispatch_publisher_command(request, pid, request.app.state.start_publisher)
     return PublisherCommandAccepted(publisherId=publisher_id, state="starting")
 
 
 @router.post("/publishers/{publisher_id}/stop", status_code=202)
 async def stop_publisher(publisher_id: str, request: Request) -> PublisherCommandAccepted:
     try:
-        PublisherId(publisher_id)
+        pid = PublisherId(publisher_id)
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
+    _dispatch_publisher_command(request, pid, request.app.state.stop_publisher)
     return PublisherCommandAccepted(publisherId=publisher_id, state="stopping")
 
 
@@ -495,6 +514,7 @@ async def get_status(request: Request) -> dict:
             pid.value: {
                 "state": controller.current_state().value,
                 "bound": controller.has_binding,
+                "pid": controller.pid,
                 "fps": controller.health.fps,
                 "rms": controller.health.rms,
                 "lastError": controller.health.last_error,
@@ -504,7 +524,9 @@ async def get_status(request: Request) -> dict:
         "consumers": [
             {
                 "id": consumer_id,
+                "kind": consumer_id.split(":", 1)[0],
                 "state": consumer.state.value,
+                "output": getattr(consumer, "output_path", None),
                 "pgid": consumer.pgid,
             }
             for consumer_id, consumer in state.consumers.items()
