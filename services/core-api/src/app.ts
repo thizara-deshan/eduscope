@@ -78,6 +78,7 @@ import { registerQuizRoutes } from './modules/quiz/routes.js';
 import { readQuizDeviceCredential } from './modules/quiz/sync/rest.js';
 import { QuizSyncStream } from './modules/quiz/sync/stream.js';
 import { PanelHub, registerPanelHub } from './modules/ws/panel-hub.js';
+import { PreviewBroker, registerPreviewBroker } from './modules/ws/preview.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -100,6 +101,7 @@ declare module 'fastify' {
     healthAggregator: HealthAggregator;
     aiCountdown: AiCountdown;
     panelHub: PanelHub;
+    previewBroker: PreviewBroker;
   }
   interface FastifyContextConfig {
     operationId?: string;
@@ -729,6 +731,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   lifecycle.register(panelHub);
   app.decorate('panelHub', panelHub);
   registerPanelHub(app, authService, panelHub);
+
+  const previewBroker = new PreviewBroker({
+    pm: pmClient,
+    bus,
+    sources: sourceExecutor,
+    logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
+  });
+  lifecycle.register(previewBroker);
+  app.decorate('previewBroker', previewBroker);
+  registerPreviewBroker(app, authService, previewBroker);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

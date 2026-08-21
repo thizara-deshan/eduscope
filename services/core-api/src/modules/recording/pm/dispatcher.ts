@@ -13,6 +13,9 @@ import {
   type PmConsumerRunningData,
   type PmSseFrame,
   type PmStatus,
+  type PmThumbnailAnswerData,
+  type PmThumbnailErrorData,
+  type PmThumbnailIceData,
 } from './types.js';
 
 export interface PipelineManagerBridgeLogger {
@@ -45,6 +48,15 @@ function dispatchFrame(frame: PmSseFrame, bus: DomainBus): void {
       return;
     case 'evt.pm.consumer.exited':
       bus.publish('evt.pm.consumer.exited', data as PmConsumerExitedData);
+      return;
+    case 'evt.pm.thumbnail.answer':
+      bus.publish('evt.pm.thumbnail.answer', data as PmThumbnailAnswerData);
+      return;
+    case 'evt.pm.thumbnail.ice':
+      bus.publish('evt.pm.thumbnail.ice', data as PmThumbnailIceData);
+      return;
+    case 'evt.pm.thumbnail.error':
+      bus.publish('evt.pm.thumbnail.error', data as PmThumbnailErrorData);
       return;
     default:
       return; // forward-compatible: an event kind this bridge doesn't yet know is silently ignored, never crashes the stream

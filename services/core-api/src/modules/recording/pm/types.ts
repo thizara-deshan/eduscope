@@ -135,6 +135,25 @@ export type PmEvent =
 
 export const PM_RESYNC_EVENT_KIND = 'evt.pm.resync-required';
 
+/** B-36 preview signaling (events.md §3) — internal `evt.pm.thumbnail.*` shapes A's worker protocol defines (`pipeline-manager.md` §A-06 stdout `answer|ice|error`) but does not yet publish over `/events` (ADR-022/CG-2, Wave-8 board work). Declared now so the dispatcher has one stable shape to decode as that wiring lands, same as `PmEvent` above. */
+export interface PmThumbnailAnswerData {
+  negotiationId: string;
+  sdp: string;
+}
+
+export interface PmThumbnailIceData {
+  negotiationId: string;
+  candidate: string;
+  sdpMid: string | null;
+  sdpMLineIndex: number | null;
+}
+
+export interface PmThumbnailErrorData {
+  negotiationId: string;
+  code: string;
+  message: string;
+}
+
 /**
  * KEEP B-56 gate correction (2026-08-18 flag, resolved) — the per-channel
  * effective encode profile B-24 resolves and hands to pipeline-manager's

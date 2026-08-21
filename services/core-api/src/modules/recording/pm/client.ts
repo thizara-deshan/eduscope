@@ -56,6 +56,20 @@ export interface SetPublisherBindingBody {
   devicePath?: string;
 }
 
+/** B-36: pipeline-manager.md §3.2 `POST /consumers/thumbnails/offer` — `roleId` is A's `SourceRole` string, which is identical to the public `SourceRoleId` enum (no translation, unlike `PmPublisherId`). */
+export interface ThumbnailOfferBody {
+  negotiationId: string;
+  roleId: string;
+  sdp: string;
+}
+
+/** B-36: pipeline-manager.md §3.2 `POST /consumers/thumbnails/{negotiationId}/ice`. */
+export interface ThumbnailIceBody {
+  candidate: string;
+  sdpMid: string | null;
+  sdpMLineIndex: number | null;
+}
+
 const DEFAULT_PROBLEM: PmProblem = { code: 'internal', title: 'pipeline-manager request failed', status: 502 };
 
 /** Spreads an `EffectiveEncodeProfile` onto a record/live start body — never called for passthrough call sites. */
@@ -118,6 +132,26 @@ export class PipelineManagerClient {
     return this.#request<PmPublisherCommandAccepted>('PUT', `/publishers/${publisherId}/binding`, body);
   }
 
+  /** B-36 (pipeline-manager.md §3.2 `POST /consumers/thumbnails/start`): enables the preview capability. Absent `sources` means no role restriction — actual media flows only once an `offer` arrives. */
+  async startThumbnails(sources?: readonly string[]): Promise<void> {
+    await this.#request('POST', '/consumers/thumbnails/start', sources !== undefined ? { sources } : {});
+  }
+
+  /** B-36 (events.md §3 `offer`): forwards a client SDP offer. 202-accepted only — the SDP answer arrives asynchronously (`evt.pm.thumbnail.answer`, see `pm/types.ts`). */
+  async offerThumbnail(body: ThumbnailOfferBody): Promise<PmCommandAccepted> {
+    return this.#request<PmCommandAccepted>('POST', '/consumers/thumbnails/offer', body);
+  }
+
+  /** B-36 (events.md §3 `ice`, trickle both ways): forwards one client ICE candidate for an open negotiation. */
+  async iceThumbnail(negotiationId: string, body: ThumbnailIceBody): Promise<void> {
+    await this.#request('POST', `/consumers/thumbnails/${negotiationId}/ice`, body);
+  }
+
+  /** B-36 (events.md §3 `close`): tears the peer down; idempotent on an unknown/already-closed negotiation. */
+  async closeThumbnailNegotiation(negotiationId: string): Promise<void> {
+    await this.#request('DELETE', `/consumers/thumbnails/${negotiationId}`);
+  }
+
   /** `mic-lecturer` only in V1 (INV-AC-1) — the readback is the truth; a mixer failure is `appliedState:'failed'` in a `200`, not a thrown Problem. */
   async setAudioControl(gain: number, muted: boolean): Promise<PmAudioControlResult> {
     return this.#request<PmAudioControlResult>('PUT', '/audio/controls/mic-lecturer', { gain, muted });
@@ -164,10 +198,14 @@ export class PipelineManagerClient {
     if (!response.ok) {
       throw new PipelineManagerError(await this.#toProblem(response));
     }
-    if (response.status === 204) {
+    // Several 202-accepted routes (thumbnail start/stop/close) reply with an
+    // empty body, not just 204 — parse conditionally rather than assume any
+    // non-204 success carries JSON.
+    const text = await response.text();
+    if (text.length === 0) {
       return undefined as T;
     }
-    return (await response.json()) as T;
+    return JSON.parse(text) as T;
   }
 
   async #toProblem(response: Response): Promise<PmProblem> {

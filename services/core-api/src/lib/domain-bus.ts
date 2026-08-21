@@ -1,5 +1,5 @@
 import type { AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UsbVolumesPayload } from '@eduscope/shared';
-import type { PmStatus } from '../modules/recording/pm/types.js';
+import type { PmStatus, PmThumbnailAnswerData, PmThumbnailErrorData, PmThumbnailIceData } from '../modules/recording/pm/types.js';
 
 /**
  * The in-process typed event bus modules publish domain transitions to and
@@ -15,6 +15,10 @@ export interface CoreDomainEvents {
   'evt.pm.consumer.failed': { consumerId: string; code: string; meta?: Record<string, unknown> };
   'evt.pm.consumer.eos': { consumerId: string };
   'evt.pm.consumer.exited': { consumerId: string; code: string };
+  /** B-36 preview signaling — internal, forward-declared ahead of A's Wave-8 wiring (see `pm/types.ts` doc comment). */
+  'evt.pm.thumbnail.answer': PmThumbnailAnswerData;
+  'evt.pm.thumbnail.ice': PmThumbnailIceData;
+  'evt.pm.thumbnail.error': PmThumbnailErrorData;
   'pm.status.resynced': PmStatus;
   /** Public panel/admin events (contracts/events.md §2) — published here after their owning DB transaction commits; B-35's WS hub fans these out. */
   'recording.state': RecordingStatePayload;

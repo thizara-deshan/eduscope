@@ -68,6 +68,8 @@ export class FakePipelineManager {
   #liveIdCounter = 0;
   #meetingIdCounter = 0;
   #offline = false;
+  #nextThumbnailOfferResponse: QueuedResponse | null = null;
+  readonly #openNegotiations = new Set<string>();
 
   constructor(options: { bearerToken: string; replaySize?: number }) {
     this.bearerToken = options.bearerToken;
@@ -175,6 +177,16 @@ export class FakePipelineManager {
   /** Makes the next `POST /consumers/projector` return this status/body instead of the default 202. */
   queueProjectorResponse(response: QueuedResponse): void {
     this.#nextProjectorResponse = response;
+  }
+
+  /** Makes the next `POST /consumers/thumbnails/offer` return this status/body instead of the default 202 accepted. */
+  queueThumbnailOfferResponse(response: QueuedResponse): void {
+    this.#nextThumbnailOfferResponse = response;
+  }
+
+  /** Negotiation ids currently open per `offer`/`{id}/ice`/DELETE `{id}` bookkeeping (mirrors A's `ThumbnailController.negotiations`). */
+  get openNegotiationIds(): string[] {
+    return [...this.#openNegotiations];
   }
 
   /** When true, every request's socket is destroyed with no response — simulates the service being unreachable (connection-refused-like), not a graceful 4xx/5xx. */
@@ -320,6 +332,57 @@ export class FakePipelineManager {
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ consumerId: 'projector:00000001', state: 'running' }));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/thumbnails/start') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end();
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/thumbnails/offer') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const queued = this.#nextThumbnailOfferResponse;
+        this.#nextThumbnailOfferResponse = null;
+        if (queued) {
+          res.writeHead(queued.status, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(queued.body));
+          return;
+        }
+        const { negotiationId } = body as { negotiationId: string };
+        this.#openNegotiations.add(negotiationId);
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId: `thumbnails:${negotiationId}`, state: 'starting' }));
+      });
+      return;
+    }
+
+    const thumbnailIceMatch = req.method === 'POST' ? /^\/consumers\/thumbnails\/([^/]+)\/ice$/.exec(url.pathname) : null;
+    if (thumbnailIceMatch) {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        const negotiationId = thumbnailIceMatch[1]!;
+        if (!this.#openNegotiations.has(negotiationId)) {
+          res.writeHead(404, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ code: 'consumer_not_found', title: 'Unknown negotiation', status: 404, meta: { negotiationId } }));
+          return;
+        }
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end();
+      });
+      return;
+    }
+
+    const thumbnailCloseMatch = req.method === 'DELETE' ? /^\/consumers\/thumbnails\/([^/]+)$/.exec(url.pathname) : null;
+    if (thumbnailCloseMatch) {
+      this.#openNegotiations.delete(thumbnailCloseMatch[1]!);
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end();
       return;
     }
 

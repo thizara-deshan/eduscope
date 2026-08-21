@@ -303,8 +303,8 @@ function parseProtocolToken(header: string | undefined): string {
   return values[0]!;
 }
 
-/** WS-transport equivalent of `requireAuth` (DR-05): the raw access JWT travels as the sole `Sec-WebSocket-Protocol` value, never a `?token=` query. */
-function wsAuthGuard(authService: AuthService) {
+/** WS-transport equivalent of `requireAuth` (DR-05): the raw access JWT travels as the sole `Sec-WebSocket-Protocol` value, never a `?token=` query. Shared by B-36's preview socket (design/core-api.md §9.4 "same auth"). */
+export function wsAuthGuard(authService: AuthService) {
   return async (request: FastifyRequest): Promise<void> => {
     const token = parseProtocolToken(request.headers['sec-websocket-protocol']);
     const context = await authService.authenticate(token);
