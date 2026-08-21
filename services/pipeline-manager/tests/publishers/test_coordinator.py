@@ -40,6 +40,9 @@ class FakeSupervisor:
         self.processes[identity] = process
         return process
 
+    def forget(self, identity):
+        self.processes.pop(identity, None)
+
 
 @dataclass
 class FakeConfirmer:

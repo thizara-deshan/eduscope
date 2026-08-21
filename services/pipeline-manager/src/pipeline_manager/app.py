@@ -18,11 +18,12 @@ from .audio.levels import AudioLevelSampler
 from .config import Settings
 from .consumers.base import CaptureCardRecovering, ConsumerNotRunning, PublisherNotRunning
 from .consumers.projector import ProjectorConsumer
+from .consumers.record import RecordConsumer
 from .consumers.thumbnails import RoleNotPreviewable, ThumbnailController
 from .hardware.helper_client import HelperClient
 from .hardware.led import LedController
 from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, run_watchdog_loop
-from .models import PublisherId
+from .models import ConsumerState, PublisherId
 from .pipelines.builder import UnsupportedPipeline
 from .pipelines.layouts import InvalidRatio, PresetChannelMismatch
 from .pipelines.live import InvalidStreamKey
@@ -33,8 +34,8 @@ from .publishers.coordinator import start_publisher as real_start_publisher
 from .publishers.coordinator import stop_publisher as real_stop_publisher
 from .supervisor.health import HealthConfirmer
 from .supervisor.ledger import EncodeLedger, EncoderBudgetExceeded
-from .supervisor.process import ProcessSupervisor
-from .supervisor.recovery import recover_orphans
+from .supervisor.process import AdoptedPopen, ManagedProcess, ProcessSupervisor
+from .supervisor.recovery import AdoptedProcess, real_expected_processes, real_proc_scanner, recover_orphans
 
 DOMAIN_EXCEPTIONS = (
     DomainProblem,
@@ -133,6 +134,41 @@ async def _no_preflight_source():
     return None  # off-board: gst-inspect is board-only, so preflight stays unset
 
 
+def _reconstruct_adopted_record(state, adopted: AdoptedProcess) -> RecordConsumer:
+    """Rebuild a `RecordConsumer` around a live pid this instance never
+    spawned (A-REV-007): same collaborators `start_record` would inject, but
+    ownership is attached directly rather than driven through `.start()` —
+    there is no `PipelineSpec` to re-confirm against, only a process already
+    running. `AdoptedPopen` stands in for the real `subprocess.Popen` handle
+    we can never have for a non-child pid. The encode-ledger reservation this
+    process would have held is not retroactively reclaimed here — it was
+    never released either, so a hardware encoder slot can go untracked until
+    this record is stopped; acceptable for a conservative recovery path with
+    no persisted domain state to size the reservation from.
+    """
+    consumer = RecordConsumer(
+        adopted.identity,
+        supervisor=state.supervisor,
+        ledger=state.ledger,
+        confirmer=state.confirmer,
+        platform=state.platform,
+        is_publisher_running=state.is_publisher_running,
+        is_capture_card_recovering=state.is_capture_card_recovering,
+        events=state.events,
+    )
+    process = ManagedProcess(
+        identity=adopted.identity, pid=adopted.pid, pgid=adopted.pgid, popen=AdoptedPopen(adopted.pid)
+    )
+    state.supervisor.processes[adopted.identity] = process
+    consumer.process = process
+    consumer.pgid = adopted.pgid
+    consumer.output_path = adopted.output_path
+    consumer.state = ConsumerState.RUNNING
+    consumer.adopted = True
+    consumer._start_exit_watcher(process)
+    return consumer
+
+
 async def _run_startup(app: FastAPI) -> None:
     """construct state → recover exact orphans → (boot preflight) → start bound
     publishers/watchdog → serve (A-14 Step 4). Every step is a no-op off-board
@@ -145,6 +181,12 @@ async def _run_startup(app: FastAPI) -> None:
         state.runtime_dir,
         proc_scanner=state.proc_scanner,
     )
+    # 1b. Reconstruct ownership of every adopted *record* — the only kind
+    # core-api expects to survive a manager restart untouched.
+    for adopted in state.recovery.adopted:
+        if adopted.kind != "record":
+            continue
+        state.consumers[adopted.identity] = _reconstruct_adopted_record(state, adopted)
     # 2. Boot-time preflight gate (board-only; None off-board leaves it unset).
     report = await state.preflight_source()
     if report is not None:
@@ -170,8 +212,9 @@ async def _run_shutdown(app: FastAPI) -> None:
         state.watchdog_task = None
 
     for consumer_id in list(state.consumers):
-        if consumer_id.startswith("record:"):
-            continue  # an adopted/active record is finalized by core-api, not here
+        consumer = state.consumers.get(consumer_id)
+        if getattr(consumer, "adopted", False):
+            continue  # actively adopted record: left running for core-api recovery
         consumer = state.consumers.pop(consumer_id, None)
         if consumer is None:
             continue
@@ -198,7 +241,13 @@ async def lifespan(app: FastAPI):
         await _run_shutdown(app)
 
 
-def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None) -> FastAPI:
+    """`runtime_dir` opts the supervisor into real sidecar I/O (A-REV-007);
+    left `None` (every caller except `create_production_app`, and every
+    existing unit/HTTP-level test) it stays the hermetic default — a fake
+    `popen` redirecting to a real subprocess for Integ-A coverage does not,
+    by itself, imply writing to a real filesystem location.
+    """
     app = FastAPI(title="pipeline-manager", lifespan=lifespan)
     settings = settings or Settings()
     app.state.settings = settings
@@ -208,7 +257,9 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
     app.add_exception_handler(RequestValidationError, _request_validation_handler)
 
     app.state.platform = RK3588Profile()
-    app.state.supervisor = ProcessSupervisor(popen=popen) if popen is not None else ProcessSupervisor()
+    app.state.supervisor = (
+        ProcessSupervisor(popen=popen, runtime_dir=runtime_dir) if popen is not None else ProcessSupervisor()
+    )
     app.state.ledger = EncodeLedger()
     app.state.confirmer = HealthConfirmer()
     app.state.events = EventBroker(
@@ -293,18 +344,17 @@ def create_app(settings: Settings | None = None, *, popen=None) -> FastAPI:
 
 
 def create_production_app(settings: Settings | None = None) -> FastAPI:
-    """The real Uvicorn entrypoint (A-REV-001/A-REV-011): injects a real
-    `Popen` and the real `start_publisher`/`stop_publisher` coordinators
-    behind `create_app`'s seams.
+    """The real Uvicorn entrypoint (A-REV-001/A-REV-011/A-REV-007): injects a
+    real `Popen`, the real `start_publisher`/`stop_publisher` coordinators,
+    and the real sidecar/`proc` adapters behind `create_app`'s seams.
 
-    Only the publisher-lifecycle seams this batch (B2) delivers are wired
-    here. The remaining seams (`proc_scanner`, `expected_processes`,
-    `preflight_source`, `flush_sidecars`, `audio_exec`, `watchdog.probe`)
+    The remaining seams (`preflight_source`, `audio_exec`, `watchdog.probe`)
     stay the hermetic no-op defaults `create_app` sets until their own
-    batches (B4/B6) add real adapters for them — this factory grows
+    batches (B6) add real adapters for them — this factory grows
     incrementally with the remediation plan, it does not jump ahead of it.
     """
-    app = create_app(settings, popen=subprocess.Popen)
+    settings = settings or Settings()
+    app = create_app(settings, popen=subprocess.Popen, runtime_dir=settings.runtime_dir)
     app.state.start_publisher = partial(
         real_start_publisher,
         supervisor=app.state.supervisor,
@@ -316,4 +366,6 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         supervisor=app.state.supervisor,
         events=app.state.events,
     )
+    app.state.proc_scanner = real_proc_scanner
+    app.state.expected_processes = partial(real_expected_processes, settings.runtime_dir)
     return app

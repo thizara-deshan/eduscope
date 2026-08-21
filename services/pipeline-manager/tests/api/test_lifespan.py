@@ -67,7 +67,10 @@ async def test_startup_publishes_preflight_check_when_source_present() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shutdown_stops_aux_but_leaves_adopted_record() -> None:
+async def test_shutdown_stops_aux_and_a_non_adopted_record() -> None:
+    """Only an *actively adopted* record survives shutdown untouched — a
+    record this instance itself spawned (not reconstructed from a prior
+    incarnation's sidecar) is stopped like any other consumer (A-REV-007)."""
     app = _app()
     live = _FakeConsumer()
     record = _FakeConsumer()
@@ -79,5 +82,19 @@ async def test_shutdown_stops_aux_but_leaves_adopted_record() -> None:
 
     assert live.stopped is True
     assert "live:1" not in app.state.consumers
-    assert record.stopped is False  # an active record is left for core-api recovery
+    assert record.stopped is True
+    assert "record:1" not in app.state.consumers
+
+
+@pytest.mark.asyncio
+async def test_shutdown_leaves_an_actively_adopted_record_untouched() -> None:
+    app = _app()
+    adopted_record = _FakeConsumer()
+    adopted_record.adopted = True
+    app.state.consumers["record:1"] = adopted_record
+
+    await _run_startup(app)
+    await _run_shutdown(app)
+
+    assert adopted_record.stopped is False  # left running for core-api recovery
     assert "record:1" in app.state.consumers

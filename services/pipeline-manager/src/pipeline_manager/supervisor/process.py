@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import subprocess
+import time
+from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Literal
 
 from ..pipelines.builder import PipelineSpec
+from .recovery import Sidecar, SIDECAR_MARKER, argv_hash, real_proc_scanner, remove_sidecar, write_sidecar
 
 ObservationKind = Literal["PLAYING", "EOS", "ERROR", "QOS"]
 
@@ -52,16 +57,75 @@ class ManagedProcess:
 PopenFactory = Callable[..., subprocess.Popen]
 
 
+class AdoptedPopen:
+    """Duck-types the subset of `subprocess.Popen` the rest of this module
+    relies on, for a pid this instance never forked and therefore can never
+    `os.waitpid` on directly (A-REV-007). Liveness is polled via `os.kill(pid,
+    0)` instead of reaped; no pipes exist to a process we didn't spawn, so
+    stdin/stdout/stderr stay `None` (no reader threads, no EOS-line capture —
+    a stop of an adopted child always falls through to the SIGKILL deadline).
+    """
+
+    def __init__(self, pid: int, poll_interval: float = 0.2) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+        self.stdin = None
+        self.stdout = None
+        self.stderr = None
+        self._poll_interval = poll_interval
+
+    def _is_alive(self) -> bool:
+        try:
+            os.kill(self.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # exists, just not signalable by us
+        return True
+
+    def poll(self) -> int | None:
+        if self.returncode is None and not self._is_alive():
+            self.returncode = 0  # the real exit code is unknowable for a non-child pid
+        return self.returncode
+
+    def wait(self, timeout: float | None = None) -> int:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self.poll() is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(cmd=f"pid {self.pid}", timeout=timeout)
+            time.sleep(self._poll_interval)
+        return self.returncode
+
+    def kill(self) -> None:
+        with suppress(ProcessLookupError):
+            os.kill(self.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+
+    def terminate(self) -> None:
+        with suppress(ProcessLookupError):
+            os.kill(self.pid, signal.SIGTERM)
+
+
 class ProcessSupervisor:
     """Argv-only child ownership (rule: shell=False, never a shell string).
 
     `popen` is injected so tests can spy on the exact spawn arguments without
     depending on POSIX process-group behavior being available on the dev host.
+    `runtime_dir` is the sidecar-ownership seam (A-REV-007): `None` (the
+    hermetic default, kept for every unit test and for `create_app` without a
+    production factory) skips sidecar I/O entirely; a real path makes writing
+    one at spawn and removing it at `forget()` part of owning a child, not a
+    separate bolt-on step a caller can forget.
     """
 
-    def __init__(self, popen: PopenFactory = subprocess.Popen, max_raw_lines: int = MAX_RAW_LINES) -> None:
+    def __init__(
+        self,
+        popen: PopenFactory = subprocess.Popen,
+        max_raw_lines: int = MAX_RAW_LINES,
+        runtime_dir: Path | None = None,
+    ) -> None:
         self._popen = popen
         self._max_raw_lines = max_raw_lines
+        self._runtime_dir = runtime_dir
         self.processes: dict[str, ManagedProcess] = {}
 
     async def start(self, spec: PipelineSpec, identity: str) -> ManagedProcess:
@@ -86,14 +150,40 @@ class ProcessSupervisor:
             if stream is not None:
                 process.reader_futures.append(loop.run_in_executor(None, self._read_stream, stream, process, loop))
 
+        self._write_sidecar(spec, process)
         return process
+
+    def _write_sidecar(self, spec: PipelineSpec, process: ManagedProcess) -> None:
+        if self._runtime_dir is None:
+            return
+        stat = real_proc_scanner(process.pid)
+        if stat is None:
+            return  # the child already exited between spawn and this read
+        write_sidecar(
+            self._runtime_dir,
+            Sidecar(
+                marker=SIDECAR_MARKER,
+                identity=process.identity,
+                pid=process.pid,
+                pgid=process.pgid,
+                argv_hash=argv_hash(spec.argv),
+                kind=process.identity.split(":", 1)[0],
+                output_path=spec.outputs[0] if spec.outputs else None,
+                started_at_ms=int(time.time() * 1000),
+                proc_start_ticks=stat.start_time_ticks,
+            ),
+        )
 
     def forget(self, identity: str) -> None:
         """Drop the registry entry for a child that has reached a terminal
         state (stopped, crashed, or rolled back after a failed confirm) — a
         dead identity must never linger and read as still-owned (A-REV-004/005).
+        Also removes its sidecar, if any: ownership ending here is exactly
+        the signal that identity is no longer a valid adoption candidate.
         """
         self.processes.pop(identity, None)
+        if self._runtime_dir is not None:
+            remove_sidecar(self._runtime_dir, identity)
 
     def _read_stream(self, stream, process: ManagedProcess, loop: asyncio.AbstractEventLoop) -> None:
         for line in iter(stream.readline, ""):

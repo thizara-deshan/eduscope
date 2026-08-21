@@ -102,6 +102,6 @@ async def stop_publisher(
         return
 
     await stop_process(process, STOP_DEADLINE_SECONDS, send_signal=send_signal)
-    supervisor.processes.pop(controller.identity, None)
+    supervisor.forget(controller.identity)
     event = controller.mark_offline()
     await events.publish(f"evt.pm.publisher.{event.kind}", _event_payload(event))

@@ -61,6 +61,9 @@ class RecordConsumer(_ChildOwner):
         self.truncated = False
         self.restarts = 0
         self.process: ManagedProcess | None = None
+        # Set True only by startup's orphan reconstruction (A-REV-007) — a
+        # record this instance spawned itself is never adopted.
+        self.adopted = False
         self._init_ownership()
 
     async def start(self, request: RecordRequest) -> ConsumerEvent:
