@@ -79,6 +79,8 @@ import { readQuizDeviceCredential } from './modules/quiz/sync/rest.js';
 import { QuizSyncStream } from './modules/quiz/sync/stream.js';
 import { PanelHub, registerPanelHub } from './modules/ws/panel-hub.js';
 import { PreviewBroker, registerPreviewBroker } from './modules/ws/preview.js';
+import { LogStore } from './modules/observability/store.js';
+import { registerObservabilityRoutes } from './modules/observability/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -102,6 +104,7 @@ declare module 'fastify' {
     aiCountdown: AiCountdown;
     panelHub: PanelHub;
     previewBroker: PreviewBroker;
+    logStore: LogStore;
   }
   interface FastifyContextConfig {
     operationId?: string;
@@ -180,6 +183,36 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const bus = new DomainBus();
   app.decorate('bus', bus);
+
+  const logStore = new LogStore({
+    get db(): DrizzleDb {
+      return app.db;
+    },
+    clock,
+    ids,
+    bus,
+    maxRows: config.logMaxRows,
+    maxAgeDays: config.logMaxAgeDays,
+  });
+  app.decorate('logStore', logStore);
+
+  // INV-LE-2 (design/core-api.md §12): mirrors every user-visible recording
+  // failure into the curated log store — the canonical machine-failure
+  // surface this task closes the loop on (B-05/B-06's R-06/R-07 error states
+  // already carry `errorCode`/`errorMessage`; nothing wrote them to AD-7
+  // before this store existed).
+  bus.subscribe('recording.state', (payload) => {
+    if (payload.errorCode === null) return;
+    logStore.write({
+      level: 'ERROR',
+      category: 'Session',
+      service: 'core-api',
+      message: payload.errorMessage ?? payload.errorCode,
+      context: { errorCode: payload.errorCode },
+      sessionId: payload.sessionId,
+      userId: payload.ownerUserId,
+    });
+  });
 
   const helperClient = new HelperClient({ transport: options.helperTransport ?? new UnixHelperTransport(config.helperSocketPath), clock });
   app.decorate('helperClient', helperClient);
@@ -741,6 +774,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   lifecycle.register(previewBroker);
   app.decorate('previewBroker', previewBroker);
   registerPreviewBroker(app, authService, previewBroker);
+
+  registerObservabilityRoutes(app, authService, logStore, scopedSubscriptions);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();

@@ -15,6 +15,9 @@ export interface CoreConfig {
   secretboxKey: string;
   accessTokenTtlSec: number;
   refreshTokenTtlSec: number;
+  /** AD-7 product-log rotation policy (design/core-api.md §12) — a deployment value, never product-visible config. */
+  logMaxRows: number;
+  logMaxAgeDays: number;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -35,6 +38,8 @@ const rawEnvSchema = z.object({
   CORE_API_SECRETBOX_KEY: z.string().default('dev-secretbox-key'),
   CORE_API_ACCESS_TTL_SEC: z.coerce.number().int().positive().default(600),
   CORE_API_REFRESH_TTL_SEC: z.coerce.number().int().positive().default(2_592_000),
+  EDUSCOPE_CORE_LOG_MAX_ROWS: z.coerce.number().int().positive().default(50_000),
+  EDUSCOPE_CORE_LOG_MAX_AGE_DAYS: z.coerce.number().int().positive().default(90),
 });
 
 /** Validates and shapes process env into `CoreConfig`. Throws on an invalid or unsafe value. */
@@ -75,5 +80,7 @@ export function loadConfig(env: Record<string, string | undefined>): CoreConfig 
     secretboxKey: raw.CORE_API_SECRETBOX_KEY,
     accessTokenTtlSec: raw.CORE_API_ACCESS_TTL_SEC,
     refreshTokenTtlSec: raw.CORE_API_REFRESH_TTL_SEC,
+    logMaxRows: raw.EDUSCOPE_CORE_LOG_MAX_ROWS,
+    logMaxAgeDays: raw.EDUSCOPE_CORE_LOG_MAX_AGE_DAYS,
   };
 }
