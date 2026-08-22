@@ -35,17 +35,17 @@
 - DR-13/DM-P1/DM-P2 remain contract-silent and hard-block nothing in v1. C writes slide artifacts only under the parent session path and asserts no retention period.
 - Systemd unit ownership remains F-05. C supplies importable production factories/console entry points; this plan does not add deployment units or widen F's scope.
 
-### Blocking execution gate discovered from current code
+### Blocking execution gate discovered from current code — CLOSED
 
-The master Workstream C section was updated in this planning run. Do not execute C-01 until reviewers close the new **C execution gate** with an approved remediation to the already-executed A/B workstreams:
+Remediated 2026-08-23 on branch `fix/c-execution-gate` (one commit per item, each red→green; PM's Python suite, core-api's Vitest suite, and the shared/api-client mock contract regressions are all green). C-01 and later C tasks may now execute.
 
-1. A's snapshot route must securely accept the approved tmpfs output `/run/eduscope/slides/<sessionId>/current.png`. Current `services/pipeline-manager/src/pipeline_manager/api/routes.py:55` delegates snapshot validation to the recordings-root-only boundary, which rejects that path.
-2. B must start pipeline-manager's snapshot consumer on recording, stop it on pause/stop, restart it on resume, and test those calls. Current `services/core-api/src/modules/ai/ingest.ts:105` computes the source path and starts `slide-service`, but no core-api source calls `/consumers/snapshot/start` or `/consumers/snapshot/stop`.
-3. B's STT/slide SSE ingest must reconnect, read `/status`, and re-post or reconcile the active session after a C process restart. The executed `AiIngest` opens one stream and only logs when it ends, despite B-29's planned `/status` resync.
-4. B must supply a ratified session-time anchor in the slide start request so C can compute `evt.slide.captured.offsetMs` relative to `LectureSession.startedAt`; the current `{sessionId,imageDir,sourcePath}` request has no such value.
-5. B must expose the bearer-protected localhost `POST /internal/logs` sink required by `docs/design/core-api.md` §12 so C's `ProductLogClient` can write curated rows through B's existing `LogStore` with `service="ai"` and the approved subservice context.
+1. **Closed.** A's snapshot route now accepts the approved tmpfs output `/run/eduscope/slides/<sessionId>/current.png` via a new `resolve_snapshot_output_path` (`services/pipeline-manager/src/pipeline_manager/models.py`), used by `_validate_snapshot_path` (`api/routes.py`) alongside the existing recordings-root boundary. The tmpfs branch keeps the same symlink-aware real-path containment check as `resolve_output_path`; `Settings.runtime_root` (default `/run/eduscope`) supplies the root. Tests: tmpfs path accepted, outside-both-roots rejected, symlink escape rejected (`tests/api/test_output_path_boundary.py`).
+2. **Closed.** B now calls pipeline-manager's snapshot consumer through `PipelineManagerClient.startSnapshotConsumer`/`stopSnapshotConsumer` (`services/core-api/src/modules/recording/pm/client.ts`), wired into `AiIngest` (`services/core-api/src/modules/ai/ingest.ts`): start on a fresh recording start and on resume, stop on pause and on session end. Tests: `services/core-api/test/ai/ingest.test.ts`.
+3. **Closed.** `AiIngest`'s stt/slide SSE consumers now run in a reconnect-with-backoff loop (`#runSttLoop`/`#runSlideLoop`): after a stream ends, wait `reconnectBackoffMs` (prod 2s, test-injectable), `GET /status`, and either reopen silently (session still named — a blip) or re-POST start with a freshly rebased anchor (session lost — a restart) before reopening. Neither path replays or duplicates a persisted row. Tests: `services/core-api/test/ai/ingest.test.ts` (blip reconnect, stt restart, slide restart).
+4. **Closed. RATIFIED DECISION:** the slide start request gained `anchorOffsetMs` — a duration in ms, symmetric with `SttClient`'s existing start/resume anchor, **not** `sessionStartedAt`. `SlideClient.startSession` takes it as a fourth argument; a new `SlideClient.resumeSession` (`POST /sessions/{id}/resume {anchorOffsetMs}`) mirrors `SttClient.resumeSession` and is called by `AiIngest` alongside STT's own resume. Slide-service's own pause/resume semantics are unchanged (pipeline-manager's snapshot-consumer stop is still the pause, §2.3 below) — only the anchor used to compute `offsetMs` is rebased. C-05 Step 5 (offset formula, settings) should be implemented against this shape when C executes. Tests: `services/core-api/test/ai/ingest.test.ts`.
+5. **Closed.** B exposes `POST /internal/logs` (`services/core-api/src/modules/observability/routes.ts`, `registerInternalLogRoutes`): rejects non-loopback remote addresses, requires the shared internal bearer (constant-time compare), rejects secret-shaped context keys (`token|secret|password|prompt|transcript|llmendpoint`, matching `eduscope_ai_common.configure_logging`'s denylist below), and writes through the existing `LogStore` with `service` from the request body (`"ai"` for C) and `context.subservice`. Tests: `services/core-api/test/observability/internal-logs.test.ts`.
 
-These are prerequisite corrections, not C tasks. If reviewers choose a different resolution, update the master and this plan before execution; do not hide the change in C code.
+These were prerequisite corrections, not C tasks — none of C's ten-task ownership changed.
 
 ### Repository and test conventions
 
@@ -647,7 +647,7 @@ git commit -m "feat(ai): deduplicate watched slide snapshots"
 
 **Interfaces:**
 - Consumes: C-04 watcher/candidate machine; corrected B lifecycle and paths.
-- Produces: `create_app(settings=None, *, watcher_factory=None, ocr_engine=None) -> FastAPI`; `POST /sessions`, `DELETE /sessions/{id}`, `GET /status`, `GET /events`, `GET /healthz`; SSE `evt.slide.captured`.
+- Produces: `create_app(settings=None, *, watcher_factory=None, ocr_engine=None) -> FastAPI`; `POST /sessions`, `POST /sessions/{id}/resume`, `DELETE /sessions/{id}`, `GET /status`, `GET /events`, `GET /healthz`; SSE `evt.slide.captured`.
 
 - [ ] **Step 1: Write failing OCR/copy/session/restart/API/fixture tests**
 
@@ -680,6 +680,11 @@ class StartSlideSessionRequest(BaseModel):
     sessionId: str = Field(min_length=1)
     imageDir: Path
     sourcePath: Path
+    anchorOffsetMs: int = Field(ge=0)
+
+class ResumeSlideSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    anchorOffsetMs: int = Field(ge=0)
 
 class SlideStatus(BaseModel):
     state: Literal["idle", "watching"]
@@ -701,9 +706,9 @@ For each finalized candidate: allocate the next ordinal under the controller loc
 {"sessionId":"01J00000000000000000000000","capturedAt":"2026-08-14T09:12:03.000Z","offsetMs":732000,"imagePath":"/media/eduscope/recordings/sessions/01J00000000000000000000000/slides/slide-014.png","ocrText":"Second Law of Thermodynamics","dedupeHash":"c3a1f0aa","isSlideChange":true}
 ```
 
-Publish it directly as SSE data under `evt.slide.captured`. Offset comes from `(observed_at - session_started_at)` only if B supplies `sessionStartedAt`; current B does not. Therefore extend the internal `POST /sessions` request during the C execution gate remediation to carry `anchorOffsetMs` or `sessionStartedAt`, update the master/plan if reviewers pick one, and do not infer offset from process start. Until that gate choice is ratified, implementation of this step is blocked.
+Publish it directly as SSE data under `evt.slide.captured`. Offset is computed from an anchor rather than inferred from process start. **Ratified (C execution gate item 4, closed 2026-08-23):** B's `POST /sessions` request now carries `anchorOffsetMs` — a duration in ms, symmetric with STT's `anchorOffsetMs`, not `sessionStartedAt` — and a new `POST /sessions/{sessionId}/resume {anchorOffsetMs}` (mirroring STT's resume) rebases it across a pause. Compute `offsetMs` as `anchorOffsetMs + elapsed_ms_since_the_last_start_or_resume_call`, the same shape STT already uses server-side, not `observed_at - session_started_at`.
 
-After ratification, settings use prefix `EDUSCOPE_SLIDE_` and defaults `127.0.0.1:7102`, runtime root `/run/eduscope`, recordings root `/media/eduscope/recordings`, pHash threshold 10, poll interval 1 second, OCR queue 4. `/healthz` is public; all other routes use C-01 bearer.
+Settings use prefix `EDUSCOPE_SLIDE_` and defaults `127.0.0.1:7102`, runtime root `/run/eduscope`, recordings root `/media/eduscope/recordings`, pHash threshold 10, poll interval 1 second, OCR queue 4. `/healthz` is public; all other routes use C-01 bearer.
 
 - [ ] **Step 6: Prove live snapshot, pause, stop, and restart behavior**
 
