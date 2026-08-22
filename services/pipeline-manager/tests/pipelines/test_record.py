@@ -184,6 +184,54 @@ class TestEarlyRefusal:
             LayoutPresetId("not-a-real-preset")
 
 
+<<<<<<< HEAD
+class TestEffectiveEncodeProfile:
+    """KEEP B-56 gate correction (2026-08-18): a per-channel encoder override
+    reaches the next PM start and passthrough/other channels stay unaffected."""
+
+    def test_composite_override_reaches_encoder_argv(self) -> None:
+        req = RecordRequest(
+            preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT,
+            video_bitrate_bps=5_500_000, fps=24, gop=45, rate_control="vbr", audio_bitrate_bps=96_000,
+        )
+        spec = build_record(req, RK3588Profile())
+        assert "bps=5500000" in spec.argv
+        assert "rc-mode=vbr" in spec.argv
+        assert "gop=45" in spec.argv
+        assert "bitrate=96000" in spec.argv
+
+    def test_composite_without_override_keeps_defaults(self) -> None:
+        req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT)
+        spec = build_record(req, RK3588Profile())
+        assert "bps=4000000" in spec.argv
+        assert "rc-mode=cbr" in spec.argv
+        assert "gop=30" in spec.argv
+
+    def test_single_camera_passthrough_ignores_override(self) -> None:
+        req = RecordRequest(
+            preset=LayoutPresetId.CAM_1, output_path=OUT,
+            video_bitrate_bps=7_000_000, gop=90, rate_control="vbr",
+        )
+        spec = build_record(req, RK3588Profile())
+        assert "mpph264enc" not in spec.argv
+        assert spec.encode_slots == 0
+
+    def test_local_record_override_does_not_leak_into_default_live_profile(self) -> None:
+        from pipeline_manager.pipelines.live import LiveRequest, build_live
+
+        record_spec = build_record(
+            RecordRequest(
+                preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT,
+                video_bitrate_bps=7_500_000, gop=90, rate_control="vbr",
+            ),
+            RK3588Profile(),
+        )
+        live_spec = build_live(LiveRequest(preset=LayoutPresetId.CAM_1, stream_key="bench"), RK3588Profile())
+
+        assert "bps=7500000" in record_spec.argv
+        assert "bps=7500000" not in live_spec.argv
+        assert "gop=60" in live_spec.argv  # live default (unaffected by the record override)
+=======
 class TestEffectiveFps:
     """A-REV-014: `RECORD_COMPOSITE`'s effective fps must reach both the
     per-tile normalization caps and the composited canvas caps — not just
@@ -204,3 +252,4 @@ class TestEffectiveFps:
         spec = build_record(req, RK3588Profile())
         assert spec.argv.count("video/x-raw,framerate=24/1") == 2  # once per tile
         assert "video/x-raw,width=1920,height=1080,framerate=24/1" in spec.argv
+>>>>>>> main

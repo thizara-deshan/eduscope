@@ -343,9 +343,24 @@ class EncodeProfile:
 | `passthrough` | — (no encode) | — | mpegts | single-camera `record` | `rec_cam1.sh` |
 | `thumbnail` | *bench* (low) | *bench* | WebRTC | `thumbnails` | new (A-17) |
 
-Only `bitrate`, per-stream `framerate`, and the ratio are user/knob-facing (B-56); the
-dead legacy knobs (`resolution` mapped-but-unused, `profile`/`fformat` hardcoded) are
-**not** carried as controls.
+`bitrate`, per-stream `framerate`, `gop`, `rateControl`, `audioBitrate`, and the ratio
+are user/knob-facing (B-56); the dead legacy knobs (`resolution` mapped-but-unused,
+`h264Profile`/`fformat` hardcoded) are **not** carried as controls.
+
+> **Encoder-profile ingress correction (2026-08-18 gate, resolved).** JIT planning
+> for B-24 found that `RecordStartBody`/`LiveStartBody` and `RecordRequest`/`LiveRequest`
+> carried no effective-profile fields, and `get_profile(...)` had no overrides for
+> `gop`, `rateControl`, or `audioBitrateBps` — only `videoBitrateBps`/`fps`/`container`
+> were wired. Record/live start requests now carry
+> `{videoBitrateBps, fps, gop, rateControl, audioBitrateBps}` (all optional); the
+> `record`/`live` builders apply whichever are present to the composite/re-encode
+> `EncodeProfile` immediately before build. Passthrough profiles never receive
+> overrides — single-camera record passthrough and the separate-files camera leg are
+> unaffected by design. Each channel resolves its own overrides independently: a
+> streaming override does not change the local/default record profile and vice versa.
+> B converts the public v1 Kbps fields to Bps at the core-api boundary before calling
+> PM. This changes no public v1 contract element, task, contract owner, or KEEP
+> assignment.
 
 ### 2.3 The platform plug (second platform = an add, not a rewrite)
 
@@ -580,8 +595,8 @@ and consumed only by core-api; it owns no public v1 operation.
 
 | Method / path | Body (validated by pydantic) | Notes |
 |---|---|---|
-| `POST /consumers/record` | `{preset, ratioA?, ratioB?, profile, outputPath, separate?:bool}` | session-lifetime; `outputPath` given by core-api (B-02) |
-| `POST /consumers/live` | `{preset, ratioA?, ratioB?, streamKey, profile}` | preflight first (CH-01/02); PC-inclusive presets only |
+| `POST /consumers/record` | `{preset, ratioA?, ratioB?, outputPath?, outputPaths?, videoBitrateBps?, fps?, gop?, rateControl?, audioBitrateBps?}` | session-lifetime; `outputPath`/`outputPaths` given by core-api (B-02); the five encode fields are optional per-channel overrides (§2.2 correction) applied to the composite/re-encode profile only — passthrough is unaffected |
+| `POST /consumers/live` | `{preset, ratioA?, ratioB?, streamKey, videoBitrateBps?, fps?, gop?, rateControl?, audioBitrateBps?}` | preflight first (CH-01/02); PC-inclusive presets only; same optional encode-override fields as `record` |
 | `POST /consumers/meeting` | `{preset, ratioA?, ratioB?}` | HDMI-out #2, embeds mic; **camera-only presets only** |
 | `POST /consumers/projector` | `{mode:"passthrough"\|"question", questionPayload?}` | HDMI-out #1; `mode` switch is not a restart (A-22) |
 | `POST /consumers/thumbnails/start` | `{sources?:[role]}` | WebRTC previews (A-17) |

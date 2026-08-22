@@ -27,6 +27,26 @@ class RecordRequest:
     ratio_b: int | None = None
     output_path: str | None = None
     output_paths: Mapping[str, str] | None = None
+    video_bitrate_bps: int | None = None
+    fps: int | None = None
+    gop: int | None = None
+    rate_control: str | None = None
+    audio_bitrate_bps: int | None = None
+
+
+def _profile_overrides(req: RecordRequest) -> Mapping[str, object] | None:
+    changes: dict[str, object] = {}
+    if req.video_bitrate_bps is not None:
+        changes["video_bitrate_bps"] = req.video_bitrate_bps
+    if req.fps is not None:
+        changes["fps"] = req.fps
+    if req.gop is not None:
+        changes["gop"] = req.gop
+    if req.rate_control is not None:
+        changes["rc_mode"] = req.rate_control
+    if req.audio_bitrate_bps is not None:
+        changes["audio_bitrate_bps"] = req.audio_bitrate_bps
+    return changes or None
 
 
 def build_record(
@@ -66,7 +86,7 @@ def _build_composite_or_raw(
     is_role_healthy: Callable[[SourceRole], bool] = lambda role: True,
 ) -> PipelineSpec:
     output_path = _require_output_path(req)
-    profile = get_profile(ProfileKind.RECORD_COMPOSITE)
+    profile = get_profile(ProfileKind.RECORD_COMPOSITE, _profile_overrides(req))
     builder = PipelineBuilder()
     multi_tile = len(layout.tiles) > 1
 
@@ -162,7 +182,7 @@ def _build_separate(req: RecordRequest, layout: LayoutPreset, platform: Platform
     except KeyError as exc:
         raise UnsupportedPipeline(f"missing outputPath for stream key {exc}") from exc
 
-    reencode_profile = get_profile(ProfileKind.RECORD_USB_REENCODE)
+    reencode_profile = get_profile(ProfileKind.RECORD_USB_REENCODE, _profile_overrides(req))
     passthrough_profile = get_profile(ProfileKind.PASSTHROUGH)
     builder = PipelineBuilder()
 

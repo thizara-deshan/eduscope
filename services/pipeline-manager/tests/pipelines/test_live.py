@@ -82,6 +82,43 @@ class TestStreamKeyValidation:
         assert "location=rtmp://127.0.0.1:1935/live/bench live=1" in spec.argv
 
 
+<<<<<<< HEAD
+class TestEffectiveEncodeProfile:
+    """KEEP B-56 gate correction (2026-08-18): the streaming channel's override
+    reaches the next live-start profile while the local/default record profile
+    is untouched — B's per-channel effective-profile resolution depends on
+    this PM-side isolation."""
+
+    def test_live_composite_override_reaches_encoder_argv(self) -> None:
+        req = LiveRequest(
+            preset=LayoutPresetId.FIFTY_FIFTY, stream_key="bench", ratio_a=50, ratio_b=50,
+            video_bitrate_bps=6_000_000, fps=25, gop=50, rate_control="vbr", audio_bitrate_bps=112_000,
+        )
+        spec = build_live(req, RK3588Profile())
+        assert "bps=6000000" in spec.argv
+        assert "rc-mode=vbr" in spec.argv
+        assert "gop=50" in spec.argv
+        assert "bitrate=112000" in spec.argv
+
+    def test_streaming_override_does_not_change_default_local_record_profile(self) -> None:
+        from pipeline_manager.pipelines.record import RecordRequest, build_record
+
+        live_spec = build_live(
+            LiveRequest(
+                preset=LayoutPresetId.CAM_1, stream_key="bench",
+                video_bitrate_bps=8_000_000, gop=90, rate_control="vbr",
+            ),
+            RK3588Profile(),
+        )
+        record_spec = build_record(
+            RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path="/media/eduscope/recordings/out.ts"),
+            RK3588Profile(),
+        )
+
+        assert "bps=8000000" in live_spec.argv
+        assert "bps=8000000" not in record_spec.argv
+        assert "gop=30" in record_spec.argv  # record default, untouched by the live override
+=======
 class TestEffectiveFps:
     """A-REV-014: `LIVE_COMPOSITE`'s effective fps must reach both the
     per-tile normalization caps and the composited canvas caps — not just
@@ -111,3 +148,4 @@ class TestEffectiveFps:
             RK3588Profile(),
         )
         assert "video/x-raw,width=1920,height=1080,framerate=24/1" in spec.argv
+>>>>>>> main

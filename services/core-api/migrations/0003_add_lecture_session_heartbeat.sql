@@ -1,0 +1,1 @@
+ALTER TABLE `lecture_sessions` ADD `last_heartbeat_at` text;

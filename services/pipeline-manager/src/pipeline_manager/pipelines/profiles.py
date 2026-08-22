@@ -9,6 +9,7 @@ BITRATE_MIN_BPS = 2_000_000
 BITRATE_MAX_BPS = 8_000_000
 
 _CONTAINERS = ("mpegts", "flv", "none")
+_RATE_CONTROL_MODES = ("cbr", "vbr")
 
 
 class ProfileKind(str, Enum):
@@ -119,5 +120,23 @@ def get_profile(kind: ProfileKind, overrides: Mapping[str, object] | None = None
         if container not in _CONTAINERS:
             raise ValueError(f"unsupported container: {container!r}")
         changes["container"] = container
+    # KEEP B-56 correction (2026-08-18 gate) — gop/rateControl/audioBitrateBps
+    # join bitrate/fps as editable knobs; passthrough callers never pass
+    # overrides, so the remux profile is unaffected by design.
+    if "gop" in overrides:
+        gop = overrides["gop"]
+        if not isinstance(gop, int) or gop <= 0:
+            raise ValueError("gop override must be a positive integer")
+        changes["gop"] = gop
+    if "rc_mode" in overrides:
+        rc_mode = overrides["rc_mode"]
+        if rc_mode not in _RATE_CONTROL_MODES:
+            raise ValueError(f"unsupported rateControl: {rc_mode!r}")
+        changes["rc_mode"] = rc_mode
+    if "audio_bitrate_bps" in overrides:
+        audio_bitrate = overrides["audio_bitrate_bps"]
+        if not isinstance(audio_bitrate, int) or audio_bitrate <= 0:
+            raise ValueError("audioBitrateBps override must be a positive integer")
+        changes["audio_bitrate_bps"] = audio_bitrate
 
     return replace(base, **changes)

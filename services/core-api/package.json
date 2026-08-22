@@ -1,0 +1,39 @@
+{
+  "name": "@eduscope/core-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:contract": "vitest run test/contract",
+    "gate": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@eduscope/shared": "workspace:*",
+    "@fastify/jwt": "^9",
+    "@fastify/multipart": "^9",
+    "@fastify/websocket": "^11",
+    "argon2": "^0.44",
+    "better-sqlite3": "^12",
+    "drizzle-orm": "^0.44",
+    "exceljs": "^4.4",
+    "fastify": "^5",
+    "libsodium-wrappers": "^0.7",
+    "ulidx": "^2.4",
+    "ws": "^8",
+    "zod": "^3.23"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6",
+    "@types/libsodium-wrappers": "^0.7",
+    "@types/node": "^22.9",
+    "@types/ws": "^8.5",
+    "drizzle-kit": "^0.31",
+    "tsx": "^4.20",
+    "typescript": "^5.6",
+    "vitest": "^3"
+  }
+}

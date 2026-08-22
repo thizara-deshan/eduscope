@@ -1,0 +1,83 @@
+import type { AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UsbVolumesPayload } from '@eduscope/shared';
+import type { PmStatus, PmThumbnailAnswerData, PmThumbnailErrorData, PmThumbnailIceData } from '../modules/recording/pm/types.js';
+
+/**
+ * The in-process typed event bus modules publish domain transitions to and
+ * the WS hub (and other machines) subscribe from (design/core-api.md §1,
+ * "Module dependency rule"). No module calls another module's route handler
+ * directly — this bus, plus the DB, is the only cross-module channel.
+ *
+ * Event names reuse the `evt.pm.*` vocabulary from state-machines.md verbatim
+ * so a transition table row and a `subscribe()` call cite the same string.
+ */
+export interface CoreDomainEvents {
+  'evt.pm.consumer.running': { consumerId: string; pgid: number | null };
+  'evt.pm.consumer.failed': { consumerId: string; code: string; meta?: Record<string, unknown> };
+  'evt.pm.consumer.eos': { consumerId: string };
+  'evt.pm.consumer.exited': { consumerId: string; code: string };
+  /** B-36 preview signaling — internal, forward-declared ahead of A's Wave-8 wiring (see `pm/types.ts` doc comment). */
+  'evt.pm.thumbnail.answer': PmThumbnailAnswerData;
+  'evt.pm.thumbnail.ice': PmThumbnailIceData;
+  'evt.pm.thumbnail.error': PmThumbnailErrorData;
+  'pm.status.resynced': PmStatus;
+  /** Public panel/admin events (contracts/events.md §2) — published here after their owning DB transaction commits; B-35's WS hub fans these out. */
+  'recording.state': RecordingStatePayload;
+  'recording.segment': RecordingSegmentPayload;
+  'recording.artifact': RecordingArtifactPayload;
+  'channel.state': ChannelStatePayload;
+  'sources.status': SourcesStatusPayload;
+  'audio.levels': AudioLevelsPayload;
+  'audio.control': AudioControlPayload;
+  'export.job': ExportJobPayload;
+  'usb.volumes': UsbVolumesPayload;
+  'storage.status': StorageStatusPayload;
+  'device.health': DeviceHealthPayload;
+  'system.alert': SystemAlert;
+  'firmware.state': FirmwareUpdate;
+  'ai.countdown': AiCountdownPayload;
+  'ai.set': AiSetPayload;
+  'ai.question': AiQuestionPayload;
+  'quiz.publication': QuizPublicationPayload;
+  'quiz.session': QuizSessionPayload;
+  'quiz.responses': QuizResponsesPayload;
+  /** Internal only (not in contracts/events.md) — machine 1b → machine 3a/3b (B-17), fired exactly once per recording reaching `ready` (RA-03/RA-02, INV-UJ-2). */
+  'artifact.ready': { recordingId: string; sessionId: string };
+  /** Internal only — machine 2a → machine 2b (B-30), fired on Q-02/Q-03 (state-machines.md §3.1) once the countdown decides a generation cycle should start. */
+  'ai.generation.requested': { sessionId: string; trigger: 'countdown' | 'manual'; intervalMinutesAtRequest: 10 | 15 | 20 | 30; requestedAt: string };
+}
+
+export type DomainEventType = keyof CoreDomainEvents;
+
+type Listener<K extends DomainEventType> = (payload: CoreDomainEvents[K]) => void;
+
+/** Unsubscribes the listener it was returned from `subscribe()` for. */
+export type Unsubscribe = () => void;
+
+export class DomainBus {
+  readonly #listeners = new Map<DomainEventType, Set<Listener<DomainEventType>>>();
+
+  publish<K extends DomainEventType>(type: K, payload: CoreDomainEvents[K]): void {
+    const listeners = this.#listeners.get(type);
+    if (!listeners) return;
+    for (const listener of [...listeners]) {
+      (listener as Listener<K>)(payload);
+    }
+  }
+
+  subscribe<K extends DomainEventType>(type: K, listener: Listener<K>): Unsubscribe {
+    let listeners = this.#listeners.get(type);
+    if (!listeners) {
+      listeners = new Set();
+      this.#listeners.set(type, listeners);
+    }
+    listeners.add(listener as Listener<DomainEventType>);
+    return () => {
+      listeners.delete(listener as Listener<DomainEventType>);
+    };
+  }
+
+  /** §6 budget gate (e.g. `audio.levels`, INV-G-7): lets a producer skip work entirely while nothing is subscribed. */
+  listenerCount(type: DomainEventType): number {
+    return this.#listeners.get(type)?.size ?? 0;
+  }
+}
