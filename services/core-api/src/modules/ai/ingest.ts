@@ -12,6 +12,12 @@ export interface AiIngestLogger {
   warn(message: string, meta?: Record<string, unknown>): void;
 }
 
+/** C execution gate item 2 — the pipeline-manager snapshot-consumer boundary AiIngest needs, narrowed from `PipelineManagerClient`. */
+export interface SnapshotConsumerClient {
+  startSnapshotConsumer(outputPath: string): Promise<unknown>;
+  stopSnapshotConsumer(): Promise<void>;
+}
+
 export interface AiIngestDeps {
   db: DrizzleDb;
   clock: Clock;
@@ -19,6 +25,7 @@ export interface AiIngestDeps {
   bus: DomainBus;
   stt: SttClient;
   slide: SlideClient;
+  pm: SnapshotConsumerClient;
   recordingsRoot: string;
   runtimeDir: string;
   /** G-AI-ENABLED (state-machines.md §3.1 Q-01) — same gate machine 2a (countdown.ts) uses; kept as an injected predicate so this module never re-parses the provisioning file. */
@@ -29,6 +36,7 @@ export interface AiIngestDeps {
 interface ActiveSession {
   sessionId: string;
   sseController: AbortController;
+  sourcePath: string;
 }
 
 /**
@@ -39,6 +47,10 @@ interface ActiveSession {
  * this module only cares whether a recording is capturing, not whether AI
  * generation is armed/degraded (a dead LLM never stops STT/slide capture,
  * ai-services.md §3.6).
+ *
+ * Also owns pipeline-manager's snapshot consumer lifecycle (C execution gate
+ * item 2: start on recording start/resume, stop on pause/stop — ai-services.md
+ * §2.1/§2.3, "the manager's consumer stop is the pause").
  */
 export class AiIngest implements LifecycleComponent {
   readonly name = 'ai-ingest';
@@ -69,6 +81,9 @@ export class AiIngest implements LifecycleComponent {
       if (!this.#deps.isAiEnabled()) return;
       if (this.#active && this.#active.sessionId === payload.sessionId && payload.startReason === 'resume') {
         const anchorOffsetMs = payload.recordedDurationMs ?? 0;
+        void this.#deps.pm.startSnapshotConsumer(this.#active.sourcePath).catch((error: unknown) => {
+          this.#deps.logger?.warn('ai ingest: snapshot consumer start failed', { error: describeError(error) });
+        });
         void this.#deps.stt.resumeSession(this.#active.sessionId, anchorOffsetMs).catch((error: unknown) => {
           this.#deps.logger?.warn('ai ingest: stt resume failed', { error: describeError(error) });
         });
@@ -84,6 +99,9 @@ export class AiIngest implements LifecycleComponent {
     if (payload.state === 'paused') {
       if (!this.#active) return;
       const sessionId = this.#active.sessionId;
+      void this.#deps.pm.stopSnapshotConsumer().catch((error: unknown) => {
+        this.#deps.logger?.warn('ai ingest: snapshot consumer stop failed', { error: describeError(error) });
+      });
       void this.#deps.stt.pauseSession(sessionId).catch((error: unknown) => {
         this.#deps.logger?.warn('ai ingest: stt pause failed', { error: describeError(error) });
       });
@@ -100,11 +118,14 @@ export class AiIngest implements LifecycleComponent {
 
   #startFresh(sessionId: string, anchorOffsetMs: number): void {
     const sseController = new AbortController();
-    this.#active = { sessionId, sseController };
+    this.#active = { sessionId, sseController, sourcePath: join(this.#deps.runtimeDir, 'slides', sessionId, 'current.png') };
 
-    const sourcePath = join(this.#deps.runtimeDir, 'slides', sessionId, 'current.png');
+    const sourcePath = this.#active.sourcePath;
     const imageDir = join(this.#deps.recordingsRoot, 'sessions', sessionId, 'slides');
 
+    void this.#deps.pm.startSnapshotConsumer(sourcePath).catch((error: unknown) => {
+      this.#deps.logger?.warn('ai ingest: snapshot consumer start failed', { error: describeError(error) });
+    });
     void this.#deps.stt.startSession(sessionId, anchorOffsetMs).catch((error: unknown) => {
       this.#deps.logger?.warn('ai ingest: stt start failed', { error: describeError(error) });
     });
@@ -127,6 +148,9 @@ export class AiIngest implements LifecycleComponent {
     if (!active) return;
     this.#active = null;
     active.sseController.abort();
+    void this.#deps.pm.stopSnapshotConsumer().catch((error: unknown) => {
+      this.#deps.logger?.warn('ai ingest: snapshot consumer stop failed', { error: describeError(error) });
+    });
     void this.#deps.stt.endSession(active.sessionId).catch((error: unknown) => {
       this.#deps.logger?.warn('ai ingest: stt end failed', { error: describeError(error) });
     });

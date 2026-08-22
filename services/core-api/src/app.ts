@@ -611,6 +611,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     bus,
     stt: sttClient,
     slide: slideClient,
+    pm: pmClient,
     recordingsRoot: config.recordingsRoot,
     runtimeDir: config.runtimeDir,
     isAiEnabled,

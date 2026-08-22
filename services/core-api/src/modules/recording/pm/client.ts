@@ -168,6 +168,21 @@ export class PipelineManagerClient {
   }
 
   /**
+   * C execution gate item 2 (ai-services.md §2.1: `POST /consumers/snapshot/start
+   * {intervalSec:1, outputPath}`) — `outputPath` is the tmpfs source
+   * `/run/eduscope/slides/<sessionId>/current.png` slide-service watches;
+   * `intervalSec` is the ratified fixed 1 fps capture rate, not caller-configurable.
+   */
+  async startSnapshotConsumer(outputPath: string): Promise<PmCommandAccepted> {
+    return this.#request<PmCommandAccepted>('POST', '/consumers/snapshot/start', { intervalSec: 1, outputPath });
+  }
+
+  /** ai-services.md §2.3: stops the singleton snapshot consumer — core-api never tracks its consumer id (pipeline-manager addresses it by class, not id). */
+  async stopSnapshotConsumer(): Promise<void> {
+    await this.#request('POST', '/consumers/snapshot/stop');
+  }
+
+  /**
    * Opens the raw `GET /events` SSE response for `sse.ts` to line-parse.
    * `lastEventId` maps to the `Last-Event-ID` request header pipeline-manager
    * uses for replay (pipeline-manager.md §3.1).
