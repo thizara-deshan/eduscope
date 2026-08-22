@@ -184,7 +184,6 @@ class TestEarlyRefusal:
             LayoutPresetId("not-a-real-preset")
 
 
-<<<<<<< HEAD
 class TestEffectiveEncodeProfile:
     """KEEP B-56 gate correction (2026-08-18): a per-channel encoder override
     reaches the next PM start and passthrough/other channels stay unaffected."""
@@ -231,7 +230,8 @@ class TestEffectiveEncodeProfile:
         assert "bps=7500000" in record_spec.argv
         assert "bps=7500000" not in live_spec.argv
         assert "gop=60" in live_spec.argv  # live default (unaffected by the record override)
-=======
+
+
 class TestEffectiveFps:
     """A-REV-014: `RECORD_COMPOSITE`'s effective fps must reach both the
     per-tile normalization caps and the composited canvas caps — not just
@@ -244,12 +244,11 @@ class TestEffectiveFps:
         from pipeline_manager.pipelines import record as record_module
         from pipeline_manager.pipelines.profiles import ProfileKind, get_profile
 
-        def _fps24(kind: ProfileKind) -> object:
-            return get_profile(kind, {"fps": 24})
+        def _fps24(kind: ProfileKind, overrides=None) -> object:
+            return get_profile(kind, {**(overrides or {}), "fps": 24})
 
         monkeypatch.setattr(record_module, "get_profile", _fps24)
         req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
         spec = build_record(req, RK3588Profile())
         assert spec.argv.count("video/x-raw,framerate=24/1") == 2  # once per tile
         assert "video/x-raw,width=1920,height=1080,framerate=24/1" in spec.argv
->>>>>>> main

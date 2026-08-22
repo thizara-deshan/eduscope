@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 
 import pytest
+
+from pipeline_manager.app import create_app
+from pipeline_manager.config import Settings
+
+from .conftest import VALID_TOKEN, make_fake_popen
 
 """B1 (A-REV-002/A-REV-016) boundary tests: `resolve_output_path` runs inside
 the record/snapshot routes before a consumer id is registered or anything is
@@ -126,3 +132,85 @@ async def test_snapshot_tmp_sibling_escape_rejected(app, client, auth_headers, t
         json={"intervalSec": 5, "outputPath": str(link / "slide.png")},
     )
     _assert_rejected_and_no_spawn(app, response)
+
+
+# ── C execution gate item 1: tmpfs slide snapshot source ───────────────────
+#
+# `/run/eduscope/slides/<sessionId>/current.png` is the approved atomic tmpfs
+# capture source slide-service watches (see the C execution gate note in
+# docs/plans/integration-plan.md). It sits outside `recordings_root`, so it
+# must be accepted through a dedicated, symlink-aware branch rather than by
+# loosening the recordings-root boundary itself.
+
+
+@pytest.fixture
+async def runtime_app(tmp_path):
+    recordings_root = tmp_path / "recordings"
+    recordings_root.mkdir()
+    runtime_root = tmp_path / "run"
+    runtime_root.mkdir()
+    settings = Settings(shared_bearer_token=VALID_TOKEN, recordings_root=recordings_root, runtime_root=runtime_root)
+    app = create_app(settings, popen=make_fake_popen())
+    yield app
+    for process in app.state.supervisor.processes.values():
+        if process.popen.poll() is None:
+            process.popen.terminate()
+    for process in app.state.supervisor.processes.values():
+        try:
+            process.popen.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.popen.kill()
+            process.popen.wait(timeout=5)
+
+
+@pytest.fixture
+async def runtime_client(runtime_app):
+    import httpx
+
+    transport = httpx.ASGITransport(app=runtime_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+        yield c
+
+
+@pytest.mark.asyncio
+async def test_snapshot_tmpfs_source_accepted(runtime_app, runtime_client, auth_headers) -> None:
+    tmpfs_path = runtime_app.state.settings.runtime_root / "slides" / "01J00000000000000000000000" / "current.png"
+    response = await runtime_client.post(
+        "/consumers/snapshot/start",
+        headers=auth_headers,
+        json={"intervalSec": 5, "outputPath": str(tmpfs_path)},
+    )
+    assert response.status_code == 202
+    assert len(runtime_app.state.consumers) == 1
+
+
+@pytest.mark.asyncio
+async def test_snapshot_outside_both_roots_rejected(runtime_app, runtime_client, auth_headers) -> None:
+    response = await runtime_client.post(
+        "/consumers/snapshot/start",
+        headers=auth_headers,
+        json={"intervalSec": 5, "outputPath": "/etc/slides.png"},
+    )
+    _assert_rejected_and_no_spawn(runtime_app, response)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink escape needs a real POSIX symlink; verified on target")
+async def test_snapshot_tmpfs_symlink_escape_rejected(runtime_app, runtime_client, auth_headers, tmp_path) -> None:
+    """`<runtime_root>/slides/link -> outside` with
+    `outputPath=<runtime_root>/slides/link/current.png` has the exact
+    `<session-id>/current.png` shape lexically, but the real symlink target
+    is outside the slides root — only following it exposes the escape."""
+    slides_root = runtime_app.state.settings.runtime_root / "slides"
+    slides_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = slides_root / "link"
+    os.symlink(outside, link, target_is_directory=True)
+
+    response = await runtime_client.post(
+        "/consumers/snapshot/start",
+        headers=auth_headers,
+        json={"intervalSec": 5, "outputPath": str(link / "current.png")},
+    )
+    _assert_rejected_and_no_spawn(runtime_app, response)

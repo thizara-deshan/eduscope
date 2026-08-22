@@ -65,6 +65,7 @@ export class FakePipelineManager {
   #nextAudioResponse: QueuedResponse | null = null;
   #nextProjectorResponse: QueuedResponse | null = null;
   #recordIdCounter = 0;
+  #snapshotIdCounter = 0;
   #liveIdCounter = 0;
   #meetingIdCounter = 0;
   #offline = false;
@@ -332,6 +333,23 @@ export class FakePipelineManager {
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ consumerId: 'projector:00000001', state: 'running' }));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/snapshot/start') {
+      this.#readJsonBody(req).then((body) => {
+        call.body = body;
+        this.#snapshotIdCounter += 1;
+        const consumerId = `snapshot:${String(this.#snapshotIdCounter).padStart(8, '0')}`;
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ consumerId, state: 'starting' }));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/consumers/snapshot/stop') {
+      res.writeHead(202, {});
+      res.end();
       return;
     }
 

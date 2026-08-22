@@ -1,0 +1,284 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../../src/app.js';
+import { loadConfig } from '../../src/config.js';
+import { lectureSessions, slideCaptures, storageVolumes, transcriptSegments, users } from '../../src/db/schema.js';
+import { UlidGenerator } from '../../src/lib/ids.js';
+import { hashPassword } from '../../src/modules/auth/passwords.js';
+import { FakeAiServices } from '../fakes/ai-services.js';
+import { FakeClock } from '../fakes/clock.js';
+import { FakePipelineManager } from '../fakes/pipeline-manager.js';
+
+const NOW = new Date('2026-08-23T08:00:00.000Z');
+const BEARER = 'ai-ingest-test-internal-bearer';
+const FIRST_CONSUMER_ID = 'record:00000001';
+// Real (non-fake-clock) reconnect delay — small enough to keep the reconnect
+// tests fast, large enough that "did NOT reconnect yet" assertions have room.
+const RECONNECT_BACKOFF_MS = 20;
+
+function fullProvisioning(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    deviceId: 'device-1',
+    serialNumber: 'SN-1',
+    instituteProfileId: 'institute-1',
+    hallCode: 'LAC001',
+    hallDisplayName: 'Lecture Hall 1',
+    titlePattern: '{hall} – {date} {time}',
+    timezone: 'Asia/Colombo',
+    ntpServers: [],
+    expectedStorageVolumeUuid: null,
+    featureFlags: { recordingEnabled: true, aiQuizEnabled: true, streamingEnabled: false },
+    quizServerBaseUrl: null,
+    llmEndpoint: 'http://127.0.0.1:9/llm',
+    provisionedAt: '2026-01-01T00:00:00.000+00:00',
+    provisionedBy: 'deploy',
+    ...overrides,
+  };
+}
+
+function writeProvisioning(dir: string, overrides: Record<string, unknown> = {}): string {
+  const path = join(dir, 'provisioning.json');
+  writeFileSync(path, JSON.stringify(fullProvisioning(overrides)));
+  return path;
+}
+
+async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (!(await check())) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor: condition not met in time');
+    await delay(5);
+  }
+}
+
+interface TestContext {
+  dir: string;
+  app: FastifyInstance;
+  clock: FakeClock;
+  pm: FakePipelineManager;
+  ai: FakeAiServices;
+  ownerToken: string;
+}
+
+async function loginAs(app: FastifyInstance, username: string, password: string): Promise<string> {
+  const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username, password, client: 'panel' } });
+  return (response.json() as { tokens: { accessToken: string } }).tokens.accessToken;
+}
+
+async function createContext(): Promise<TestContext> {
+  const dir = mkdtempSync(join(tmpdir(), 'core-api-ai-ingest-'));
+  const pm = new FakePipelineManager({ bearerToken: BEARER });
+  const pmBaseUrl = await pm.listen();
+  const ai = new FakeAiServices({ bearerToken: BEARER });
+  const aiBaseUrls = await ai.listen();
+  const provisioningPath = writeProvisioning(dir);
+
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    CORE_API_DB_PATH: join(dir, 'core.db'),
+    CORE_API_JWT_SECRET: 'ai-ingest-test-secret',
+    CORE_API_PROVISIONING_PATH: provisioningPath,
+    CORE_API_RECORDINGS_ROOT: join(dir, 'recordings'),
+    CORE_API_RUNTIME_DIR: join(dir, 'runtime'),
+    CORE_API_PM_BASE_URL: pmBaseUrl,
+    CORE_API_INTERNAL_BEARER: BEARER,
+  });
+
+  const clock = new FakeClock(NOW);
+  const ids = new UlidGenerator();
+  const app = await buildApp({ config, clock, ids, aiBaseUrls, aiIngestReconnectBackoffMs: RECONNECT_BACKOFF_MS });
+  await app.lifecycle.start();
+  await waitFor(() => pm.openConnectionCount === 1);
+
+  const ownerId = ids.next(NOW);
+  app.db
+    .insert(users)
+    .values({
+      id: ownerId,
+      username: 'owner',
+      displayName: 'Owner Lecturer',
+      role: 'lecturer',
+      source: 'local',
+      passwordHash: await hashPassword('Password1'),
+      mustResetPassword: false,
+      disabled: false,
+      createdAt: NOW.toISOString(),
+    })
+    .run();
+  app.db
+    .insert(storageVolumes)
+    .values({
+      id: ids.next(NOW),
+      uuid: 'recordings-volume-1',
+      devicePath: '/dev/sda1',
+      mountPath: '/media/eduscope',
+      filesystem: 'ext4',
+      capacityBytes: 1_000_000_000_000,
+      freeBytes: 500_000_000_000,
+      smartStatus: 'good',
+      role: 'recordings',
+      state: 'mounted',
+      registeredAt: NOW.toISOString(),
+    })
+    .run();
+
+  const ownerToken = await loginAs(app, 'owner', 'Password1');
+
+  return { dir, app, clock, pm, ai, ownerToken };
+}
+
+async function destroyContext(ctx: TestContext): Promise<void> {
+  await ctx.app.close();
+  await ctx.pm.close();
+  await ctx.ai.close();
+  rmSync(ctx.dir, { recursive: true, force: true });
+}
+
+function currentSession(ctx: TestContext): typeof lectureSessions.$inferSelect {
+  return ctx.app.db.select().from(lectureSessions).all()[0]!;
+}
+
+async function startAndConfirm(ctx: TestContext): Promise<string> {
+  const response = await ctx.app.inject({ method: 'POST', url: '/api/v1/recording/start', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
+  expect(response.statusCode).toBe(202);
+  await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/record'));
+  ctx.pm.publish('evt.pm.consumer.running', { consumerId: FIRST_CONSUMER_ID, pgid: 1 });
+  await waitFor(() => currentSession(ctx).state === 'recording');
+  return currentSession(ctx).id;
+}
+
+async function pauseGracefully(ctx: TestContext): Promise<void> {
+  const response = await ctx.app.inject({ method: 'POST', url: '/api/v1/recording/pause', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
+  expect(response.statusCode).toBe(202);
+  await waitFor(() => ctx.pm.calls.some((call) => call.path === `/consumers/${FIRST_CONSUMER_ID}/stop`));
+  ctx.pm.publish('evt.pm.consumer.eos', { consumerId: FIRST_CONSUMER_ID });
+  await waitFor(() => currentSession(ctx).state === 'paused');
+}
+
+async function resumeAndConfirm(ctx: TestContext): Promise<void> {
+  const response = await ctx.app.inject({ method: 'POST', url: '/api/v1/recording/resume', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
+  expect(response.statusCode).toBe(202);
+  await waitFor(() => ctx.pm.calls.filter((call) => call.path === '/consumers/record').length === 2);
+  ctx.pm.publish('evt.pm.consumer.running', { consumerId: 'record:00000002', pgid: 2 });
+  await waitFor(() => currentSession(ctx).state === 'recording');
+}
+
+async function stopGracefully(ctx: TestContext, consumerId: string = FIRST_CONSUMER_ID): Promise<void> {
+  const response = await ctx.app.inject({ method: 'POST', url: '/api/v1/recording/stop', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
+  expect(response.statusCode).toBe(202);
+  await waitFor(() => ctx.pm.calls.some((call) => call.path === `/consumers/${consumerId}/stop`));
+  ctx.pm.publish('evt.pm.consumer.eos', { consumerId });
+  await waitFor(() => currentSession(ctx).state === 'completed');
+}
+
+describe('AI ingest — snapshot consumer lifecycle, slide anchor, SSE reconnect (C execution gate items 2-4)', () => {
+  let ctx: TestContext;
+
+  afterEach(async () => {
+    await delay(50);
+    await destroyContext(ctx);
+  });
+
+  it('starts the snapshot consumer on recording start, stops it on pause, restarts it on resume, stops it on stop', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+
+    await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/snapshot/start'));
+    const firstStart = ctx.pm.calls.find((call) => call.path === '/consumers/snapshot/start')!;
+    expect(firstStart.body).toEqual({ intervalSec: 1, outputPath: expect.stringContaining(sessionId) });
+    expect((firstStart.body as { outputPath: string }).outputPath).toContain('current.png');
+
+    await pauseGracefully(ctx);
+    await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/snapshot/stop'));
+
+    await resumeAndConfirm(ctx);
+    await waitFor(() => ctx.pm.calls.filter((call) => call.path === '/consumers/snapshot/start').length === 2);
+
+    await stopGracefully(ctx, 'record:00000002'); // resume started a fresh record consumer
+    await waitFor(() => ctx.pm.calls.filter((call) => call.path === '/consumers/snapshot/stop').length === 2);
+  });
+
+  it('item 4: slide session start carries anchorOffsetMs 0, and resume re-posts a resume with the same anchor stt gets', async () => {
+    ctx = await createContext();
+    await startAndConfirm(ctx);
+
+    await waitFor(() => ctx.ai.slideCalls.some((call) => call.path === '/sessions'));
+    const slideStart = ctx.ai.slideCalls.find((call) => call.path === '/sessions')!;
+    expect((slideStart.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(0);
+
+    ctx.clock.advance(5 * 60_000);
+    await pauseGracefully(ctx);
+    await resumeAndConfirm(ctx);
+
+    await waitFor(() => ctx.ai.sttCalls.some((call) => call.path.endsWith('/resume')));
+    await waitFor(() => ctx.ai.slideCalls.some((call) => call.path.endsWith('/resume')));
+
+    const sttResume = ctx.ai.sttCalls.find((call) => call.path.endsWith('/resume'))!;
+    const slideResume = ctx.ai.slideCalls.find((call) => call.path.endsWith('/resume'))!;
+    const expectedAnchor = currentSession(ctx).recordedDurationMs;
+    expect((sttResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
+    expect((slideResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
+  });
+
+  it('item 3: a network blip that does not lose the stt session reconnects without re-posting a new session start', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1 && ctx.ai.sttCalls.some((call) => call.path === '/sessions'));
+    const startCallsBefore = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length;
+
+    ctx.ai.dropSttConnections(); // status still names sessionId — just a blip
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1, 3000); // reconnected
+
+    expect(ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length).toBe(startCallsBefore);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 1000, endOffsetMs: 2000, text: 'after blip', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 1);
+    expect(ctx.app.db.select().from(transcriptSegments).all()[0]).toMatchObject({ sessionId, text: 'after blip' });
+  });
+
+  it('item 3: a stt-service restart that loses the session is reconciled by re-posting start, with no duplicate transcript rows', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 0, endOffsetMs: 1000, text: 'before restart', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 1);
+
+    const startCallsBefore = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length;
+    ctx.ai.restartStt(); // drops the connection AND forgets the session (GET /status -> sessionId: null)
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1, 3000); // reconnected after reconciling
+
+    await waitFor(() => ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length === startCallsBefore + 1);
+    const rePost = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').at(-1)!;
+    expect((rePost.body as { sessionId: string }).sessionId).toBe(sessionId);
+    expect((rePost.body as { anchorOffsetMs: number }).anchorOffsetMs).toBeGreaterThanOrEqual(0);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 2000, endOffsetMs: 3000, text: 'after restart', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 2);
+    expect(ctx.app.db.select().from(transcriptSegments).all().map((row) => row.text)).toEqual(['before restart', 'after restart']);
+  });
+
+  it('item 3: a slide-service restart that loses the session is reconciled by re-posting start, with no duplicate slide-capture rows', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.slideOpenConnectionCount === 1);
+
+    ctx.ai.emitSlideCaptured({ capturedAt: NOW.toISOString(), offsetMs: 1000, imagePath: '/tmp/slide-001.png', ocrText: 'before restart', dedupeHash: 'a', isSlideChange: true });
+    await waitFor(() => ctx.app.db.select().from(slideCaptures).all().length === 1);
+
+    const startCallsBefore = ctx.ai.slideCalls.filter((call) => call.path === '/sessions').length;
+    ctx.ai.restartSlide();
+    await waitFor(() => ctx.ai.slideOpenConnectionCount === 1, 3000);
+
+    await waitFor(() => ctx.ai.slideCalls.filter((call) => call.path === '/sessions').length === startCallsBefore + 1);
+    const rePost = ctx.ai.slideCalls.filter((call) => call.path === '/sessions').at(-1)!;
+    expect((rePost.body as { sessionId: string }).sessionId).toBe(sessionId);
+
+    ctx.ai.emitSlideCaptured({ capturedAt: NOW.toISOString(), offsetMs: 2000, imagePath: '/tmp/slide-002.png', ocrText: 'after restart', dedupeHash: 'b', isSlideChange: true });
+    await waitFor(() => ctx.app.db.select().from(slideCaptures).all().length === 2);
+    expect(ctx.app.db.select().from(slideCaptures).all().map((row) => row.ocrText)).toEqual(['before restart', 'after restart']);
+  });
+});
