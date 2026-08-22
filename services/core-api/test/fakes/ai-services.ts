@@ -173,6 +173,13 @@ export class FakeAiServices {
         res.end(JSON.stringify({ state: 'watching' }));
         return true;
       }
+      const resumeMatch = /^\/sessions\/([^/]+)\/resume$/.exec(url.pathname);
+      if (req.method === 'POST' && resumeMatch) {
+        call.body = await readJsonBody(req);
+        res.writeHead(202, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ state: 'watching' }));
+        return true;
+      }
       const deleteMatch = /^\/sessions\/([^/]+)$/.exec(url.pathname);
       if (req.method === 'DELETE' && deleteMatch) {
         res.writeHead(202, { 'content-type': 'application/json' });

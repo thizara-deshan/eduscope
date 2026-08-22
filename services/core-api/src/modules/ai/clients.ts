@@ -191,9 +191,26 @@ export interface SlideStatus {
 
 /** ai-services.md §2.3 — the only client for slide-service. */
 export class SlideClient extends BaseAiClient {
-  /** `sourcePath` = pipeline-manager's snapshot-consumer output (tmpfs); `imageDir` = the durable slide home under the recordings volume (§2.2). */
-  async startSession(sessionId: string, imageDir: string, sourcePath: string): Promise<void> {
-    await this.request('POST', '/sessions', { sessionId, imageDir, sourcePath });
+  /**
+   * `sourcePath` = pipeline-manager's snapshot-consumer output (tmpfs);
+   * `imageDir` = the durable slide home under the recordings volume (§2.2).
+   * `anchorOffsetMs` (C execution gate item 4, ratified: symmetric with
+   * `SttClient.startSession`, a duration in ms — not `sessionStartedAt`) lets
+   * slide-service compute session-relative `offsetMs` the same way STT does.
+   */
+  async startSession(sessionId: string, imageDir: string, sourcePath: string, anchorOffsetMs: number): Promise<void> {
+    await this.request('POST', '/sessions', { sessionId, imageDir, sourcePath, anchorOffsetMs });
+  }
+
+  /**
+   * C execution gate item 4 — mirrors `SttClient.resumeSession`. The slide
+   * session itself is never torn down across a pause (pipeline-manager's
+   * snapshot-consumer stop *is* the pause, ai-services.md §2.3), but its
+   * offset clock still needs rebasing on resume or a paused gap would inflate
+   * every later `offsetMs` by the pause duration.
+   */
+  async resumeSession(sessionId: string, anchorOffsetMs: number): Promise<void> {
+    await this.request('POST', `/sessions/${sessionId}/resume`, { anchorOffsetMs });
   }
 
   async endSession(sessionId: string): Promise<void> {

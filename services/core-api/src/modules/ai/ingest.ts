@@ -37,6 +37,8 @@ interface ActiveSession {
   sessionId: string;
   sseController: AbortController;
   sourcePath: string;
+  /** The anchor last told to stt/slide (C execution gate item 4) — resume rebases both to this. */
+  anchorOffsetMs: number;
 }
 
 /**
@@ -81,11 +83,15 @@ export class AiIngest implements LifecycleComponent {
       if (!this.#deps.isAiEnabled()) return;
       if (this.#active && this.#active.sessionId === payload.sessionId && payload.startReason === 'resume') {
         const anchorOffsetMs = payload.recordedDurationMs ?? 0;
+        this.#active.anchorOffsetMs = anchorOffsetMs;
         void this.#deps.pm.startSnapshotConsumer(this.#active.sourcePath).catch((error: unknown) => {
           this.#deps.logger?.warn('ai ingest: snapshot consumer start failed', { error: describeError(error) });
         });
         void this.#deps.stt.resumeSession(this.#active.sessionId, anchorOffsetMs).catch((error: unknown) => {
           this.#deps.logger?.warn('ai ingest: stt resume failed', { error: describeError(error) });
+        });
+        void this.#deps.slide.resumeSession(this.#active.sessionId, anchorOffsetMs).catch((error: unknown) => {
+          this.#deps.logger?.warn('ai ingest: slide resume failed', { error: describeError(error) });
         });
         return;
       }
@@ -118,9 +124,9 @@ export class AiIngest implements LifecycleComponent {
 
   #startFresh(sessionId: string, anchorOffsetMs: number): void {
     const sseController = new AbortController();
-    this.#active = { sessionId, sseController, sourcePath: join(this.#deps.runtimeDir, 'slides', sessionId, 'current.png') };
+    const sourcePath = join(this.#deps.runtimeDir, 'slides', sessionId, 'current.png');
+    this.#active = { sessionId, sseController, sourcePath, anchorOffsetMs };
 
-    const sourcePath = this.#active.sourcePath;
     const imageDir = join(this.#deps.recordingsRoot, 'sessions', sessionId, 'slides');
 
     void this.#deps.pm.startSnapshotConsumer(sourcePath).catch((error: unknown) => {
@@ -129,7 +135,7 @@ export class AiIngest implements LifecycleComponent {
     void this.#deps.stt.startSession(sessionId, anchorOffsetMs).catch((error: unknown) => {
       this.#deps.logger?.warn('ai ingest: stt start failed', { error: describeError(error) });
     });
-    void this.#deps.slide.startSession(sessionId, imageDir, sourcePath).catch((error: unknown) => {
+    void this.#deps.slide.startSession(sessionId, imageDir, sourcePath, anchorOffsetMs).catch((error: unknown) => {
       this.#deps.logger?.warn('ai ingest: slide start failed', { error: describeError(error) });
     });
 

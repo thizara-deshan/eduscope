@@ -171,7 +171,7 @@ async function stopGracefully(ctx: TestContext, consumerId: string = FIRST_CONSU
   await waitFor(() => currentSession(ctx).state === 'completed');
 }
 
-describe('AI ingest — pipeline-manager snapshot consumer lifecycle (C execution gate item 2)', () => {
+describe('AI ingest — pipeline-manager snapshot consumer lifecycle and slide session-time anchor (C execution gate items 2 and 4)', () => {
   let ctx: TestContext;
 
   afterEach(async () => {
@@ -196,5 +196,27 @@ describe('AI ingest — pipeline-manager snapshot consumer lifecycle (C executio
 
     await stopGracefully(ctx, 'record:00000002'); // resume started a fresh record consumer
     await waitFor(() => ctx.pm.calls.filter((call) => call.path === '/consumers/snapshot/stop').length === 2);
+  });
+
+  it('item 4: slide session start carries anchorOffsetMs 0, and resume re-posts a resume with the same anchor stt gets', async () => {
+    ctx = await createContext();
+    await startAndConfirm(ctx);
+
+    await waitFor(() => ctx.ai.slideCalls.some((call) => call.path === '/sessions'));
+    const slideStart = ctx.ai.slideCalls.find((call) => call.path === '/sessions')!;
+    expect((slideStart.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(0);
+
+    ctx.clock.advance(5 * 60_000);
+    await pauseGracefully(ctx);
+    await resumeAndConfirm(ctx);
+
+    await waitFor(() => ctx.ai.sttCalls.some((call) => call.path.endsWith('/resume')));
+    await waitFor(() => ctx.ai.slideCalls.some((call) => call.path.endsWith('/resume')));
+
+    const sttResume = ctx.ai.sttCalls.find((call) => call.path.endsWith('/resume'))!;
+    const slideResume = ctx.ai.slideCalls.find((call) => call.path.endsWith('/resume'))!;
+    const expectedAnchor = currentSession(ctx).recordedDurationMs;
+    expect((sttResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
+    expect((slideResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
   });
 });
