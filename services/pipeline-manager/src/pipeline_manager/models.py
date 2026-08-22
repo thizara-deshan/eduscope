@@ -190,3 +190,39 @@ def resolve_output_path(path: Path, recordings_root: Path) -> Path:
     if real_root not in real_path.parents:
         raise ValueError("outputPath must be beneath the configured recordings root")
     return Path(posix_path)
+
+
+def resolve_snapshot_output_path(path: Path, recordings_root: Path, runtime_root: Path) -> Path:
+    """Snapshot's `outputPath` may be either a durable path beneath
+    `recordings_root` (the general `resolve_output_path` boundary) or the one
+    approved tmpfs capture source `<runtime_root>/slides/<sessionId>/current.png`
+    that C's slide-service watches. The tmpfs branch gets its own shape check
+    (exactly one session-id segment, filename fixed) plus the same
+    symlink-aware real-path containment `resolve_output_path` uses, so it is
+    not a laxer boundary than the recordings-root one it complements.
+    """
+    try:
+        return resolve_output_path(path, recordings_root)
+    except ValueError:
+        pass
+    return _resolve_tmpfs_slide_path(path, runtime_root)
+
+
+def _resolve_tmpfs_slide_path(path: Path, runtime_root: Path) -> Path:
+    posix_path = PurePosixPath(posixpath.normpath(path.as_posix()))
+    if not posix_path.is_absolute():
+        raise ValueError("outputPath must be an absolute path")
+    posix_slides_root = PurePosixPath(posixpath.normpath(runtime_root.as_posix())) / "slides"
+
+    try:
+        relative = posix_path.relative_to(posix_slides_root)
+    except ValueError:
+        raise ValueError("outputPath must be the approved tmpfs slide snapshot path") from None
+    if len(relative.parts) != 2 or relative.parts[1] != "current.png" or not relative.parts[0]:
+        raise ValueError("outputPath must be the approved tmpfs slide snapshot path")
+
+    real_slides_root = PurePosixPath(os.path.realpath(posix_slides_root))
+    real_path = PurePosixPath(os.path.realpath(posix_path))
+    if real_slides_root not in real_path.parents:
+        raise ValueError("outputPath must be the approved tmpfs slide snapshot path")
+    return Path(posix_path)

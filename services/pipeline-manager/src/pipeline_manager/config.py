@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     platform_id: Literal["rk3588"] = "rk3588"
     shared_bearer_token: str = Field(min_length=32)
     recordings_root: Path = Path("/media/eduscope/recordings")
+    runtime_root: Path = Path("/run/eduscope")
     helper_socket: Path = Path("/run/eduscope/helper.sock")
     runtime_dir: Path = Path("/run/eduscope/pipeline-manager")
     event_replay_size: int = Field(default=512, ge=32, le=4096)

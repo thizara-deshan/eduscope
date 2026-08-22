@@ -14,7 +14,7 @@ from ..consumers.live import LiveConsumer
 from ..consumers.meeting import MeetingConsumer
 from ..consumers.record import RecordConsumer
 from ..consumers.snapshot import SnapshotConsumer
-from ..models import LayoutPresetId, PublisherId, SourceRole, resolve_output_path
+from ..models import LayoutPresetId, PublisherId, SourceRole, resolve_output_path, resolve_snapshot_output_path
 from ..pipelines.live import LiveRequest
 from ..pipelines.meeting import MeetingRequest
 from ..pipelines.projector import ProjectorMode, QuestionOverlay
@@ -52,8 +52,8 @@ def _validate_record_paths(body: RecordStartBody, recordings_root: Path) -> None
             raise ValueError("outputPaths entries must not target the same resolved path")
 
 
-def _validate_snapshot_path(body: SnapshotStartBody, recordings_root: Path) -> None:
-    resolve_output_path(Path(body.outputPath), recordings_root)
+def _validate_snapshot_path(body: SnapshotStartBody, recordings_root: Path, runtime_root: Path) -> None:
+    resolve_snapshot_output_path(Path(body.outputPath), recordings_root, runtime_root)
 
 
 def _check_preflight(state) -> None:
@@ -346,7 +346,7 @@ async def set_projector_mode(body: ProjectorModeBody, request: Request) -> Comma
 @router.post("/consumers/snapshot/start", status_code=202)
 async def start_snapshot(body: SnapshotStartBody, request: Request) -> CommandAccepted:
     state = request.app.state
-    _validate_snapshot_path(body, state.settings.recordings_root)
+    _validate_snapshot_path(body, state.settings.recordings_root, state.settings.runtime_root)
     consumer_id = f"snapshot:{state.new_id()}"
     consumer = SnapshotConsumer(
         consumer_id, platform=state.platform, has_ai_subscription=state.has_ai_subscription,
