@@ -139,6 +139,8 @@ export interface BuildAppOptions {
   ntpReader?: NtpReader;
   /** B-29 AI-services boundary; production uses the fixed ai-services.md §0 ports, tests inject loopback fixture URLs. */
   aiBaseUrls?: { stt: string; slide: string; question: string };
+  /** C execution gate item 3 — delay before AiIngest's SSE reconnect loop re-reads `/status`; production defaults to 2s, tests inject a small value so reconnect tests stay fast. */
+  aiIngestReconnectBackoffMs?: number;
   /** B-32 quiz-sync boundary; production resolves `provisioning.quizServerBaseUrl` live, tests inject a loopback fixture URL. */
   quizServiceBaseUrl?: string;
   /** B-32 quiz-sync boundary; tests inject a fixture bearer. Production resolves `null` (dormant) until B-34 wires the deploy-minted device credential (DR-03). */
@@ -615,6 +617,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     recordingsRoot: config.recordingsRoot,
     runtimeDir: config.runtimeDir,
     isAiEnabled,
+    reconnectBackoffMs: options.aiIngestReconnectBackoffMs,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(aiIngest);

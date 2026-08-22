@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { lectureSessions, storageVolumes, users } from '../../src/db/schema.js';
+import { lectureSessions, slideCaptures, storageVolumes, transcriptSegments, users } from '../../src/db/schema.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
 import { FakeAiServices } from '../fakes/ai-services.js';
@@ -16,6 +16,9 @@ import { FakePipelineManager } from '../fakes/pipeline-manager.js';
 const NOW = new Date('2026-08-23T08:00:00.000Z');
 const BEARER = 'ai-ingest-test-internal-bearer';
 const FIRST_CONSUMER_ID = 'record:00000001';
+// Real (non-fake-clock) reconnect delay — small enough to keep the reconnect
+// tests fast, large enough that "did NOT reconnect yet" assertions have room.
+const RECONNECT_BACKOFF_MS = 20;
 
 function fullProvisioning(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -86,7 +89,7 @@ async function createContext(): Promise<TestContext> {
 
   const clock = new FakeClock(NOW);
   const ids = new UlidGenerator();
-  const app = await buildApp({ config, clock, ids, aiBaseUrls });
+  const app = await buildApp({ config, clock, ids, aiBaseUrls, aiIngestReconnectBackoffMs: RECONNECT_BACKOFF_MS });
   await app.lifecycle.start();
   await waitFor(() => pm.openConnectionCount === 1);
 
@@ -171,7 +174,7 @@ async function stopGracefully(ctx: TestContext, consumerId: string = FIRST_CONSU
   await waitFor(() => currentSession(ctx).state === 'completed');
 }
 
-describe('AI ingest — pipeline-manager snapshot consumer lifecycle and slide session-time anchor (C execution gate items 2 and 4)', () => {
+describe('AI ingest — snapshot consumer lifecycle, slide anchor, SSE reconnect (C execution gate items 2-4)', () => {
   let ctx: TestContext;
 
   afterEach(async () => {
@@ -218,5 +221,64 @@ describe('AI ingest — pipeline-manager snapshot consumer lifecycle and slide s
     const expectedAnchor = currentSession(ctx).recordedDurationMs;
     expect((sttResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
     expect((slideResume.body as { anchorOffsetMs: number }).anchorOffsetMs).toBe(expectedAnchor);
+  });
+
+  it('item 3: a network blip that does not lose the stt session reconnects without re-posting a new session start', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1 && ctx.ai.sttCalls.some((call) => call.path === '/sessions'));
+    const startCallsBefore = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length;
+
+    ctx.ai.dropSttConnections(); // status still names sessionId — just a blip
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1, 3000); // reconnected
+
+    expect(ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length).toBe(startCallsBefore);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 1000, endOffsetMs: 2000, text: 'after blip', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 1);
+    expect(ctx.app.db.select().from(transcriptSegments).all()[0]).toMatchObject({ sessionId, text: 'after blip' });
+  });
+
+  it('item 3: a stt-service restart that loses the session is reconciled by re-posting start, with no duplicate transcript rows', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 0, endOffsetMs: 1000, text: 'before restart', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 1);
+
+    const startCallsBefore = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length;
+    ctx.ai.restartStt(); // drops the connection AND forgets the session (GET /status -> sessionId: null)
+    await waitFor(() => ctx.ai.sttOpenConnectionCount === 1, 3000); // reconnected after reconciling
+
+    await waitFor(() => ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length === startCallsBefore + 1);
+    const rePost = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').at(-1)!;
+    expect((rePost.body as { sessionId: string }).sessionId).toBe(sessionId);
+    expect((rePost.body as { anchorOffsetMs: number }).anchorOffsetMs).toBeGreaterThanOrEqual(0);
+
+    ctx.ai.emitSttSegment({ startOffsetMs: 2000, endOffsetMs: 3000, text: 'after restart', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
+    await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 2);
+    expect(ctx.app.db.select().from(transcriptSegments).all().map((row) => row.text)).toEqual(['before restart', 'after restart']);
+  });
+
+  it('item 3: a slide-service restart that loses the session is reconciled by re-posting start, with no duplicate slide-capture rows', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await waitFor(() => ctx.ai.slideOpenConnectionCount === 1);
+
+    ctx.ai.emitSlideCaptured({ capturedAt: NOW.toISOString(), offsetMs: 1000, imagePath: '/tmp/slide-001.png', ocrText: 'before restart', dedupeHash: 'a', isSlideChange: true });
+    await waitFor(() => ctx.app.db.select().from(slideCaptures).all().length === 1);
+
+    const startCallsBefore = ctx.ai.slideCalls.filter((call) => call.path === '/sessions').length;
+    ctx.ai.restartSlide();
+    await waitFor(() => ctx.ai.slideOpenConnectionCount === 1, 3000);
+
+    await waitFor(() => ctx.ai.slideCalls.filter((call) => call.path === '/sessions').length === startCallsBefore + 1);
+    const rePost = ctx.ai.slideCalls.filter((call) => call.path === '/sessions').at(-1)!;
+    expect((rePost.body as { sessionId: string }).sessionId).toBe(sessionId);
+
+    ctx.ai.emitSlideCaptured({ capturedAt: NOW.toISOString(), offsetMs: 2000, imagePath: '/tmp/slide-002.png', ocrText: 'after restart', dedupeHash: 'b', isSlideChange: true });
+    await waitFor(() => ctx.app.db.select().from(slideCaptures).all().length === 2);
+    expect(ctx.app.db.select().from(slideCaptures).all().map((row) => row.ocrText)).toEqual(['before restart', 'after restart']);
   });
 });

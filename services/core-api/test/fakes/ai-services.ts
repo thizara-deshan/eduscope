@@ -65,6 +65,14 @@ class FakeSseService {
     for (const res of this.#subscribers) res.write(frame);
   }
 
+  /** Destroys every open `/events` connection with no graceful marker — simulates the service process restarting mid-stream (C execution gate item 3). */
+  dropConnections(): void {
+    for (const res of [...this.#subscribers]) {
+      res.destroy();
+      this.#subscribers.delete(res);
+    }
+  }
+
   async #handle(
     req: IncomingMessage,
     res: ServerResponse,
@@ -113,6 +121,24 @@ export type GenerateBehavior =
   | { kind: 'status'; status: number; body: unknown }
   | { kind: 'response'; body: unknown };
 
+interface FakeSttStatus {
+  state: 'idle' | 'listening' | 'paused' | 'degraded';
+  sessionId: string | null;
+  model: string | null;
+  modelVersion: string | null;
+  samplesConsumed: number | null;
+  lastSegmentAt: string | null;
+  audioSource: { attached: boolean; fps: number | null } | null;
+}
+
+interface FakeSlideStatus {
+  state: 'idle' | 'watching';
+  sessionId: string | null;
+  slideCount: number;
+  lastCaptureAt: string | null;
+  ocrBacklog: number;
+}
+
 export class FakeAiServices {
   readonly bearerToken: string;
   readonly #stt: FakeSseService;
@@ -122,6 +148,8 @@ export class FakeAiServices {
   readonly #generateBehaviors: GenerateBehavior[] = [];
   #questionReachable = true;
   #questionOffline = false;
+  #sttStatus: FakeSttStatus = { state: 'idle', sessionId: null, model: 'vosk', modelVersion: 'v1', samplesConsumed: 0, lastSegmentAt: null, audioSource: null };
+  #slideStatus: FakeSlideStatus = { state: 'idle', sessionId: null, slideCount: 0, lastCaptureAt: null, ocrBacklog: 0 };
 
   constructor(options: { bearerToken: string }) {
     this.bearerToken = options.bearerToken;
@@ -129,11 +157,12 @@ export class FakeAiServices {
     this.#stt = new FakeSseService(this.bearerToken, async (req, res, url, call) => {
       if (req.method === 'GET' && url.pathname === '/status') {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ state: 'idle', sessionId: null, model: 'vosk', modelVersion: 'v1', samplesConsumed: 0, lastSegmentAt: null, audioSource: null }));
+        res.end(JSON.stringify(this.#sttStatus));
         return true;
       }
       if (req.method === 'POST' && url.pathname === '/sessions') {
         call.body = await readJsonBody(req);
+        this.#sttStatus = { ...this.#sttStatus, state: 'listening', sessionId: (call.body as { sessionId: string }).sessionId };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'listening' }));
         return true;
@@ -141,6 +170,7 @@ export class FakeAiServices {
       const pauseMatch = /^\/sessions\/([^/]+)\/pause$/.exec(url.pathname);
       if (req.method === 'POST' && pauseMatch) {
         call.body = await readJsonBody(req);
+        this.#sttStatus = { ...this.#sttStatus, state: 'paused' };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'paused' }));
         return true;
@@ -148,12 +178,14 @@ export class FakeAiServices {
       const resumeMatch = /^\/sessions\/([^/]+)\/resume$/.exec(url.pathname);
       if (req.method === 'POST' && resumeMatch) {
         call.body = await readJsonBody(req);
+        this.#sttStatus = { ...this.#sttStatus, state: 'listening' };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'listening' }));
         return true;
       }
       const deleteMatch = /^\/sessions\/([^/]+)$/.exec(url.pathname);
       if (req.method === 'DELETE' && deleteMatch) {
+        this.#sttStatus = { ...this.#sttStatus, state: 'idle', sessionId: null };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'idle' }));
         return true;
@@ -164,11 +196,12 @@ export class FakeAiServices {
     this.#slide = new FakeSseService(this.bearerToken, async (req, res, url, call) => {
       if (req.method === 'GET' && url.pathname === '/status') {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ state: 'idle', sessionId: null, slideCount: 0, lastCaptureAt: null, ocrBacklog: 0 }));
+        res.end(JSON.stringify(this.#slideStatus));
         return true;
       }
       if (req.method === 'POST' && url.pathname === '/sessions') {
         call.body = await readJsonBody(req);
+        this.#slideStatus = { ...this.#slideStatus, state: 'watching', sessionId: (call.body as { sessionId: string }).sessionId };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'watching' }));
         return true;
@@ -182,6 +215,7 @@ export class FakeAiServices {
       }
       const deleteMatch = /^\/sessions\/([^/]+)$/.exec(url.pathname);
       if (req.method === 'DELETE' && deleteMatch) {
+        this.#slideStatus = { ...this.#slideStatus, state: 'idle', sessionId: null };
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ state: 'idle' }));
         return true;
@@ -241,6 +275,33 @@ export class FakeAiServices {
 
   setSlideOffline(offline: boolean): void {
     this.#slide.setOffline(offline);
+  }
+
+  /**
+   * Simulates a stt-service process restart (C execution gate item 3): drops
+   * every open `/events` connection with no graceful marker and forgets the
+   * in-memory session, exactly as a real restart would — the next `GET
+   * /status` reports `sessionId: null` until core-api reconciles.
+   */
+  restartStt(): void {
+    this.#stt.dropConnections();
+    this.#sttStatus = { ...this.#sttStatus, state: 'idle', sessionId: null };
+  }
+
+  /** Simulates a slide-service process restart — see `restartStt`. */
+  restartSlide(): void {
+    this.#slide.dropConnections();
+    this.#slideStatus = { ...this.#slideStatus, state: 'idle', sessionId: null };
+  }
+
+  /** Drops the `/events` connection without touching in-memory session state — a network blip C survives, not a restart. `GET /status` still names the same session afterward. */
+  dropSttConnections(): void {
+    this.#stt.dropConnections();
+  }
+
+  /** See `dropSttConnections` — the slide-service equivalent. */
+  dropSlideConnections(): void {
+    this.#slide.dropConnections();
   }
 
   emitSttSegment(data: unknown): void {
