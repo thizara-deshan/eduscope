@@ -80,7 +80,7 @@ import { QuizSyncStream } from './modules/quiz/sync/stream.js';
 import { PanelHub, registerPanelHub } from './modules/ws/panel-hub.js';
 import { PreviewBroker, registerPreviewBroker } from './modules/ws/preview.js';
 import { LogStore } from './modules/observability/store.js';
-import { registerObservabilityRoutes } from './modules/observability/routes.js';
+import { registerInternalLogRoutes, registerObservabilityRoutes } from './modules/observability/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -780,6 +780,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerPreviewBroker(app, authService, previewBroker);
 
   registerObservabilityRoutes(app, authService, logStore, scopedSubscriptions);
+  registerInternalLogRoutes(app, logStore, config.internalBearer);
 
   app.addHook('onClose', async () => {
     await lifecycle.stop();
