@@ -47,11 +47,11 @@ async def test_meeting_start_returns_202(client, auth_headers, online_publishers
 
 
 @pytest.mark.asyncio
-async def test_snapshot_start_returns_202(client, auth_headers) -> None:
+async def test_snapshot_start_returns_202(client, auth_headers, tmp_path) -> None:
     response = await client.post(
         "/consumers/snapshot/start",
         headers=auth_headers,
-        json={"intervalSec": 5, "outputPath": "/media/eduscope/slides/out.png"},
+        json={"intervalSec": 5, "outputPath": str(tmp_path / "out.png")},
     )
     assert response.status_code == 202
 

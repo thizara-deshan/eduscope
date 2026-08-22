@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Callable, Mapping
 
 from ..models import Channel, LayoutPresetId, SourceRole
 from .builder import (
@@ -49,13 +49,24 @@ def _profile_overrides(req: RecordRequest) -> Mapping[str, object] | None:
     return changes or None
 
 
-def build_record(req: RecordRequest, platform: PlatformProfile) -> PipelineSpec:
+def build_record(
+    req: RecordRequest,
+    platform: PlatformProfile,
+    *,
+    is_role_healthy: Callable[[SourceRole], bool] = lambda role: True,
+) -> PipelineSpec:
+    """`is_role_healthy` (A-REV-003) is the debounced publisher-health lookup
+    a caller may inject — every existing caller that omits it gets the
+    original "every required role is healthy" behavior byte-for-byte
+    (`PipelineBuilder` only takes the `healthy=False` branch when a role is
+    reported down), so this is additive: no existing argv changes.
+    """
     layout = get_layout(req.preset, Channel.LOCAL, req.ratio_a, req.ratio_b)
     if layout.kind == "multi-file":
         return _build_separate(req, layout, platform)
     if layout.passthrough_eligible and _is_h264_single(layout):
         return _build_camera_passthrough(req, layout, platform)
-    return _build_composite_or_raw(req, layout, platform)
+    return _build_composite_or_raw(req, layout, platform, is_role_healthy)
 
 
 def _is_h264_single(layout: LayoutPreset) -> bool:
@@ -68,7 +79,12 @@ def _require_output_path(req: RecordRequest) -> str:
     return req.output_path
 
 
-def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: PlatformProfile) -> PipelineSpec:
+def _build_composite_or_raw(
+    req: RecordRequest,
+    layout: LayoutPreset,
+    platform: PlatformProfile,
+    is_role_healthy: Callable[[SourceRole], bool] = lambda role: True,
+) -> PipelineSpec:
     output_path = _require_output_path(req)
     profile = get_profile(ProfileKind.RECORD_COMPOSITE, _profile_overrides(req))
     builder = PipelineBuilder()
@@ -79,8 +95,10 @@ def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: 
         source_branch_normalized(
             builder, platform, tile.role,
             target_width=tile.w, target_height=tile.h, apply_scale=False, sink_pad=None,
+            healthy=is_role_healthy(tile.role), fps=profile.fps,
         )
         builder.add(*platform.encoder(profile), "!", "h264parse", "config-interval=1", "!", "queue", "!", "mux.")
+        degraded_start_ok = True
     else:
         pads = []
         for index, tile in enumerate(layout.tiles):
@@ -88,11 +106,12 @@ def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: 
             source_branch_normalized(
                 builder, platform, tile.role,
                 target_width=tile.w, target_height=tile.h, apply_scale=True, sink_pad=sink_pad,
+                healthy=is_role_healthy(tile.role), fps=profile.fps,
             )
             pads.append(Pad(name=f"sink_{index}", xpos=tile.x, ypos=tile.y, width=tile.w, height=tile.h))
         builder.add(*platform.compositor("comp", pads), "!")
         builder.add(
-            "video/x-raw,width=1920,height=1080,framerate=30/1",
+            f"video/x-raw,width=1920,height=1080,framerate={profile.fps}/1",
             "!",
             "queue",
             "!",
@@ -105,8 +124,9 @@ def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: 
             "!",
             "mux.",
         )
+        degraded_start_ok = True
 
-    audio_branch(builder, platform, profile, "mux.")
+    audio_branch(builder, platform, profile, "mux.", healthy=is_role_healthy(AUDIO_ROLE))
     builder.add(*platform.mux("mpegts", "mux"), "!", *platform.file_sink(output_path))
 
     return PipelineSpec(
@@ -114,6 +134,7 @@ def _build_composite_or_raw(req: RecordRequest, layout: LayoutPreset, platform: 
         required_roles=layout.required_roles,
         encode_slots=1,
         outputs=(output_path,),
+        degraded_start_ok=degraded_start_ok,
     )
 
 

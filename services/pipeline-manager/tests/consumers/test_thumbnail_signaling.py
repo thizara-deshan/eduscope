@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -15,16 +17,26 @@ from .conftest import FakeSupervisor, SignalSpy
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "events" / "thumbnail-signaling.json"
 
 
+@dataclass
+class RecordingEvents:
+    published: list = field(default_factory=list)
+
+    async def publish(self, kind: str, data: dict):
+        self.published.append((kind, data))
+        return None
+
+
 def _offer(negotiation_id: str = "n1", role_id: SourceRole = SourceRole.PRESENTATION) -> ThumbnailOffer:
     return ThumbnailOffer(type="offer", negotiation_id=negotiation_id, role_id=role_id, sdp="v=0...")
 
 
-def _controller(is_role_online_and_bound=lambda role: True) -> ThumbnailController:
+def _controller(is_role_online_and_bound=lambda role: True, events=None) -> ThumbnailController:
     return ThumbnailController(
         supervisor=FakeSupervisor(),
         ledger=EncodeLedger(),
         is_role_online_and_bound=is_role_online_and_bound,
         send_signal=SignalSpy(),
+        events=events,
     )
 
 
@@ -98,6 +110,128 @@ async def test_closing_last_negotiation_releases_provisional_slot() -> None:
     await controller.close("n1")
 
     assert controller.negotiation_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_offer_writes_the_offer_as_the_first_stdin_control_line() -> None:
+    """A-REV-008: the SDP offer arrives at the worker over stdin — never
+    baked into argv (it's per-negotiation and can be resent on a second
+    offer)."""
+    controller = _controller()
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+    written = negotiation.process.popen.stdin.written
+    assert len(written) == 1
+    payload = json.loads(written[0])
+    assert payload["type"] == "offer"
+    assert payload["negotiation_id"] == "n1"
+    assert payload["sdp"] == "v=0..."
+
+
+@pytest.mark.asyncio
+async def test_send_ice_forwards_to_the_negotiations_worker_stdin() -> None:
+    controller = _controller()
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+
+    forwarded = controller.send_ice(
+        "n1", candidate="candidate:1 1 UDP 2 10.0.0.1 5000 typ host", sdp_mid="0", sdp_mline_index=0
+    )
+
+    assert forwarded is True
+    written = negotiation.process.popen.stdin.written
+    assert len(written) == 2  # offer, then ice
+    payload = json.loads(written[1])
+    assert payload["type"] == "ice"
+    assert payload["candidate"].startswith("candidate:1")
+
+
+@pytest.mark.asyncio
+async def test_send_ice_on_unknown_negotiation_is_a_silent_no_op() -> None:
+    controller = _controller()
+    assert controller.send_ice("never-existed", candidate="x", sdp_mid=None, sdp_mline_index=None) is False
+
+
+@pytest.mark.asyncio
+async def test_worker_answer_line_is_republished_as_a_camelcase_event() -> None:
+    """The parent pump translates the worker's snake_case wire message into
+    the camelCase `evt.pm.thumbnails.signal` contract shape."""
+    events = RecordingEvents()
+    controller = _controller(events=events)
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+
+    negotiation.process.raw_lines.append(
+        json.dumps({"type": "answer", "negotiation_id": "n1", "sdp": "v=0...answer"})
+    )
+    await asyncio.sleep(0.2)  # let the pump task's poll loop observe it
+
+    assert ("evt.pm.thumbnails.signal", {"type": "answer", "negotiationId": "n1", "sdp": "v=0...answer"}) in events.published
+    controller._pump_tasks["n1"].cancel()
+
+
+@pytest.mark.asyncio
+async def test_worker_ice_line_is_republished_with_camelcase_fields() -> None:
+    events = RecordingEvents()
+    controller = _controller(events=events)
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+
+    negotiation.process.raw_lines.append(
+        json.dumps(
+            {
+                "type": "ice",
+                "negotiation_id": "n1",
+                "candidate": "candidate:1 1 UDP 2 10.0.0.1 5000 typ host",
+                "sdp_mid": "0",
+                "sdp_mline_index": 0,
+            }
+        )
+    )
+    await asyncio.sleep(0.2)
+
+    kinds = [kind for kind, _ in events.published]
+    assert "evt.pm.thumbnails.signal" in kinds
+    payload = next(data for kind, data in events.published if kind == "evt.pm.thumbnails.signal")
+    assert payload == {
+        "type": "ice",
+        "negotiationId": "n1",
+        "candidate": "candidate:1 1 UDP 2 10.0.0.1 5000 typ host",
+        "sdpMid": "0",
+        "sdpMLineIndex": 0,
+    }
+    controller._pump_tasks["n1"].cancel()
+
+
+@pytest.mark.asyncio
+async def test_non_signaling_stdout_lines_are_ignored_by_the_pump() -> None:
+    """A bare `PLAYING`/`Got EOS` bus-status line (already handled by the
+    generic supervisor observation queue) is not a signaling frame — the
+    pump must not choke on or republish it."""
+    events = RecordingEvents()
+    controller = _controller(events=events)
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+
+    negotiation.process.raw_lines.append("PLAYING")
+    negotiation.process.raw_lines.append("not json at all")
+    await asyncio.sleep(0.2)
+
+    assert events.published == []
+    controller._pump_tasks["n1"].cancel()
+
+
+@pytest.mark.asyncio
+async def test_close_cancels_the_output_pump_task() -> None:
+    controller = _controller()
+    await controller.offer(_offer(negotiation_id="n1"))
+    pump = controller._pump_tasks["n1"]
+
+    await controller.close("n1")
+    await asyncio.sleep(0)
+
+    assert pump.cancelled() or pump.done()
+    assert "n1" not in controller._pump_tasks
 
 
 @pytest.mark.asyncio

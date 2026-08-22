@@ -4,10 +4,11 @@ two synthetic samples (real /proc/stat does not exist on this dev host)."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
-from .conftest import TOKEN, _find_bash, run_script
+from .conftest import TOKEN, _find_bash, run_script, write_sequence
 
 
 def test_script_exists_and_is_valid_bash() -> None:
@@ -43,6 +44,53 @@ def test_token_never_appears_in_output(state_dir, tmp_path) -> None:
     )
     assert TOKEN not in result.stdout
     assert TOKEN not in result.stderr
+
+
+# ── ledger enforcement (A-REV-018/B6: must actually exercise state) ────────
+
+
+def test_ledger_at_capacity_exercises_refusal_and_passes(state_dir, tmp_path) -> None:
+    """A real refusal round-trip: the ledger is at capacity, the script
+    posts a probe thumbnail offer, and the fake service (mirroring the real
+    409 `encoder_budget_exceeded` path) refuses it.
+
+    `--duration-sec 1` with a real (unfaked) `sleep`/`/proc/stat` gives the
+    CPU-headroom gate an actual idle sample from this (idle) dev host — the
+    only way to reach the ledger section below duration-sec=0 always yields
+    a 0% mean-idle sample (no loop iterations) and fails before ever
+    getting there."""
+    write_sequence(state_dir, [{"encodeLedger": {"inUse": 3, "capacity": 3}}])
+    result = run_script(
+        "resource-ledger.sh",
+        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1"],
+        state_dir,
+        timeout=15,
+        env_overrides={"SLEEP": "sleep"},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS A16-RES" in result.stdout
+    assert "ledger-enforced" in result.stdout
+
+    refusal = json.loads((tmp_path / "ledger-refusal.json").read_text(encoding="utf-8"))
+    assert refusal == {"code": "encoder_budget_exceeded", "title": "No free encode session", "status": 409}
+
+
+def test_ledger_below_capacity_fails_honestly_instead_of_claiming_enforcement(state_dir, tmp_path) -> None:
+    """B6 done-criteria: a ledger that was NOT at capacity when the gate ran
+    must FAIL the gate — never silently print PASS/"ledger-enforced" for a
+    refusal path nothing actually exercised."""
+    write_sequence(state_dir, [{"encodeLedger": {"inUse": 1, "capacity": 3}}])
+    result = run_script(
+        "resource-ledger.sh",
+        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1"],
+        state_dir,
+        timeout=15,
+        env_overrides={"SLEEP": "sleep"},
+    )
+    assert result.returncode != 0
+    assert "FAIL A16-RES ledger not at capacity" in result.stdout
+    assert "PASS" not in result.stdout
+    assert "ledger-enforced" not in result.stdout
 
 
 def _idle_percent(before: str, after: str) -> float:

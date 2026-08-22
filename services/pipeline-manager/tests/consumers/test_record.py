@@ -20,9 +20,19 @@ OUT_2 = "/media/eduscope/recordings/seg-002.ts"
 
 @dataclass
 class FakePopen:
-    returncode: int | None = 0
+    # `None` means "still running" until a test simulates an exit — see
+    # tests/consumers/conftest.py's FakePopen for why.
+    returncode: int | None = None
+    stdin: object | None = None
+    stdout: object | None = None
+    stderr: object | None = None
 
     def wait(self, timeout: float | None = None) -> int:
+        if self.returncode is None:
+            self.returncode = 0
+        return self.returncode
+
+    def poll(self) -> int | None:
         return self.returncode
 
 
@@ -30,12 +40,17 @@ class FakePopen:
 class FakeSupervisor:
     calls: list = field(default_factory=list)
     next_pid: int = 1000
+    processes: dict = field(default_factory=dict)
 
     async def start(self, spec, identity):
         process = ManagedProcess(identity=identity, pid=self.next_pid, pgid=self.next_pid, popen=FakePopen())
         self.calls.append((spec, identity))
+        self.processes[identity] = process
         self.next_pid += 1
         return process
+
+    def forget(self, identity: str) -> None:
+        self.processes.pop(identity, None)
 
 
 @dataclass
@@ -93,6 +108,24 @@ class TestStartReadinessRefusal:
     async def test_refuses_when_capture_card_recovering_and_presentation_required(self) -> None:
         consumer, sup, _, _ = _consumer(capture_card_recovering=True)
         with pytest.raises(CaptureCardRecovering):
+            await consumer.start(RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT_1))
+        assert sup.calls == []
+
+    @pytest.mark.asyncio
+    async def test_composite_starts_degraded_when_only_one_required_role_is_running(self) -> None:
+        """A-REV-003: FIFTY_FIFTY needs presentation + lecturer-cam; losing
+        one no longer refuses the whole record — the other role's fallback
+        branch (built into `build_record`) covers it."""
+        consumer, sup, _, _ = _consumer(publisher_running=False)
+        consumer._is_publisher_running = lambda role: role is SourceRole.PRESENTATION
+        event = await consumer.start(RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT_1))
+        assert event.state is ConsumerState.RUNNING
+        assert len(sup.calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_composite_still_refuses_when_every_required_role_is_offline(self) -> None:
+        consumer, sup, _, _ = _consumer(publisher_running=False)
+        with pytest.raises(PublisherNotRunning):
             await consumer.start(RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, output_path=OUT_1))
         assert sup.calls == []
 

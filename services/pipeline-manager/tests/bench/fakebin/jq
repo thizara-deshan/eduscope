@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 
 def main() -> int:
@@ -16,6 +17,7 @@ def main() -> int:
     null_input = False
     kv: dict[str, str] = {}
     filter_expr = None
+    input_path = None
 
     i = 0
     while i < len(args):
@@ -31,11 +33,21 @@ def main() -> int:
         elif arg == "--arg":
             kv[args[i + 1]] = args[i + 2]
             i += 2
-        else:
+        elif filter_expr is None:
             filter_expr = arg
+        else:
+            # A second positional arg is an input file (real jq reads from
+            # it instead of stdin) — used by resource-ledger.sh's
+            # `jq '.code // empty' ledger-refusal.json`.
+            input_path = arg
         i += 1
 
-    data = None if null_input else json.load(sys.stdin)
+    if null_input:
+        data = None
+    elif input_path is not None:
+        data = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    else:
+        data = json.load(sys.stdin)
     result = _eval(filter_expr, data, kv)
 
     if result is None or result is False:
@@ -58,6 +70,15 @@ def _eval(expr: str, data, kv: dict[str, str]):
 
     if expr == ".consumerId":
         return data.get("consumerId")
+
+    if expr == ".encodeLedger.inUse":
+        return data["encodeLedger"]["inUse"]
+
+    if expr == ".encodeLedger.capacity":
+        return data["encodeLedger"]["capacity"]
+
+    if expr == ".code // empty":
+        return data.get("code") or None
 
     if expr == ".publishers.rtsp.pid":
         return data["publishers"]["rtsp"]["pid"]

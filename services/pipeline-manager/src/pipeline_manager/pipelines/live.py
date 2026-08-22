@@ -63,6 +63,7 @@ def build_live(req: LiveRequest, platform: PlatformProfile) -> PipelineSpec:
         source_branch_normalized(
             builder, platform, tile.role,
             target_width=tile.w, target_height=tile.h, apply_scale=False, sink_pad=None,
+            fps=profile.fps,
         )
         builder.add(
             *platform.encoder(profile), "!", "h264parse", "config-interval=1", "!",
@@ -75,11 +76,12 @@ def build_live(req: LiveRequest, platform: PlatformProfile) -> PipelineSpec:
             source_branch_normalized(
                 builder, platform, tile.role,
                 target_width=tile.w, target_height=tile.h, apply_scale=True, sink_pad=sink_pad,
+                fps=profile.fps,
             )
             pads.append(Pad(name=f"sink_{index}", xpos=tile.x, ypos=tile.y, width=tile.w, height=tile.h))
         builder.add(*platform.compositor("comp", pads), "!")
         builder.add(
-            "video/x-raw,width=1920,height=1080,framerate=30/1", "!", "queue", "!",
+            f"video/x-raw,width=1920,height=1080,framerate={profile.fps}/1", "!", "queue", "!",
             *platform.encoder(profile), "!", "h264parse", "config-interval=1", "!",
             "queue", "max-size-buffers=200", "!", "mux.",
         )

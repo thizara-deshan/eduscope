@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import posixpath
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -165,16 +166,27 @@ class AudioLevelSample(BaseModel):
 
 
 def resolve_output_path(path: Path, recordings_root: Path) -> Path:
-    """Reject relative paths and paths outside recordings_root (B-02: opaque, given paths only).
+    """Reject relative paths, the root itself, and paths outside recordings_root,
+    including via a symlink (B-02: opaque, given paths only).
 
-    The manager only ever runs on POSIX (RK3588); paths are normalized with
-    PurePosixPath regardless of the authoring host so this behaves the same on a
-    Windows dev host as on the target board.
+    Lexical normalization alone (`posixpath.normpath`) cannot see a symlink
+    that hops out of the root partway through — e.g. `root/link -> /etc` with
+    `outputPath=root/link/passwd` normalizes to a string that still looks
+    like it's under root. `os.path.realpath` walks the real filesystem and
+    follows any symlink that exists, so the escape shows up in the resolved
+    path even though the caller-given path is returned unchanged on success.
+    Nonexistent components (the common case — the file doesn't exist yet)
+    are left as-is, matching `Path.resolve(strict=False)` semantics, so this
+    still behaves the same on a Windows dev host as on the POSIX target board
+    for paths that don't yet exist on disk.
     """
     posix_path = PurePosixPath(posixpath.normpath(path.as_posix()))
     if not posix_path.is_absolute():
         raise ValueError("outputPath must be an absolute path")
     posix_root = PurePosixPath(posixpath.normpath(recordings_root.as_posix()))
-    if posix_path != posix_root and posix_root not in posix_path.parents:
+
+    real_root = PurePosixPath(os.path.realpath(posix_root))
+    real_path = PurePosixPath(os.path.realpath(posix_path))
+    if real_root not in real_path.parents:
         raise ValueError("outputPath must be beneath the configured recordings root")
     return Path(posix_path)

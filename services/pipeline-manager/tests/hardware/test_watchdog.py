@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from pipeline_manager.hardware.watchdog import (
     RECOVER_TIMEOUT_SECONDS,
     CaptureCardWatchdog,
     ProbeResult,
+    real_v4l2_probe,
 )
 
 STABLE_ID = "usb-v4l2-eduscope-dongle-001"
@@ -208,3 +211,15 @@ def test_watchdog_module_never_imports_consumers_or_publishers() -> None:
 
 async def _absent_async() -> ProbeResult:
     return _absent()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="v4l2-ctl is Linux-only; verified on target")
+@pytest.mark.skipif(shutil.which("v4l2-ctl") is None, reason="v4l2-ctl not on PATH on this host")
+async def test_real_v4l2_probe_is_argv_only_and_returns_a_probe_result() -> None:
+    """A-REV-013: the production `watchdog.probe` adapter — no shell=True,
+    a real `v4l2-ctl --list-devices` subprocess, decoded stdout."""
+    result = await real_v4l2_probe()
+    assert isinstance(result, ProbeResult)
+    assert isinstance(result.returncode, int)
+    assert isinstance(result.stdout, str)

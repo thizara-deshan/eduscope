@@ -15,40 +15,42 @@ def _assert_problem(response, code: str, status: int) -> None:
 
 
 @pytest.mark.asyncio
-async def test_invalid_preset_is_400(client, auth_headers, online_publishers) -> None:
+async def test_invalid_preset_is_400(client, auth_headers, online_publishers, tmp_path) -> None:
     response = await client.post(
         "/consumers/record",
         headers=auth_headers,
-        json={"preset": "not-a-real-preset", "outputPath": "/media/eduscope/recordings/seg.ts"},
+        json={"preset": "not-a-real-preset", "outputPath": str(tmp_path / "seg.ts")},
     )
     _assert_problem(response, "invalid_preset", 400)
 
 
 @pytest.mark.asyncio
-async def test_invalid_ratio_is_400(client, auth_headers) -> None:
+async def test_invalid_ratio_is_400(client, auth_headers, tmp_path) -> None:
     response = await client.post(
-        "/consumers/snapshot/start", headers=auth_headers, json={"intervalSec": 0, "outputPath": "/x.png"}
+        "/consumers/snapshot/start",
+        headers=auth_headers,
+        json={"intervalSec": 0, "outputPath": str(tmp_path / "out.png")},
     )
     _assert_problem(response, "invalid_ratio", 400)
 
 
 @pytest.mark.asyncio
-async def test_preset_channel_mismatch_is_400(client, auth_headers, online_publishers) -> None:
+async def test_preset_channel_mismatch_is_400(client, auth_headers, online_publishers, tmp_path) -> None:
     response = await client.post(
         "/consumers/record",
         headers=auth_headers,
-        json={"preset": "pc-only", "outputPath": "/media/eduscope/recordings/seg.ts"},
+        json={"preset": "pc-only", "outputPath": str(tmp_path / "seg.ts")},
     )
     _assert_problem(response, "preset_channel_mismatch", 400)
 
 
 @pytest.mark.asyncio
-async def test_publisher_not_running_is_409(client, auth_headers) -> None:
+async def test_publisher_not_running_is_409(client, auth_headers, tmp_path) -> None:
     # online_publishers fixture deliberately not used — publishers start OFFLINE.
     response = await client.post(
         "/consumers/record",
         headers=auth_headers,
-        json={"preset": "cam-1", "outputPath": "/media/eduscope/recordings/seg.ts"},
+        json={"preset": "cam-1", "outputPath": str(tmp_path / "seg.ts")},
     )
     _assert_problem(response, "publisher_not_running", 409)
     assert response.json()["meta"]["publisherId"] == "rtsp"
@@ -93,11 +95,35 @@ async def test_consumer_not_found_is_404(client, auth_headers) -> None:
 
 
 @pytest.mark.asyncio
-async def test_capture_card_absent_is_503(client, app, auth_headers, online_publishers) -> None:
+async def test_capture_card_absent_is_503(client, app, auth_headers, online_publishers, tmp_path) -> None:
     app.state.watchdog.state = "recovering"
     response = await client.post(
         "/consumers/record",
         headers=auth_headers,
-        json={"preset": "fifty-fifty", "outputPath": "/media/eduscope/recordings/seg.ts"},
+        json={"preset": "fifty-fifty", "outputPath": str(tmp_path / "seg.ts")},
     )
     _assert_problem(response, "capture_card_absent", 503)
+
+
+@pytest.mark.asyncio
+async def test_missing_output_path_is_unsupported_pipeline_400(client, auth_headers, online_publishers) -> None:
+    response = await client.post("/consumers/record", headers=auth_headers, json={"preset": "cam-1"})
+    _assert_problem(response, "unsupported_pipeline", 400)
+
+
+@pytest.mark.asyncio
+async def test_invalid_stream_key_is_400(client, auth_headers, online_publishers) -> None:
+    response = await client.post(
+        "/consumers/live", headers=auth_headers, json={"preset": "cam-1", "streamKey": "not valid!"}
+    )
+    _assert_problem(response, "invalid_stream_key", 400)
+
+
+@pytest.mark.asyncio
+async def test_request_validation_error_is_problem_shaped_422(client, auth_headers) -> None:
+    response = await client.put(
+        "/publishers/rtsp/binding",
+        headers=auth_headers,
+        json={"address": "rtsp://cam1", "surprise": "no"},
+    )
+    _assert_problem(response, "invalid_request", 422)

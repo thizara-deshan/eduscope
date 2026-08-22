@@ -83,14 +83,18 @@ echo "$status_json" > "${EVIDENCE_DIR}/ledger-snapshot.json"
 in_use="$("$JQ" -r '.encodeLedger.inUse' <<<"$status_json")"
 capacity="$("$JQ" -r '.encodeLedger.capacity' <<<"$status_json")"
 
-if [[ "$in_use" == "$capacity" ]]; then
-  refusal_body='{"negotiationId":"a16-ledger-probe","roleId":"presentation","sdp":"v=0..."}'
-  refusal_status="$("$CURL" -s -o "${EVIDENCE_DIR}/ledger-refusal.json" -w '%{http_code}' \
-    -X POST "${AUTH[@]}" -H 'Content-Type: application/json' -d "$refusal_body" \
-    "${BASE_URL}/consumers/thumbnails/offer")"
-  refusal_code="$("$JQ" -r '.code // empty' "${EVIDENCE_DIR}/ledger-refusal.json" 2>/dev/null || echo "")"
-  test "$refusal_status" = "409" && test "$refusal_code" = "encoder_budget_exceeded" \
-    || { echo "FAIL A16-RES ledger did not refuse over-capacity thumbnail"; exit 1; }
-fi
+# A16-RES only certifies enforcement it actually watched happen — a ledger
+# that wasn't at capacity when this ran must fail the gate, not silently
+# print PASS/"ledger-enforced" for a refusal path nothing exercised.
+test "$in_use" == "$capacity" \
+  || { echo "FAIL A16-RES ledger not at capacity ($in_use/$capacity) — refusal path not exercised"; exit 1; }
+
+refusal_body='{"negotiationId":"a16-ledger-probe","roleId":"presentation","sdp":"v=0..."}'
+refusal_status="$("$CURL" -s -o "${EVIDENCE_DIR}/ledger-refusal.json" -w '%{http_code}' \
+  -X POST "${AUTH[@]}" -H 'Content-Type: application/json' -d "$refusal_body" \
+  "${BASE_URL}/consumers/thumbnails/offer")"
+refusal_code="$("$JQ" -r '.code // empty' "${EVIDENCE_DIR}/ledger-refusal.json" 2>/dev/null || echo "")"
+test "$refusal_status" = "409" && test "$refusal_code" = "encoder_budget_exceeded" \
+  || { echo "FAIL A16-RES ledger did not refuse over-capacity thumbnail"; exit 1; }
 
 printf "PASS A16-RES cpu-headroom=%s ledger-enforced\n" "$mean_idle"

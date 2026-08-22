@@ -30,22 +30,34 @@ def _log(name: str, entry: dict) -> None:
         handle.write(json.dumps(entry) + "\n")
 
 
-def _post_response(path: str, body: dict) -> dict:
+def _post_response(path: str, body: dict) -> tuple[int, dict]:
+    """Returns (http_status, body) — most POSTs are the usual 202-accepted,
+    but `/consumers/thumbnails/offer` (A16-RES ledger enforcement) mirrors
+    the real service: 409 `encoder_budget_exceeded` when the ledger is
+    already at capacity, 202 otherwise."""
     match = re.match(r"^/publishers/([a-z0-9]+)/(start|stop)$", path)
     if match:
-        return {"publisherId": match.group(1), "state": "starting" if match.group(2) == "start" else "stopping"}
+        state = "starting" if match.group(2) == "start" else "stopping"
+        return 202, {"publisherId": match.group(1), "state": state}
 
     if path == "/consumers/record":
-        return {"consumerId": STATE.joinpath("next_record_id").read_text().strip(), "state": "starting"}
+        return 202, {"consumerId": STATE.joinpath("next_record_id").read_text().strip(), "state": "starting"}
     if path == "/consumers/live":
-        return {"consumerId": STATE.joinpath("next_live_id").read_text().strip(), "state": "starting"}
+        return 202, {"consumerId": STATE.joinpath("next_live_id").read_text().strip(), "state": "starting"}
     if path == "/consumers/meeting":
-        return {"consumerId": STATE.joinpath("next_meeting_id").read_text().strip(), "state": "starting"}
+        return 202, {"consumerId": STATE.joinpath("next_meeting_id").read_text().strip(), "state": "starting"}
+
+    if path == "/consumers/thumbnails/offer":
+        snapshot = _status_snapshot()
+        ledger = snapshot.get("encodeLedger", {})
+        if ledger.get("inUse", 0) >= ledger.get("capacity", 0):
+            return 409, {"code": "encoder_budget_exceeded", "title": "No free encode session", "status": 409}
+        return 202, {"consumerId": "thumbnails:a16probe", "state": "starting"}
 
     if re.match(r"^/consumers/.+/stop$", path):
-        return {"state": "stopping"}
+        return 202, {"state": "stopping"}
 
-    return {}
+    return 200, {}
 
 
 def main() -> int:
@@ -53,6 +65,8 @@ def main() -> int:
     method = "GET"
     body = None
     url = None
+    out_path: str | None = None
+    write_fmt: str | None = None
     i = 0
     while i < len(args):
         arg = args[i]
@@ -62,7 +76,13 @@ def main() -> int:
         elif arg == "-d":
             body = json.loads(args[i + 1])
             i += 1
-        elif arg in ("-H", "-w", "-o", "--max-time"):
+        elif arg == "-o":
+            out_path = args[i + 1]
+            i += 1
+        elif arg == "-w":
+            write_fmt = args[i + 1]
+            i += 1
+        elif arg in ("-H", "--max-time"):
             i += 1  # skip flag + its value
         elif arg.startswith("-"):
             pass  # ignore -f -s -S -N etc.
@@ -82,15 +102,25 @@ def main() -> int:
         return 22
 
     if path == "/status" and method == "GET":
-        print(json.dumps(_status_snapshot()))
-        return 0
-
-    if method == "POST":
+        status_code, response_body = 200, _status_snapshot()
+    elif method == "POST":
         _log("posts.jsonl", {"path": path, "body": body})
-        print(json.dumps(_post_response(path, body or {})))
-        return 0
+        status_code, response_body = _post_response(path, body or {})
+    else:
+        status_code, response_body = 200, {}
 
-    print("{}")
+    response_text = json.dumps(response_body)
+    if out_path is not None:
+        Path(out_path).write_text(response_text, encoding="utf-8")
+    elif write_fmt is None:
+        # No -o and no -w: default behavior (every pre-existing caller) —
+        # print the body to stdout, same as always.
+        print(response_text)
+
+    if write_fmt is not None:
+        # Only the one substitution the bench scripts actually use.
+        sys.stdout.write(write_fmt.replace("%{http_code}", str(status_code)))
+
     return 0
 
 

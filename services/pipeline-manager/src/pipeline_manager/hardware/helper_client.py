@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Literal
@@ -77,7 +78,12 @@ class HelperClient:
         connector = getattr(asyncio, "open_unix_connection", None)
         if connector is None:
             raise HelperError("AF_UNIX sockets are not available on this host")
-        return await connector(str(self._socket_path))
+        # `limit` (A-REV-015) bounds the StreamReader's own internal buffer
+        # to MAX_RESPONSE_BYTES, so `readuntil` below raises a clean,
+        # immediate `LimitOverrunError` on an over-limit line — never an
+        # unbounded buffer growing past a malicious/broken helper that
+        # streams data with no newline.
+        return await connector(str(self._socket_path), limit=MAX_RESPONSE_BYTES)
 
     async def _send(self, verb: str, args: BaseModel) -> HelperResponse:
         request_id = self._id_factory()
@@ -101,9 +107,16 @@ class HelperClient:
 
             try:
                 async with asyncio.timeout(self._response_timeout):
-                    line = await reader.readline()
+                    line = await reader.readuntil(b"\n")
             except TimeoutError as exc:
                 raise HelperTimeout("response timed out") from exc
+            except asyncio.LimitOverrunError as exc:
+                # An over-limit response with no newline yet (A-REV-015) —
+                # fails fast and clean instead of buffering unbounded data
+                # or surfacing a raw asyncio exception.
+                raise HelperResponseTooLarge(f"response exceeds {MAX_RESPONSE_BYTES} bytes") from exc
+            except asyncio.IncompleteReadError as exc:
+                raise HelperError("helper closed the connection before a full response") from exc
 
             if len(line) > MAX_RESPONSE_BYTES:
                 raise HelperResponseTooLarge(f"response exceeds {MAX_RESPONSE_BYTES} bytes")
@@ -117,6 +130,8 @@ class HelperClient:
             )
         finally:
             writer.close()
+            with suppress(Exception):
+                await writer.wait_closed()
 
     async def set_led(self, mode: Literal["on", "off", "blink"]) -> HelperResponse:
         return await self._send("led.set", LedSetArgs(mode=mode))

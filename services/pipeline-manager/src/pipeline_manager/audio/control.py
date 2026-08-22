@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Sequence
@@ -32,6 +33,25 @@ class ExecResult:
 
 ExecFn = Callable[[Sequence[str]], Awaitable[ExecResult]]
 LogFn = Callable[[dict], None]
+
+
+async def real_amixer_exec(argv: Sequence[str]) -> ExecResult:
+    """Argv-only async `amixer` adapter (A-REV-012) — the real `audio_exec`
+    seam `create_production_app` injects. `asyncio.create_subprocess_exec`
+    only: never a shell string, matching every other spawn in this service.
+    """
+    process = await asyncio.create_subprocess_exec(
+        *argv,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    returncode = process.returncode if process.returncode is not None else 1
+    return ExecResult(
+        returncode=returncode,
+        stdout=stdout.decode("utf-8", errors="replace"),
+        stderr=stderr.decode("utf-8", errors="replace"),
+    )
 
 
 def _validate_name(name: str, *, field: str) -> None:

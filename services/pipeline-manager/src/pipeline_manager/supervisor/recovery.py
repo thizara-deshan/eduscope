@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -46,6 +47,15 @@ def write_sidecar(runtime_dir: Path, sidecar: Sidecar) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(asdict(sidecar)), encoding="utf-8")
     os.replace(tmp_path, path)
+
+
+def remove_sidecar(runtime_dir: Path, identity: str) -> None:
+    """The write-side counterpart of `write_sidecar`: called once ownership
+    of `identity` ends (clean stop, failed-start rollback, or an unexpected
+    exit) so a dead identity never lingers on disk as a false adoption
+    candidate for the next boot."""
+    with suppress(FileNotFoundError):
+        sidecar_path(runtime_dir, identity).unlink()
 
 
 def read_sidecars(runtime_dir: Path) -> list[Sidecar]:
@@ -162,3 +172,59 @@ def recover_orphans(
         )
 
     return RecoveryResult(adopted=tuple(adopted), foreign=tuple(foreign))
+
+
+def real_proc_scanner(pid: int) -> ProcStat | None:
+    """Board/Arch adapter for `ProcScanner` (A-REV-007): a fresh `/proc/<pid>`
+    read, never a cached or self-reported value. `starttime` (field 22 of
+    `stat`, after the `)` that closes `comm` — `comm` itself may contain
+    spaces or parens, so it can't be split on whitespace) is the kernel's own
+    PID-reuse guard; `exe` is read via the symlink, not trusted from argv[0].
+    """
+    try:
+        executable = os.readlink(f"/proc/{pid}/exe")
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    _, _, rest = stat_text.rpartition(")")
+    fields = rest.split()
+    if len(fields) < 20:
+        return None
+    return ProcStat(start_time_ticks=int(fields[19]), executable=executable)
+
+
+def _read_cmdline(pid: int) -> tuple[str, ...] | None:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    return tuple(part.decode("utf-8", errors="replace") for part in raw.split(b"\x00") if part)
+
+
+def real_expected_processes(runtime_dir: Path) -> list[ExpectedProcess]:
+    """Board/Arch adapter for the `expected_processes` seam.
+
+    An opaque `record:<id>` identity carries no domain state a fresh process
+    could rebuild ahead of a restart, so "expected" is necessarily
+    self-referential: for each sidecar on disk, read that *same* pid's live
+    argv/exe straight from `/proc` right now. This still isn't a rubber
+    stamp — `recover_orphans` hashes this freshly-read argv and compares it
+    against the sidecar's `argv_hash` (recorded at spawn time), so a sidecar
+    whose claimed pid is now running something else entirely is still
+    rejected as foreign, not adopted.
+    """
+    expected: list[ExpectedProcess] = []
+    for sidecar in read_sidecars(runtime_dir):
+        argv = _read_cmdline(sidecar.pid)
+        if argv is None:
+            continue  # process already gone; recover_orphans will report it foreign
+        try:
+            executable = os.readlink(f"/proc/{sidecar.pid}/exe")
+        except OSError:
+            continue
+        expected.append(
+            ExpectedProcess(identity=sidecar.identity, argv=argv, kind=sidecar.kind, executable=executable)
+        )
+    return expected

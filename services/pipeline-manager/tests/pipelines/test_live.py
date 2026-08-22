@@ -82,6 +82,7 @@ class TestStreamKeyValidation:
         assert "location=rtmp://127.0.0.1:1935/live/bench live=1" in spec.argv
 
 
+<<<<<<< HEAD
 class TestEffectiveEncodeProfile:
     """KEEP B-56 gate correction (2026-08-18): the streaming channel's override
     reaches the next live-start profile while the local/default record profile
@@ -117,3 +118,34 @@ class TestEffectiveEncodeProfile:
         assert "bps=8000000" in live_spec.argv
         assert "bps=8000000" not in record_spec.argv
         assert "gop=30" in record_spec.argv  # record default, untouched by the live override
+=======
+class TestEffectiveFps:
+    """A-REV-014: `LIVE_COMPOSITE`'s effective fps must reach both the
+    per-tile normalization caps and the composited canvas caps — not just
+    live unused on `EncodeProfile.fps`."""
+
+    def test_single_tile_normalization_uses_profile_fps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from pipeline_manager.pipelines import live as live_module
+        from pipeline_manager.pipelines.profiles import ProfileKind, get_profile
+
+        def _fps24(kind: ProfileKind) -> object:
+            return get_profile(kind, {"fps": 24})
+
+        monkeypatch.setattr(live_module, "get_profile", _fps24)
+        spec = build_live(LiveRequest(preset=LayoutPresetId.CAM_1, stream_key="bench"), RK3588Profile())
+        assert "video/x-raw,framerate=24/1" in spec.argv
+
+    def test_composite_canvas_caps_use_profile_fps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from pipeline_manager.pipelines import live as live_module
+        from pipeline_manager.pipelines.profiles import ProfileKind, get_profile
+
+        def _fps24(kind: ProfileKind) -> object:
+            return get_profile(kind, {"fps": 24})
+
+        monkeypatch.setattr(live_module, "get_profile", _fps24)
+        spec = build_live(
+            LiveRequest(preset=LayoutPresetId.FIFTY_FIFTY, stream_key="bench", ratio_a=50, ratio_b=50),
+            RK3588Profile(),
+        )
+        assert "video/x-raw,width=1920,height=1080,framerate=24/1" in spec.argv
+>>>>>>> main
