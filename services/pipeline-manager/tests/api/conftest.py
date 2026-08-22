@@ -40,8 +40,8 @@ def make_fake_popen():
 
 
 @pytest.fixture
-def app_and_popen():
-    settings = Settings(shared_bearer_token=VALID_TOKEN)
+def app_and_popen(tmp_path):
+    settings = Settings(shared_bearer_token=VALID_TOKEN, recordings_root=tmp_path)
     popen = make_fake_popen()
     app = create_app(settings, popen=popen)
     return app, popen

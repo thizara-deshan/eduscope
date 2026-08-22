@@ -9,13 +9,14 @@ import pytest
 
 from pipeline_manager.pipelines.builder import PipelineSpec
 from pipeline_manager.supervisor.process import ProcessSupervisor, classify_line
+from pipeline_manager.supervisor.recovery import read_sidecars
 
 FAKE_CHILD = Path(__file__).resolve().parent / "fake_child.py"
 
 
-def _spec(mode: str) -> PipelineSpec:
+def _spec(mode: str, outputs: tuple[str, ...] = ()) -> PipelineSpec:
     argv = (sys.executable, str(FAKE_CHILD), mode)
-    return PipelineSpec(argv=argv, required_roles=(), encode_slots=0, outputs=())
+    return PipelineSpec(argv=argv, required_roles=(), encode_slots=0, outputs=outputs)
 
 
 @dataclass
@@ -112,6 +113,51 @@ async def test_error_observation_is_parsed_from_real_child() -> None:
     try:
         observation = await process.observations.get()
         assert observation.kind == "ERROR"
+    finally:
+        process.popen.terminate()
+        process.popen.wait(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_start_writes_a_sidecar_when_runtime_dir_is_configured(tmp_path: Path) -> None:
+    supervisor = ProcessSupervisor(runtime_dir=tmp_path)
+    process = await supervisor.start(_spec("playing", outputs=("/tmp/out.ts",)), "record:sidecar-write")
+    try:
+        sidecars = read_sidecars(tmp_path)
+        assert len(sidecars) == 1
+        assert sidecars[0].identity == "record:sidecar-write"
+        assert sidecars[0].pid == process.pid
+        assert sidecars[0].pgid == process.pgid
+        assert sidecars[0].kind == "record"
+        assert sidecars[0].output_path == "/tmp/out.ts"
+    finally:
+        process.popen.terminate()
+        process.popen.wait(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_forget_removes_the_sidecar_when_runtime_dir_is_configured(tmp_path: Path) -> None:
+    supervisor = ProcessSupervisor(runtime_dir=tmp_path)
+    process = await supervisor.start(_spec("playing"), "record:sidecar-remove")
+    try:
+        assert read_sidecars(tmp_path) != []
+        supervisor.forget("record:sidecar-remove")
+        assert read_sidecars(tmp_path) == []
+        assert "record:sidecar-remove" not in supervisor.processes
+    finally:
+        process.popen.terminate()
+        process.popen.wait(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_no_sidecar_is_written_without_a_runtime_dir() -> None:
+    """The hermetic default (every unit test, and `create_app` without a
+    production factory) must never touch the filesystem for ownership
+    bookkeeping — matches the no-op `flush_sidecars`/`proc_scanner` seams."""
+    supervisor = ProcessSupervisor()
+    process = await supervisor.start(_spec("playing"), "record:no-runtime-dir")
+    try:
+        assert supervisor._runtime_dir is None
     finally:
         process.popen.terminate()
         process.popen.wait(timeout=5)

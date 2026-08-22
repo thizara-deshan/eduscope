@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,7 @@ from pipeline_manager.audio.control import (
     InvalidGain,
     UnsupportedAudioRole,
     apply_audio_control,
+    real_amixer_exec,
 )
 from pipeline_manager.models import SourceRole
 
@@ -155,3 +158,41 @@ def test_fixture_shapes_match_audio_control_wire_fields() -> None:
     for row in rows:
         assert set(row.keys()) == {"roleId", "appliedGain", "appliedMuted", "appliedState", "lastError"}
         assert row["appliedState"] in ("applied", "failed")
+
+
+# ── real_amixer_exec (A-REV-012, POSIX-only real subprocess) ───────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="verified on target")
+@pytest.mark.skipif(shutil.which("echo") is None, reason="echo not on PATH on this host")
+async def test_real_amixer_exec_captures_stdout_and_zero_returncode() -> None:
+    """A harmless real child stands in for `amixer` — proves the adapter is
+    argv-only (no shell) and correctly captures stdout/returncode."""
+    result = await real_amixer_exec([shutil.which("echo"), "hello"])
+    assert result.returncode == 0
+    assert result.stdout.strip() == "hello"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="verified on target")
+@pytest.mark.skipif(shutil.which("false") is None, reason="false not on PATH on this host")
+async def test_real_amixer_exec_captures_nonzero_returncode() -> None:
+    result = await real_amixer_exec([shutil.which("false")])
+    assert result.returncode != 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="verified on target")
+async def test_real_amixer_exec_never_uses_a_shell(tmp_path: Path) -> None:
+    """A shell metacharacter in an argv token must be passed through
+    literally to the child as one argument, never interpreted by a shell —
+    proves `shell=False` semantics (a real shell would split `;` into a
+    second command and create the marker file)."""
+    echo = shutil.which("echo")
+    if echo is None:
+        pytest.skip("echo not on PATH on this host")
+    marker = tmp_path / "pwned"
+    result = await real_amixer_exec([echo, f"hi; touch {marker}"])
+    assert result.stdout.strip() == f"hi; touch {marker}"
+    assert not marker.exists()

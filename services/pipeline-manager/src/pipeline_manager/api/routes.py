@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -12,7 +14,7 @@ from ..consumers.live import LiveConsumer
 from ..consumers.meeting import MeetingConsumer
 from ..consumers.record import RecordConsumer
 from ..consumers.snapshot import SnapshotConsumer
-from ..models import LayoutPresetId, PublisherId, SourceRole
+from ..models import LayoutPresetId, PublisherId, SourceRole, resolve_output_path
 from ..pipelines.live import LiveRequest
 from ..pipelines.meeting import MeetingRequest
 from ..pipelines.projector import ProjectorMode, QuestionOverlay
@@ -33,6 +35,25 @@ def _parse_preset(value: str) -> LayoutPresetId:
         return LayoutPresetId(value)
     except ValueError:
         raise InvalidPresetString(value) from None
+
+
+def _validate_record_paths(body: RecordStartBody, recordings_root: Path) -> None:
+    """Every path a record request can name — the single `outputPath` or the
+    per-stream-key `outputPaths` map — must resolve under `recordings_root`
+    (symlink-aware, B-02) before a consumer id is registered or anything is
+    spawned. Raised bare `ValueError`s are routed to a Problem centrally
+    (`app.py`'s `DOMAIN_EXCEPTIONS`), same as every other domain error.
+    """
+    if body.outputPath is not None:
+        resolve_output_path(Path(body.outputPath), recordings_root)
+    if body.outputPaths is not None:
+        resolved = [resolve_output_path(Path(value), recordings_root) for value in body.outputPaths.values()]
+        if len(set(resolved)) != len(resolved):
+            raise ValueError("outputPaths entries must not target the same resolved path")
+
+
+def _validate_snapshot_path(body: SnapshotStartBody, recordings_root: Path) -> None:
+    resolve_output_path(Path(body.outputPath), recordings_root)
 
 
 def _check_preflight(state) -> None:
@@ -152,22 +173,40 @@ class ThumbnailIceBody(BaseModel):
 # ── publishers ───────────────────────────────────────────────────────────
 
 
+def _dispatch_publisher_command(request: Request, publisher_id: PublisherId, action) -> None:
+    """Run `action(controller)` in the background under this publisher's
+    lock so the route can return 202 immediately (§3.1: accepted, then
+    resolved by `evt.pm.publisher.*` / `GET /status`) while same-identity
+    commands still serialize against each other.
+    """
+    state = request.app.state
+    controller = state.publishers[publisher_id]
+    lock = state.publisher_locks[publisher_id]
+
+    async def _run() -> None:
+        async with lock:
+            await action(controller)
+
+    asyncio.create_task(_run())
+
+
 @router.post("/publishers/{publisher_id}/start", status_code=202)
 async def start_publisher(publisher_id: str, request: Request) -> PublisherCommandAccepted:
     try:
         pid = PublisherId(publisher_id)
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
-    _ = request.app.state.publishers[pid]  # validated the id resolves to a real controller
+    _dispatch_publisher_command(request, pid, request.app.state.start_publisher)
     return PublisherCommandAccepted(publisherId=publisher_id, state="starting")
 
 
 @router.post("/publishers/{publisher_id}/stop", status_code=202)
 async def stop_publisher(publisher_id: str, request: Request) -> PublisherCommandAccepted:
     try:
-        PublisherId(publisher_id)
+        pid = PublisherId(publisher_id)
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
+    _dispatch_publisher_command(request, pid, request.app.state.stop_publisher)
     return PublisherCommandAccepted(publisherId=publisher_id, state="stopping")
 
 
@@ -200,6 +239,7 @@ async def bind_publisher(publisher_id: str, body: PublisherBindingBody, request:
 async def start_record(body: RecordStartBody, request: Request) -> CommandAccepted:
     preset = _parse_preset(body.preset)
     state = request.app.state
+    _validate_record_paths(body, state.settings.recordings_root)
     consumer_id = f"record:{state.new_id()}"
     consumer = RecordConsumer(
         consumer_id,
@@ -209,6 +249,7 @@ async def start_record(body: RecordStartBody, request: Request) -> CommandAccept
         platform=state.platform,
         is_publisher_running=state.is_publisher_running,
         is_capture_card_recovering=state.is_capture_card_recovering,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     req = RecordRequest(
@@ -236,6 +277,7 @@ async def start_live(body: LiveStartBody, request: Request) -> CommandAccepted:
         supervisor=state.supervisor,
         ledger=state.ledger,
         confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     await consumer.start(LiveRequest(preset=preset, stream_key=body.streamKey, ratio_a=body.ratioA, ratio_b=body.ratioB))
@@ -259,6 +301,7 @@ async def start_meeting(body: MeetingStartBody, request: Request) -> CommandAcce
         supervisor=state.supervisor,
         ledger=state.ledger,
         confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     await consumer.start(MeetingRequest(preset=preset, hdmi2_alsa_device=state.settings.hdmi2_alsa_device, ratio_a=body.ratioA, ratio_b=body.ratioB))
@@ -287,10 +330,12 @@ async def set_projector_mode(body: ProjectorModeBody, request: Request) -> Comma
 @router.post("/consumers/snapshot/start", status_code=202)
 async def start_snapshot(body: SnapshotStartBody, request: Request) -> CommandAccepted:
     state = request.app.state
+    _validate_snapshot_path(body, state.settings.recordings_root)
     consumer_id = f"snapshot:{state.new_id()}"
     consumer = SnapshotConsumer(
         consumer_id, platform=state.platform, has_ai_subscription=state.has_ai_subscription,
         supervisor=state.supervisor, ledger=state.ledger, confirmer=state.confirmer,
+        events=state.events,
     )
     state.consumers[consumer_id] = consumer
     try:
@@ -362,7 +407,10 @@ async def thumbnail_offer(body: ThumbnailOfferBody, request: Request) -> Command
 @router.post("/consumers/thumbnails/{negotiation_id}/ice", status_code=202)
 async def thumbnail_ice(negotiation_id: str, body: ThumbnailIceBody, request: Request) -> Response:
     state = request.app.state
-    if negotiation_id not in state.thumbnails.negotiations:
+    forwarded = state.thumbnails.send_ice(
+        negotiation_id, candidate=body.candidate, sdp_mid=body.sdpMid, sdp_mline_index=body.sdpMLineIndex
+    )
+    if not forwarded:
         raise NegotiationNotFound(negotiation_id)
     return Response(status_code=202)
 
@@ -473,6 +521,7 @@ async def get_status(request: Request) -> dict:
             pid.value: {
                 "state": controller.current_state().value,
                 "bound": controller.has_binding,
+                "pid": controller.pid,
                 "fps": controller.health.fps,
                 "rms": controller.health.rms,
                 "lastError": controller.health.last_error,
@@ -482,7 +531,9 @@ async def get_status(request: Request) -> dict:
         "consumers": [
             {
                 "id": consumer_id,
+                "kind": consumer_id.split(":", 1)[0],
                 "state": consumer.state.value,
+                "output": getattr(consumer, "output_path", None),
                 "pgid": consumer.pgid,
             }
             for consumer_id, consumer in state.consumers.items()

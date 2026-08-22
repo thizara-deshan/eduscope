@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -69,6 +71,21 @@ class TestOutputPath:
             Path("/media/eduscope/recordings/2026/seg-001.ts"), Path("/media/eduscope/recordings")
         )
         assert resolved == Path("/media/eduscope/recordings/2026/seg-001.ts")
+
+    def test_root_itself_rejected(self) -> None:
+        with pytest.raises(ValueError, match="recordings root"):
+            resolve_output_path(Path("/media/eduscope/recordings"), Path("/media/eduscope/recordings"))
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="symlink escape needs a real POSIX symlink; verified on target")
+    def test_symlink_inside_root_pointing_out_rejected(self, tmp_path: Path) -> None:
+        root = tmp_path / "recordings"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        os.symlink(outside, root / "link", target_is_directory=True)
+
+        with pytest.raises(ValueError, match="recordings root"):
+            resolve_output_path(root / "link" / "escape.ts", root)
 
 
 def test_service_cannot_bind_publicly() -> None:

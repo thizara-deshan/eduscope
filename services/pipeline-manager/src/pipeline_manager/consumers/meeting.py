@@ -27,10 +27,16 @@ class MeetingConsumer(ConsumerController):
         self._is_publisher_running = is_publisher_running
 
     async def start(self, request: MeetingRequest) -> ConsumerEvent:
-        spec = build_meeting(request, self._platform)
-        for role in spec.required_roles:
-            if not self._is_publisher_running(role):
-                raise PublisherNotRunning(role)
+        spec = build_meeting(request, self._platform, is_role_healthy=self._is_publisher_running)
+        if spec.degraded_start_ok:
+            # A-REV-003: refuse only if every required role is offline —
+            # a single missing camera/mic falls back in-pipeline instead.
+            if not any(self._is_publisher_running(role) for role in spec.required_roles):
+                raise PublisherNotRunning(spec.required_roles[0])
+        else:
+            for role in spec.required_roles:
+                if not self._is_publisher_running(role):
+                    raise PublisherNotRunning(role)
         event = await self.spawn(spec, priority="guaranteed")
         return event
 

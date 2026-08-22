@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -8,7 +9,11 @@ from typing import Awaitable, Callable, Literal
 
 from .helper_client import HelperClient
 
+_LOGGER = logging.getLogger(__name__)
+
 CaptureCardState = Literal["present", "absent", "recovering", "failed"]
+
+CAPTURE_CARD_EVENT_KIND = "evt.pm.device.captureCard"
 
 PROBE_INTERVAL_SECONDS = 30.0  # T-CAPTURE-PROBE
 CONSECUTIVE_MISSES_BEFORE_ABSENT = 2
@@ -24,6 +29,25 @@ class ProbeResult:
 
 
 ProbeFn = Callable[[], Awaitable[ProbeResult]]
+
+
+async def real_v4l2_probe() -> ProbeResult:
+    """Argv-only `v4l2-ctl --list-devices` adapter (A-REV-013) — the real
+    `watchdog.probe` seam `create_production_app` injects. Never a shell —
+    `asyncio.create_subprocess_exec` only.
+    A nonzero exit still yields a `ProbeResult` (`_matches` reports it as a
+    miss, same as any other absent-card cycle); a missing `v4l2-ctl` binary
+    raises `FileNotFoundError`, which `run_watchdog_loop`'s own guard logs
+    and treats as a skipped cycle rather than tearing the loop down.
+    """
+    process = await asyncio.create_subprocess_exec(
+        "v4l2-ctl", "--list-devices",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await process.communicate()
+    returncode = process.returncode if process.returncode is not None else 1
+    return ProbeResult(returncode=returncode, stdout=stdout.decode("utf-8", errors="replace"))
 
 
 @dataclass
@@ -106,18 +130,40 @@ async def run_watchdog_loop(
     interval: float = PROBE_INTERVAL_SECONDS,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     stop_event: "asyncio.Event | None" = None,
+    events=None,
 ) -> None:
     """Supervised probe loop: one `tick()` every `interval`, guarded so a
     transient probe/hub-cycle error never tears the loop down. Cancel the task
     (or set `stop_event`) to stop it — the FastAPI lifespan cancels it on
     shutdown. On the board this runs for the process lifetime; off-board the
     default probe simply reports the card absent.
+
+    A-REV-013: a cycle that lands on "recovering" immediately calls
+    `confirm_recovery` — T-CAPTURE-RECOVER's 25s deadline starts right after
+    the hub cycle, not after an additional up-to-`interval`-second wait for
+    the next scheduled tick. Every state *change* (not every tick) publishes
+    `evt.pm.device.captureCard` on `events` (optional — omitted in hermetic
+    unit tests, always passed by `app.py`'s real `EventBroker`, which is
+    infrastructure, not a hardware seam). A caught exception is logged, never
+    silently discarded — the loop still survives it, same as before.
     """
     while stop_event is None or not stop_event.is_set():
         try:
-            await watchdog.tick()
+            previous = watchdog.state
+            state = await watchdog.tick()
+            if state != previous:
+                await _publish_transition(events, state)
+            if state == "recovering":
+                confirmed = await watchdog.confirm_recovery(sleep=sleep)
+                if confirmed != state:
+                    await _publish_transition(events, confirmed)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 - a probe/helper error must not kill the loop
-            pass
+        except Exception as exc:  # noqa: BLE001 - a probe/helper error must not kill the loop
+            _LOGGER.warning("capture-card watchdog cycle failed: %s", exc)
         await sleep(interval)
+
+
+async def _publish_transition(events, state: CaptureCardState) -> None:
+    if events is not None:
+        await events.publish(CAPTURE_CARD_EVENT_KIND, {"state": state})

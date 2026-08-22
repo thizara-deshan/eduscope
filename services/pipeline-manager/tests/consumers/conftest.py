@@ -18,10 +18,20 @@ class FakeStdin:
 
 @dataclass
 class FakePopen:
-    returncode: int | None = 0
+    # `None` means "still running" — a freshly spawned fake child must read as
+    # alive to the exit watcher until a test explicitly simulates an exit via
+    # `popen.returncode = <code>` (mirrors real `Popen.poll()`/`.wait()`).
+    returncode: int | None = None
     stdin: FakeStdin = field(default_factory=FakeStdin)
+    stdout: object | None = None
+    stderr: object | None = None
 
     def wait(self, timeout: float | None = None) -> int:
+        if self.returncode is None:
+            self.returncode = 0
+        return self.returncode
+
+    def poll(self) -> int | None:
         return self.returncode
 
 
@@ -29,12 +39,17 @@ class FakePopen:
 class FakeSupervisor:
     calls: list = field(default_factory=list)
     next_pid: int = 2000
+    processes: dict = field(default_factory=dict)
 
     async def start(self, spec, identity):
         process = ManagedProcess(identity=identity, pid=self.next_pid, pgid=self.next_pid, popen=FakePopen())
         self.calls.append((spec, identity))
+        self.processes[identity] = process
         self.next_pid += 1
         return process
+
+    def forget(self, identity: str) -> None:
+        self.processes.pop(identity, None)
 
 
 @dataclass
