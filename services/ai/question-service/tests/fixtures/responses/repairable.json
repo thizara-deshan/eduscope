@@ -1,0 +1,4 @@
+{
+  "content": "[{\"prompt\": \"Zero-correct question one\", \"options\": [{\"text\": \"a\", \"isCorrect\": false}, {\"text\": \"b\", \"isCorrect\": false}]}, {\"prompt\": \"Zero-correct question two\", \"options\": [{\"text\": \"a\", \"isCorrect\": false}, {\"text\": \"b\", \"isCorrect\": false}]}, {\"prompt\": \"Zero-correct question three\", \"options\": [{\"text\": \"a\", \"isCorrect\": false}, {\"text\": \"b\", \"isCorrect\": false}]}]",
+  "model": "llama-3.1-8b-instruct-q4_k_m"
+}

@@ -1,0 +1,4 @@
+{
+  "content": "Sure, here are the questions:\n[{\"prompt\": \"What is conserved in an isolated system?\", \"options\": [{\"text\": \"Energy\", \"isCorrect\": true}, {\"text\": \"Momentum only\", \"isCorrect\": false}]},\n{\"prompt\": \"Which law describes energy c",
+  "model": "llama-3.1-8b-instruct-q4_k_m"
+}
