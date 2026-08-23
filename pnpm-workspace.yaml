@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   - 'apps/*'
   - 'services/core-api'
+  - 'services/quiz-service'
