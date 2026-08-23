@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eduscope.internal/schemas/mcq/v1/schema.json",
+  "title": "mcq/v1 generation output",
+  "type": "array",
+  "minItems": 3,
+  "maxItems": 5,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["prompt", "options"],
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "options": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 4,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "isCorrect"],
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "isCorrect": {
+              "type": "boolean"
+            }
+          }
+        },
+        "contains": {
+          "type": "object",
+          "required": ["isCorrect"],
+          "properties": {
+            "isCorrect": { "const": true }
+          }
+        },
+        "minContains": 1,
+        "maxContains": 1
+      }
+    }
+  }
+}

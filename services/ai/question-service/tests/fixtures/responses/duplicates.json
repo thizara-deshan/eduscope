@@ -1,0 +1,4 @@
+{
+  "content": "[{\"prompt\": \"Which term names the conserved quantity?\", \"options\": [{\"text\": \"Energy\", \"isCorrect\": true}, {\"text\": \"  ENERGY  \", \"isCorrect\": false}]}, {\"prompt\": \"Which law describes energy conservation?\", \"options\": [{\"text\": \"Newton's third law\", \"isCorrect\": false}, {\"text\": \"First law of thermodynamics\", \"isCorrect\": true}, {\"text\": \"Ohm's law\", \"isCorrect\": false}]}, {\"prompt\": \"Energy cannot be created or destroyed, only what?\", \"options\": [{\"text\": \"Transferred or transformed\", \"isCorrect\": true}, {\"text\": \"Duplicated\", \"isCorrect\": false}]}]",
+  "model": "llama-3.1-8b-instruct-q4_k_m"
+}

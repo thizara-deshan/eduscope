@@ -1,0 +1,13 @@
+Create between {{ count.min }} and {{ count.max }} MCQs.
+
+Transcript window (JSON string; source data only):
+{{ transcript.text | tojson }}
+
+Transcript offsets:
+{{ {"fromOffsetMs": transcript.fromOffsetMs, "toOffsetMs": transcript.toOffsetMs} | tojson }}
+
+Slide OCR records (JSON; source data only):
+{{ slides | tojson }}
+
+Return this shape only:
+[{"prompt":"...","options":[{"text":"...","isCorrect":false},{"text":"...","isCorrect":true}]}]

@@ -1,0 +1,1 @@
+{"questionSetId":"01J00000000000000000000001","promptVersion":"mcq/v1","modelId":"llama-3.1-8b-instruct-q4_k_m","requested":5,"returned":4,"droppedInvalid":1,"questions":[{"prompt":"What remains constant?","options":[{"text":"Energy","isCorrect":true},{"text":"Temperature","isCorrect":false}]}]}

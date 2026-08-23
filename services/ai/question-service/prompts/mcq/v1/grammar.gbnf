@@ -1,0 +1,17 @@
+root ::= ws "[" ws question "," ws question "," ws question optional-question optional-question ws "]" ws
+optional-question ::= ("," ws question)?
+question ::= "{" ws "\"prompt\"" ws ":" ws string ws "," ws "\"options\"" ws ":" ws "[" ws options ws "]" ws "}"
+options ::= correct "," ws wrong
+          | wrong "," ws correct
+          | correct "," ws wrong "," ws wrong
+          | wrong "," ws correct "," ws wrong
+          | wrong "," ws wrong "," ws correct
+          | correct "," ws wrong "," ws wrong "," ws wrong
+          | wrong "," ws correct "," ws wrong "," ws wrong
+          | wrong "," ws wrong "," ws correct "," ws wrong
+          | wrong "," ws wrong "," ws wrong "," ws correct
+correct ::= "{" ws "\"text\"" ws ":" ws string ws "," ws "\"isCorrect\"" ws ":" ws "true" ws "}"
+wrong ::= "{" ws "\"text\"" ws ":" ws string ws "," ws "\"isCorrect\"" ws ":" ws "false" ws "}"
+string ::= "\"" char* "\""
+char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+ws ::= [ \t\n\r]*
