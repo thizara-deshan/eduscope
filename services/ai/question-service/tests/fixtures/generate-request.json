@@ -1,0 +1,1 @@
+{"sessionId":"01J00000000000000000000000","questionSetId":"01J00000000000000000000001","count":{"min":3,"max":5},"transcript":{"fromOffsetMs":0,"toOffsetMs":60000,"text":"Energy cannot be created or destroyed."},"slides":[{"offsetMs":30000,"ocrText":"Conservation of Energy"}],"promptVersion":"mcq/v1","llmEndpoint":"http://127.0.0.1:7200"}

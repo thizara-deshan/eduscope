@@ -1,0 +1,6 @@
+{
+  "unreachable": { "status": 503, "body": { "code": "llm.unreachable", "title": "LLM is unreachable", "status": 503 } },
+  "timeout": { "status": 504, "body": { "code": "llm.timeout", "title": "LLM generation timed out", "status": 504 } },
+  "invalidPayload": { "status": 422, "body": { "code": "llm.invalid-payload", "title": "LLM returned no valid questions", "status": 422 } },
+  "badRequest": { "status": 400, "body": { "code": "bad-request", "title": "Invalid generation request", "status": 400 } }
+}

@@ -238,10 +238,36 @@ async def test_generate_uses_the_completion_model_without_calling_props() -> Non
 
     client, http_client = _make_client(handler)
     async with http_client:
-        outcome = await client.generate("http://127.0.0.1:7200", "p", GRAMMAR, remaining_budget_ms=10000)
+        outcome = await client.generate("http://127.0.0.1:7200", "p", GRAMMAR, remaining_budget_ms=lambda: 10000)
 
     assert outcome.model_id == "from-completion"
     assert props_calls == []
+
+
+@pytest.mark.asyncio
+async def test_generate_evaluates_remaining_budget_lazily_after_completions() -> None:
+    # The budget callable must be read only once, after the completion (and
+    # any repair) calls have already spent their own time against it — not
+    # captured up front before either network call runs.
+    budget_reads: list[int] = []
+
+    def remaining_budget_ms() -> int:
+        budget_reads.append(len(budget_reads))
+        return 10000
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/props":
+            return httpx.Response(200, json={"model": "from-props"})
+        return httpx.Response(200, json={"content": _fixture("repairable")["content"]})
+
+    client, http_client = _make_client(handler)
+    async with http_client:
+        outcome = await client.generate(
+            "http://127.0.0.1:7200", "p", GRAMMAR, remaining_budget_ms=remaining_budget_ms
+        )
+
+    assert budget_reads == [0]
+    assert outcome.model_id == "from-props"
 
 
 @pytest.mark.asyncio

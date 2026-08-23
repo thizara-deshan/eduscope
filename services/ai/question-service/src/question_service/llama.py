@@ -10,6 +10,7 @@ never retries beyond the single internal repair attempt (ai-services.md
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import httpx
 
@@ -72,6 +73,12 @@ def _repair_prompt(prompt: str, result: SalvageResult) -> str:
 class LlamaClient:
     def __init__(self, http_client: httpx.AsyncClient) -> None:
         self._http_client = http_client
+
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        """Exposed so callers (question_service.app) can reuse the same
+        transport for the `/probe` route instead of opening a second one."""
+        return self._http_client
 
     async def complete(self, llm_endpoint: str, prompt: str, grammar: str) -> LlamaCompletion:
         """One raw `/completion` call. Never retries; never repairs."""
@@ -148,9 +155,16 @@ class LlamaClient:
         prompt: str,
         grammar: str,
         *,
-        remaining_budget_ms: int | None = None,
+        remaining_budget_ms: Callable[[], int | None] | None = None,
     ) -> GenerationOutcome:
-        """One completion, one optional repair pass, then model-id resolution."""
+        """One completion, one optional repair pass, then model-id resolution.
+
+        `remaining_budget_ms` is a callable, not a static value, because the
+        completion (and optional repair) calls above consume real time
+        against the caller's enclosing deadline (C-08's 40s asyncio.timeout);
+        it must be evaluated only once we reach model-id resolution, not
+        captured before either network call.
+        """
         first = await self.complete(llm_endpoint, prompt, grammar)
         result = salvage_questions(first.content)
         completion_count = 1
@@ -165,7 +179,7 @@ class LlamaClient:
         model_id = await self.resolve_model_id(
             llm_endpoint,
             completion_model=latest_model,
-            remaining_budget_ms=remaining_budget_ms,
+            remaining_budget_ms=remaining_budget_ms() if remaining_budget_ms is not None else None,
         )
 
         return GenerationOutcome(
