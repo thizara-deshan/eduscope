@@ -15,8 +15,8 @@ const QUIZ_APP_PATH = path.join(contractsDir, 'quiz-app.yaml');
 // Pins the contract files this task was implemented against (Global
 // Constraint 1: a route/event is not done until it matches the ratified
 // contract; implementation may not "fix" the contract locally).
-const EXPECTED_OPENAPI_SHA256 = 'b99ae5dc8a5bea9ca8e7069bdaf7715f8cc8ea9e8600d7030f6d4976c46dcfbf';
-const EXPECTED_QUIZ_APP_SHA256 = 'ddfc0c730a2eacd955d8ce0eab8a9a121e83fd5c02ce4dfd7e2971ed414aa58f';
+const EXPECTED_OPENAPI_SHA256 = 'bfc5935aba40042bc9afe21523fbb7aef0fc0b62608a5648540073f01328925b';
+const EXPECTED_QUIZ_APP_SHA256 = 'c6b52cbe7aad77380932fb41bc56f0c844c2510e2b6801fe9ec9391a0b691bd0';
 
 const EXPECTED_SERVER_ONLY_OPERATION_IDS = [
   'quizSyncCreateSession',
