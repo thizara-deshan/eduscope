@@ -10,12 +10,15 @@ export type QuizDomainEventName =
   | 'publication.opened'
   | 'publication.closed'
   | 'session.closed'
-  | 'participant.joined';
+  | 'participant.joined'
+  | 'answer.accepted';
 
 export interface QuizDomainEventPayload {
   quizSessionId: string;
   publicationId?: string;
   participantId?: string;
+  answerId?: string;
+  seq?: number;
 }
 
 /**
