@@ -65,6 +65,8 @@ export interface BuildAppOptions {
   joinCodeGenerator?: JoinCodeGenerator;
   domainEvents?: DomainNotifier;
   pageHandler?: PageHandler;
+  /** D-08 test-only seam (DR-22) — production always omits it and always allows an authenticated device-stream upgrade. */
+  deviceUpgradeAllowed?: () => boolean;
 }
 
 /**
@@ -123,7 +125,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerStudentRegistrationRoutes(app, deviceStreamHub);
   registerStudentAnswerRoutes(app, deviceStreamHub);
   registerStudentStreamRoutes(app, studentStreamHub);
-  registerDeviceStreamRoutes(app, deviceStreamHub);
+  registerDeviceStreamRoutes(app, deviceStreamHub, options.deviceUpgradeAllowed);
 
   // Hijacks only the not-found path, after every API/WS route this and later
   // D tasks register, so the Next.js page handler is strictly a fallback.

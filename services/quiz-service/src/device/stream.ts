@@ -204,22 +204,32 @@ class DeviceStreamAuthError extends Error {
   }
 }
 
-async function deviceStreamPreHandler(request: FastifyRequest): Promise<void> {
-  try {
-    await authenticateDevice(request);
-  } catch (error) {
-    if (error instanceof ProblemError) {
-      throw new DeviceStreamAuthError(error.status, error.title);
+function makeDeviceStreamPreHandler(deviceUpgradeAllowed: () => boolean) {
+  return async function deviceStreamPreHandler(request: FastifyRequest): Promise<void> {
+    if (!deviceUpgradeAllowed()) {
+      throw new DeviceStreamAuthError(503, 'device stream unavailable');
     }
-    throw error;
-  }
+    try {
+      await authenticateDevice(request);
+    } catch (error) {
+      if (error instanceof ProblemError) {
+        throw new DeviceStreamAuthError(error.status, error.title);
+      }
+      throw error;
+    }
+  };
 }
 
-/** Registers the device-bearer-authenticated `GET /api/device/v1/stream` upgrade (events.md §4). */
-export function registerDeviceStreamRoutes(app: FastifyInstance, hub: DeviceStreamHub): void {
+/**
+ * Registers the device-bearer-authenticated `GET /api/device/v1/stream`
+ * upgrade (events.md §4). `deviceUpgradeAllowed` is a D-08 test-only seam
+ * (DR-22) for simulating the stream becoming unavailable; production always
+ * omits it and always allows an authenticated upgrade.
+ */
+export function registerDeviceStreamRoutes(app: FastifyInstance, hub: DeviceStreamHub, deviceUpgradeAllowed: () => boolean = () => true): void {
   app.get(
     '/api/device/v1/stream',
-    { websocket: true, preHandler: deviceStreamPreHandler },
+    { websocket: true, preHandler: makeDeviceStreamPreHandler(deviceUpgradeAllowed) },
     (socket, request) => {
       const principal = request.deviceContext!;
 
