@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyWebsocket from '@fastify/websocket';
 import type { QuizConfig } from './config.js';
 import { loadConfig } from './config.js';
 import type { QuizDb } from './db/client.js';
@@ -24,6 +25,7 @@ import { EventEmitterDomainNotifier } from './device/publication-routes.js';
 import { registerStudentJoinRoutes } from './student/join.js';
 import { registerStudentRegistrationRoutes } from './student/registration.js';
 import { registerStudentAnswerRoutes } from './student/answers.js';
+import { registerStudentStreamRoutes, StudentStreamHub } from './student/stream.js';
 import { QuizAppProblemError } from './student/identity.js';
 
 const MAX_BODY_BYTES = 32 * 1024;
@@ -106,14 +108,19 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await app.register(fastifyCookie, { secret: config.cookieSecret });
   await app.register(fastifyRateLimit, { global: false });
+  await app.register(fastifyWebsocket);
 
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
+
+  const studentStreamHub = new StudentStreamHub({ db, clock, sessionSerial, logger: app.log });
+  studentStreamHub.subscribeTo(domainEvents);
 
   registerDeviceSessionRoutes(app);
   registerDevicePublicationRoutes(app);
   registerStudentJoinRoutes(app);
   registerStudentRegistrationRoutes(app);
   registerStudentAnswerRoutes(app);
+  registerStudentStreamRoutes(app, studentStreamHub);
 
   // Hijacks only the not-found path, after every API/WS route this and later
   // D tasks register, so the Next.js page handler is strictly a fallback.

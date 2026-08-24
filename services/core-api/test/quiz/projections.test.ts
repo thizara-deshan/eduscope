@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyInstance } from 'fastify';
-import type { Leaderboard, QuizResponsesPayload, QuizSessionPayload, SystemAlert } from '@eduscope/shared';
+import type { Leaderboard, QuizResponsesPayload, QuizScoreInput, QuizSessionPayload, SystemAlert } from '@eduscope/shared';
+import { scoreQuizParticipants } from '@eduscope/shared';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
@@ -356,5 +357,17 @@ describe('Quiz projection reads (Z-01..Z-06/Z-30..Z-33, machine 4a/4d)', () => {
     expect(alice.rank).toBe(1);
     expect(bob.rank).toBe(1);
     expect(cara.rank).toBe(2);
+
+    // INV-LB-2 parity witness (workstream D master-plan gate flag): the same
+    // fixture run through the shared DM-10 helper produces deep-equal entries
+    // to B's own getLeaderboard output — one ranking implementation, not two.
+    const fixture: QuizScoreInput[] = [
+      { studentIdNumber: 'S001', displayName: 'Alice', answered: 1, correct: 1, responseMsTotal: 1000 },
+      { studentIdNumber: 'S002', displayName: 'Bob', answered: 1, correct: 1, responseMsTotal: 2000 },
+      { studentIdNumber: 'S003', displayName: 'Cara', answered: 1, correct: 0, responseMsTotal: 1500 },
+    ];
+    const sharedScored = scoreQuizParticipants(fixture);
+    const bScored = [...leaderboard.entries].sort((a, b) => a.studentIdNumber.localeCompare(b.studentIdNumber));
+    expect(sharedScored.sort((a, b) => a.studentIdNumber.localeCompare(b.studentIdNumber))).toEqual(bScored);
   });
 });

@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import type { Leaderboard, LeaderboardEntry } from '@eduscope/shared';
+import type { Leaderboard } from '@eduscope/shared';
+import { scoreQuizParticipants } from '@eduscope/shared';
 import type { DrizzleDb } from '../../db/client.js';
 import { answerProjections, questionPublications, questions } from '../../db/schema.js';
 import type { Clock } from '../../lib/clock.js';
@@ -41,27 +42,7 @@ export function getLeaderboard(db: DrizzleDb, clock: Clock, sessionId: string): 
     byStudent.set(answer.studentIdNumber, accumulator);
   }
 
-  const scored = [...byStudent.values()].map((student) => ({
-    studentIdNumber: student.studentIdNumber,
-    displayName: student.displayName,
-    answered: student.answered,
-    correct: student.correct,
-    points: student.correct * 10,
-    accuracy: student.answered > 0 ? student.correct / student.answered : 0,
-    avgResponseMs: student.answered > 0 ? Math.round(student.responseMsTotal / student.answered) : 0,
-  }));
-  scored.sort((a, b) => b.points - a.points || a.studentIdNumber.localeCompare(b.studentIdNumber));
-
-  const entries: LeaderboardEntry[] = [];
-  let previousPoints: number | null = null;
-  let rank = 0;
-  for (const student of scored) {
-    if (previousPoints === null || student.points !== previousPoints) {
-      rank += 1; // dense rank (INV-LB-2): the next distinct score is rank+1, never index+1 — ties never leave a gap.
-      previousPoints = student.points;
-    }
-    entries.push({ ...student, rank });
-  }
+  const entries = scoreQuizParticipants([...byStudent.values()]);
 
   return { sessionId, entries, computedAt: clock.now().toISOString(), stale };
 }

@@ -501,3 +501,12 @@ export type StudentQuizQuestionPayload = z.infer<typeof zStudentQuizQuestionPayl
 export type StudentQuizResultPayload = z.infer<typeof zStudentQuizResultPayload>;
 export type StudentQuizSessionPayload = z.infer<typeof zStudentQuizSessionPayload>;
 export type StudentServerEvent = z.infer<typeof zStudentServerEvent>;
+
+/** §5 envelope (workstream D master-plan gate flag): `seq` is per connection and monotonic (CG-22). */
+export const zStudentEventEnvelope = zStudentServerEvent.and(
+  z.object({
+    at: z.string().datetime({ offset: true }),
+    seq: z.number().int().nonnegative(),
+  }),
+);
+export type StudentEventEnvelope = z.infer<typeof zStudentEventEnvelope>;
