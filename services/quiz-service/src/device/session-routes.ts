@@ -158,7 +158,7 @@ export function registerDeviceSessionRoutes(app: FastifyInstance): void {
       const principal = request.deviceContext as DevicePrincipal;
       const { quizSessionId } = request.params as { quizSessionId: string };
 
-      await app.sessionSerial.run(quizSessionId, () =>
+      const transition = await app.sessionSerial.run(quizSessionId, () =>
         app.db.transaction(async (tx) => {
           const rows = await tx
             .select()
@@ -173,10 +173,16 @@ export function registerDeviceSessionRoutes(app: FastifyInstance): void {
             .for('update');
           const session = rows[0];
           if (!session) {
-            return;
+            return undefined;
           }
 
           const now = app.clock.now();
+
+          const [openPublication] = await tx
+            .select({ id: publications.id })
+            .from(publications)
+            .where(and(eq(publications.quizSessionId, quizSessionId), eq(publications.state, 'open')))
+            .for('update');
 
           await tx
             .update(publications)
@@ -187,8 +193,17 @@ export function registerDeviceSessionRoutes(app: FastifyInstance): void {
             .update(quizSessions)
             .set({ state: 'closed', closedAt: now })
             .where(eq(quizSessions.id, quizSessionId));
+
+          return { closedPublicationId: openPublication?.id };
         }),
       );
+
+      if (transition) {
+        if (transition.closedPublicationId) {
+          app.domainEvents.emit('publication.closed', { quizSessionId, publicationId: transition.closedPublicationId });
+        }
+        app.domainEvents.emit('session.closed', { quizSessionId });
+      }
 
       reply.code(204).send();
     },

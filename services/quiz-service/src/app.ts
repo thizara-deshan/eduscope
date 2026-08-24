@@ -16,6 +16,9 @@ import { ProblemError } from './contracts/problem.js';
 import { registerDeviceSessionRoutes } from './device/session-routes.js';
 import type { JoinCodeGenerator } from './device/session-routes.js';
 import { RandomJoinCodeGenerator } from './device/session-routes.js';
+import { registerDevicePublicationRoutes } from './device/publication-routes.js';
+import type { DomainNotifier } from './device/publication-routes.js';
+import { EventEmitterDomainNotifier } from './device/publication-routes.js';
 
 const MAX_BODY_BYTES = 32 * 1024;
 
@@ -28,6 +31,7 @@ declare module 'fastify' {
     sql: Sql;
     sessionSerial: SessionSerial;
     joinCodeGenerator: JoinCodeGenerator;
+    domainEvents: DomainNotifier;
   }
 }
 
@@ -40,6 +44,7 @@ export interface BuildAppOptions {
   ids?: IdGenerator;
   sessionSerial?: SessionSerial;
   joinCodeGenerator?: JoinCodeGenerator;
+  domainEvents?: DomainNotifier;
   pageHandler?: PageHandler;
 }
 
@@ -53,6 +58,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const ids = options.ids ?? new UlidGenerator();
   const sessionSerial = options.sessionSerial ?? new InMemorySessionSerial();
   const joinCodeGenerator = options.joinCodeGenerator ?? new RandomJoinCodeGenerator();
+  const domainEvents = options.domainEvents ?? new EventEmitterDomainNotifier();
 
   const { db, sql, close } = openDatabase(config.databaseUrl);
   await migrate(sql, DEFAULT_MIGRATIONS_DIR);
@@ -67,6 +73,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('sql', sql);
   app.decorate('sessionSerial', sessionSerial);
   app.decorate('joinCodeGenerator', joinCodeGenerator);
+  app.decorate('domainEvents', domainEvents);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ProblemError) {
@@ -80,6 +87,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
 
   registerDeviceSessionRoutes(app);
+  registerDevicePublicationRoutes(app);
 
   // Hijacks only the not-found path, after every API/WS route this and later
   // D tasks register, so the Next.js page handler is strictly a fallback.
