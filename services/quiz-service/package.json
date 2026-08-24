@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
+    "load:200": "tsx test/load/join-answer-ws.ts",
     "gate": "pnpm typecheck && pnpm test"
   },
   "dependencies": {

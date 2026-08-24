@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyWebsocket from '@fastify/websocket';
 import type { QuizConfig } from './config.js';
@@ -67,6 +68,8 @@ export interface BuildAppOptions {
   pageHandler?: PageHandler;
   /** D-08 test-only seam (DR-22) — production always omits it and always allows an authenticated device-stream upgrade. */
   deviceUpgradeAllowed?: () => boolean;
+  /** D-09 test-only seam for log-scan assertions on real, serialized pino output; production always logs to stdout. */
+  loggerStream?: NodeJS.WritableStream;
 }
 
 /**
@@ -85,7 +88,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await migrate(sql, DEFAULT_MIGRATIONS_DIR);
 
   // Only the loopback Nginx proxy may supply forwarded student/device IPs.
-  const app = Fastify({ logger: true, trustProxy: '127.0.0.1', bodyLimit: MAX_BODY_BYTES });
+  const app = Fastify({
+    logger: options.loggerStream ? { level: 'info', stream: options.loggerStream } : true,
+    trustProxy: '127.0.0.1',
+    bodyLimit: MAX_BODY_BYTES,
+  });
 
   app.decorate('config', config);
   app.decorate('clock', clock);
@@ -96,6 +103,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('joinCodeGenerator', joinCodeGenerator);
   app.decorate('domainEvents', domainEvents);
 
+  const STUDENT_PUBLIC_PREFIX = '/api/student/v1';
+
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ProblemError) {
       reply.code(error.status).type('application/problem+json').send(error.toBody());
@@ -105,13 +114,45 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       reply.code(error.status).type('application/problem+json').send(error.toBody());
       return;
     }
+    // A body over the 32 KiB cap must never leak Fastify's default error
+    // shape on the public student surface; it collapses onto the same
+    // contracted Problem the abuse policy uses everywhere else.
+    const fastifyCode = (error as { code?: string }).code;
+    if (fastifyCode === 'FST_ERR_CTP_BODY_TOO_LARGE' && request.url.startsWith(STUDENT_PUBLIC_PREFIX)) {
+      // Any bytes past the cap are unread; ask the connection to close
+      // instead of leaving them to be misparsed as a pipelined request.
+      reply.header('connection', 'close');
+      const problem = new QuizAppProblemError(503, 'quiz.unavailable', 'Quiz service unavailable');
+      reply.code(problem.status).type('application/problem+json').send(problem.toBody());
+      return;
+    }
     request.log.error(error);
     reply.send(error);
   });
 
   await app.register(fastifyCookie, { secret: config.cookieSecret });
+  await app.register(fastifyCors, {
+    origin: (origin, callback) => callback(null, origin === config.publicOrigin),
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+  });
   await app.register(fastifyRateLimit, { global: false });
   await app.register(fastifyWebsocket);
+
+  // Device server-to-server routes are outside this check — only browser
+  // student traffic is Origin-scoped. Non-browser contract clients send no
+  // `Origin` header at all and are allowed through unconditionally; a
+  // present, non-matching value (including the literal string `"null"`)
+  // refuses only state-changing (POST) requests. A mismatched Origin on a
+  // read-only GET is left to `@fastify/cors`, which simply omits the
+  // allow-origin header rather than refusing the request.
+  app.addHook('onRequest', async (request) => {
+    if (request.method !== 'POST' || !request.url.startsWith(STUDENT_PUBLIC_PREFIX)) return;
+    const origin = request.headers.origin;
+    if (origin !== undefined && origin !== config.publicOrigin) {
+      throw new QuizAppProblemError(503, 'quiz.unavailable', 'Quiz service unavailable');
+    }
+  });
 
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
 
