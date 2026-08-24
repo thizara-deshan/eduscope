@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SubmitAnswerResponse } from '@eduscope/shared';
 import { zSubmitAnswerRequest } from '@eduscope/shared';
 import { answers, publications, quizSessions, type StoredQuizOption } from '../db/schema.js';
+import type { DeviceStreamHub } from '../device/stream.js';
 import { resolveParticipantCookie } from './cookies.js';
 import { QuizAppProblemError } from './identity.js';
 
@@ -39,7 +40,7 @@ interface AnswerOutcome {
 }
 
 /** Registers D-owned `submitAnswer` (quiz-app.yaml tag: student-quiz). */
-export function registerStudentAnswerRoutes(app: FastifyInstance): void {
+export function registerStudentAnswerRoutes(app: FastifyInstance, deviceStreamHub: DeviceStreamHub): void {
   app.post(
     '/api/student/v1/publications/:publicationId/answers',
     { config: { operationId: 'submitAnswer' } },
@@ -137,6 +138,7 @@ export function registerStudentAnswerRoutes(app: FastifyInstance): void {
 
       if (outcome.outcome === 'accepted') {
         app.domainEvents.emit('answer.accepted', { quizSessionId, answerId: outcome.answerId, seq: outcome.seq });
+        deviceStreamHub.enqueueAnswer(quizSessionId);
       }
 
       const response: SubmitAnswerResponse = { outcome: outcome.outcome, selectedOptionId: outcome.selectedOptionId };

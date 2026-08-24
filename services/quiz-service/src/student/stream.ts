@@ -7,6 +7,7 @@ import { answers, participants, publications } from '../db/schema.js';
 import type { Clock } from '../lib/clock.js';
 import type { SessionSerial } from '../lib/session-serial.js';
 import type { DomainNotifier } from '../device/publication-routes.js';
+import type { DeviceStreamHub } from '../device/stream.js';
 import type { ParticipantPrincipal } from './cookies.js';
 import { resolveParticipantCookie } from './cookies.js';
 import { buildSnapshot } from './snapshot.js';
@@ -27,6 +28,8 @@ export interface StudentStreamHubDeps {
   clock: Clock;
   sessionSerial: SessionSerial;
   logger?: StudentStreamLogger;
+  /** D-07: connect/disconnect changes the device stream's live online count. */
+  deviceStreamHub?: DeviceStreamHub;
 }
 
 interface StudentConnection {
@@ -93,6 +96,7 @@ export class StudentStreamHub {
         .update(participants)
         .set({ connectionState: 'online', lastSeenAt: this.#deps.clock.now() })
         .where(eq(participants.id, principal.participantId));
+      this.#deps.deviceStreamHub?.markParticipantCounts(principal.quizSessionId);
 
       socket.on('message', () => {
         // Server->student only (events.md §5 "Direction"); any inbound frame is a protocol violation.
@@ -111,6 +115,7 @@ export class StudentStreamHub {
         .update(participants)
         .set({ connectionState: 'offline', lastSeenAt: this.#deps.clock.now() })
         .where(eq(participants.id, conn.participantId));
+      this.#deps.deviceStreamHub?.markParticipantCounts(conn.quizSessionId);
     });
   }
 

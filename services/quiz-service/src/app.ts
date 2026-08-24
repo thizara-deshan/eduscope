@@ -27,6 +27,7 @@ import { registerStudentRegistrationRoutes } from './student/registration.js';
 import { registerStudentAnswerRoutes } from './student/answers.js';
 import { registerStudentStreamRoutes, StudentStreamHub } from './student/stream.js';
 import { QuizAppProblemError } from './student/identity.js';
+import { registerDeviceStreamRoutes, DeviceStreamHub } from './device/stream.js';
 
 const MAX_BODY_BYTES = 32 * 1024;
 
@@ -112,15 +113,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
 
-  const studentStreamHub = new StudentStreamHub({ db, clock, sessionSerial, logger: app.log });
+  const deviceStreamHub = new DeviceStreamHub({ db, clock, sessionSerial, logger: app.log });
+  const studentStreamHub = new StudentStreamHub({ db, clock, sessionSerial, logger: app.log, deviceStreamHub });
   studentStreamHub.subscribeTo(domainEvents);
 
   registerDeviceSessionRoutes(app);
   registerDevicePublicationRoutes(app);
   registerStudentJoinRoutes(app);
-  registerStudentRegistrationRoutes(app);
-  registerStudentAnswerRoutes(app);
+  registerStudentRegistrationRoutes(app, deviceStreamHub);
+  registerStudentAnswerRoutes(app, deviceStreamHub);
   registerStudentStreamRoutes(app, studentStreamHub);
+  registerDeviceStreamRoutes(app, deviceStreamHub);
 
   // Hijacks only the not-found path, after every API/WS route this and later
   // D tasks register, so the Next.js page handler is strictly a fallback.

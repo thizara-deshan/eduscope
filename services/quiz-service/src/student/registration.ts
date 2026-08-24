@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { RegisterParticipantResponse } from '@eduscope/shared';
 import { participants, participantSessions, quizSessions, students } from '../db/schema.js';
+import type { DeviceStreamHub } from '../device/stream.js';
 import { generateParticipantToken, hashParticipantToken, issueParticipantCookie } from './cookies.js';
 import { QuizAppProblemError, SelfRegistrationIdentityProvider, type IdentityProvider } from './identity.js';
 
@@ -32,7 +33,7 @@ function unwrapUniqueViolation(error: unknown): UniqueViolation | undefined {
 }
 
 /** Registers D-owned `registerParticipant` (quiz-app.yaml tag: student-quiz). */
-export function registerStudentRegistrationRoutes(app: FastifyInstance): void {
+export function registerStudentRegistrationRoutes(app: FastifyInstance, deviceStreamHub: DeviceStreamHub): void {
   app.post(
     '/api/student/v1/quiz-sessions/:quizSessionId/participants',
     { config: { operationId: 'registerParticipant', rateLimit: REGISTER_RATE_LIMIT } },
@@ -165,6 +166,7 @@ export function registerStudentRegistrationRoutes(app: FastifyInstance): void {
       issueParticipantCookie(reply, app.config, outcome.token);
       if (outcome.isNewParticipant) {
         app.domainEvents.emit('participant.joined', { quizSessionId, participantId: outcome.participantId });
+        deviceStreamHub.markParticipantCounts(quizSessionId);
       }
 
       const response: RegisterParticipantResponse = {
