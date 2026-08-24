@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyCookie from '@fastify/cookie';
+import fastifyRateLimit from '@fastify/rate-limit';
 import type { QuizConfig } from './config.js';
 import { loadConfig } from './config.js';
 import type { QuizDb } from './db/client.js';
@@ -19,6 +21,9 @@ import { RandomJoinCodeGenerator } from './device/session-routes.js';
 import { registerDevicePublicationRoutes } from './device/publication-routes.js';
 import type { DomainNotifier } from './device/publication-routes.js';
 import { EventEmitterDomainNotifier } from './device/publication-routes.js';
+import { registerStudentJoinRoutes } from './student/join.js';
+import { registerStudentRegistrationRoutes } from './student/registration.js';
+import { QuizAppProblemError } from './student/identity.js';
 
 const MAX_BODY_BYTES = 32 * 1024;
 
@@ -32,6 +37,16 @@ declare module 'fastify' {
     sessionSerial: SessionSerial;
     joinCodeGenerator: JoinCodeGenerator;
     domainEvents: DomainNotifier;
+  }
+
+  // Every D route tags itself with `config: { operationId }` for the contract
+  // tests' route->operationId assertions. `@fastify/rate-limit`'s own
+  // `FastifyContextConfig` augmentation (adding `rateLimit`) turns this
+  // interface from implicitly-open to closed, so `operationId` needs its own
+  // declared member here or every route's route-config object literal fails
+  // TypeScript's excess-property check.
+  interface FastifyContextConfig {
+    operationId?: string;
   }
 }
 
@@ -80,14 +95,23 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       reply.code(error.status).type('application/problem+json').send(error.toBody());
       return;
     }
+    if (error instanceof QuizAppProblemError) {
+      reply.code(error.status).type('application/problem+json').send(error.toBody());
+      return;
+    }
     request.log.error(error);
     reply.send(error);
   });
+
+  await app.register(fastifyCookie, { secret: config.cookieSecret });
+  await app.register(fastifyRateLimit, { global: false });
 
   app.get('/healthz', async () => ({ status: 'ok' as const, contractVersion: '1.0.0' as const }));
 
   registerDeviceSessionRoutes(app);
   registerDevicePublicationRoutes(app);
+  registerStudentJoinRoutes(app);
+  registerStudentRegistrationRoutes(app);
 
   // Hijacks only the not-found path, after every API/WS route this and later
   // D tasks register, so the Next.js page handler is strictly a fallback.

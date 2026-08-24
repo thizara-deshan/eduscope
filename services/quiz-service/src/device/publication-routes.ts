@@ -6,11 +6,16 @@ import { publications, quizSessions, type StoredQuizOption } from '../db/schema.
 import { ProblemError, parseBody } from '../contracts/problem.js';
 import { authenticateDevice, type DevicePrincipal } from './auth.js';
 
-export type QuizDomainEventName = 'publication.opened' | 'publication.closed' | 'session.closed';
+export type QuizDomainEventName =
+  | 'publication.opened'
+  | 'publication.closed'
+  | 'session.closed'
+  | 'participant.joined';
 
 export interface QuizDomainEventPayload {
   quizSessionId: string;
   publicationId?: string;
+  participantId?: string;
 }
 
 /**
