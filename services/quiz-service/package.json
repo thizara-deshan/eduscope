@@ -13,6 +13,10 @@
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
     "load:200": "tsx test/load/join-answer-ws.ts",
+    "provision:device": "tsx scripts/provision-device.ts",
+    "backup": "tsx scripts/backup.ts",
+    "restore": "tsx scripts/restore.ts",
+    "smoke:staging": "tsx test/operations/staging-smoke.ts",
     "gate": "pnpm typecheck && pnpm test"
   },
   "dependencies": {
