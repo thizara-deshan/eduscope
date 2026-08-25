@@ -493,6 +493,20 @@ describe('device realtime sync stream (events.md §4)', () => {
       headers: { cookie: cookieA },
     } as never);
     void studentWs;
+    // `injectWS` resolves once the handshake completes, but `StudentStreamHub.attach`
+    // (snapshot delivery, connection-state update, markParticipantCounts) runs
+    // detached (`void hub.attach(...)`) — poll the row it writes rather than a fixed
+    // delay, or the fake-clock advance below can fire its one flush tick before the
+    // online transition (and the dirty flag it sets) actually lands.
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const [row] = await harness.app.sql<{ connection_state: string }[]>`
+        SELECT p.connection_state FROM participants p
+        JOIN students s ON s.id = p.student_id
+        WHERE s.student_id_number = 'ST1000001' AND p.quiz_session_id = ${quizSessionId}
+      `;
+      if (row?.connection_state === 'online') break;
+      await delay(10);
+    }
 
     harness.clock.advance(1_000);
     await waitFor(() => frames.length > before);

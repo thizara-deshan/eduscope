@@ -1,7 +1,7 @@
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
@@ -10,6 +10,8 @@ const UNIT_PATH = join(CAMPUS_DIR, 'eduscope-quiz.service');
 const NGINX_TEMPLATE_PATH = join(CAMPUS_DIR, 'nginx-quiz.conf');
 const RENDERER_PATH = join(CAMPUS_DIR, 'render-config.mjs');
 const ENV_EXAMPLE_PATH = join(CAMPUS_DIR, 'quiz-service.env.example');
+const TLS_FIXTURE_CERT_PATH = resolve(import.meta.dirname, '../fixtures/tls/localhost-cert.pem');
+const TLS_FIXTURE_KEY_PATH = resolve(import.meta.dirname, '../fixtures/tls/localhost-key.pem');
 
 /** Parses `key=value`/`key value` lines into a flat map; ignores section headers/comments. */
 function parseUnitDirectives(unit: string): Map<string, string[]> {
@@ -260,15 +262,41 @@ describe('deploy/campus/render-config.mjs', () => {
       return;
     }
     const output = tempOutputPath();
+    // `nginx -t` actually loads the certificate/key to build the SSL context, so this one
+    // check — unlike the structural checks above — needs real, readable PEM files; reuse
+    // D-01's committed localhost test certificate rather than a fictional campus path.
     const rendered = runRenderer([
       '--input', NGINX_TEMPLATE_PATH,
       '--output', output,
       '--host', 'quiz.example.edu',
-      '--certificate', '/etc/eduscope/tls/quiz.pem',
-      '--certificate-key', '/etc/eduscope/tls/quiz.key',
+      '--certificate', TLS_FIXTURE_CERT_PATH,
+      '--certificate-key', TLS_FIXTURE_KEY_PATH,
     ]);
     expect(rendered.status).toBe(0);
-    const check = spawnSync('nginx', ['-t', '-c', output], { shell: false, encoding: 'utf8' });
+
+    // The campus Nginx installs this file as a conf.d fragment `include`d inside its own
+    // `http {}` block (where `map` is legal) — `nginx -t -c` on the fragment alone needs
+    // that same wrapping to validate, since a bare `-c` target must be a complete main config.
+    // `-t` also actually binds each `listen` port to catch conflicts, which this unprivileged
+    // test runner can't do on 80/443 — validate the identical config on unprivileged ports
+    // instead; `deploy/campus/README.md`'s systemd unit is what actually binds 80/443 in
+    // production, under `AmbientCapabilities=CAP_NET_BIND_SERVICE` (already asserted above).
+    const renderedForValidation = readFileSync(output, 'utf8')
+      .replace('listen 80;', 'listen 18080;')
+      .replace('listen 443 ssl http2;', 'listen 18443 ssl http2;');
+    const validationOutput = join(dirname(output), 'nginx-quiz.validation.conf');
+    writeFileSync(validationOutput, renderedForValidation, 'utf8');
+
+    const wrapperPath = join(dirname(output), 'main.conf');
+    const pidPath = join(dirname(output), 'nginx.pid');
+    const accessLogPath = join(dirname(output), 'access.log');
+    const errorLogPath = join(dirname(output), 'error.log');
+    writeFileSync(
+      wrapperPath,
+      `pid ${pidPath};\nerror_log ${errorLogPath};\nevents {}\nhttp {\n  access_log ${accessLogPath};\n  include ${validationOutput};\n}\n`,
+      'utf8',
+    );
+    const check = spawnSync('nginx', ['-t', '-c', wrapperPath], { shell: false, encoding: 'utf8' });
     expect(check.status, check.stdout + check.stderr).toBe(0);
   });
 });
