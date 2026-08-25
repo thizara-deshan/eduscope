@@ -17,7 +17,8 @@
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "smoke:staging": "tsx test/operations/staging-smoke.ts",
-    "gate": "pnpm typecheck && pnpm test"
+    "gate": "pnpm typecheck && pnpm test",
+    "gate:d": "node scripts/gate-quiz-service.mjs"
   },
   "dependencies": {
     "@eduscope/shared": "workspace:*",

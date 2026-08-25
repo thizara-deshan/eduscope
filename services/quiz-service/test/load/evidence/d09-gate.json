@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-25T10:08:39.949Z",
+  "generatedAt": "2026-08-25T21:36:34.104Z",
   "environment": "local-testcontainers",
   "summary": {
     "clients": 200,
@@ -19,39 +19,39 @@
     },
     "registration": {
       "count": 200,
-      "p50": 1615,
-      "p95": 2667,
-      "max": 2767
+      "p50": 1756,
+      "p95": 2751,
+      "max": 2860
     },
     "snapshot": {
       "count": 200,
-      "p50": 1186,
-      "p95": 2095,
-      "max": 2180
+      "p50": 1105,
+      "p95": 1812,
+      "max": 1849
     },
     "publishFanOut": {
       "count": 1,
-      "p50": 102,
-      "p95": 102,
-      "max": 102
+      "p50": 94,
+      "p95": 94,
+      "max": 94
     },
     "answer": {
       "count": 200,
-      "p50": 1420,
-      "p95": 2276,
-      "max": 2364
+      "p50": 1302,
+      "p95": 2301,
+      "max": 2361
     },
     "closeToResult": {
       "count": 1,
-      "p50": 976,
-      "p95": 976,
-      "max": 976
+      "p50": 1212,
+      "p95": 1212,
+      "max": 1212
     },
     "reconnectSnapshot": {
       "count": 50,
-      "p50": 470,
-      "p95": 872,
-      "max": 875
+      "p50": 1333,
+      "p95": 4508,
+      "max": 4836
     }
   }
 }
