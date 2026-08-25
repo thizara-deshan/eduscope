@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2026-08-25T10:08:39.949Z",
+  "environment": "local-testcontainers",
+  "summary": {
+    "clients": 200,
+    "answers": 200,
+    "duplicateRows": 0,
+    "privacyLeaks": 0,
+    "staleReconnects": 0,
+    "terminalSummaries": 200,
+    "errors": []
+  },
+  "timings": {
+    "resolve": {
+      "count": 1,
+      "p50": 7,
+      "p95": 7,
+      "max": 7
+    },
+    "registration": {
+      "count": 200,
+      "p50": 1615,
+      "p95": 2667,
+      "max": 2767
+    },
+    "snapshot": {
+      "count": 200,
+      "p50": 1186,
+      "p95": 2095,
+      "max": 2180
+    },
+    "publishFanOut": {
+      "count": 1,
+      "p50": 102,
+      "p95": 102,
+      "max": 102
+    },
+    "answer": {
+      "count": 200,
+      "p50": 1420,
+      "p95": 2276,
+      "max": 2364
+    },
+    "closeToResult": {
+      "count": 1,
+      "p50": 976,
+      "p95": 976,
+      "max": 976
+    },
+    "reconnectSnapshot": {
+      "count": 50,
+      "p50": 470,
+      "p95": 872,
+      "max": 875
+    }
+  }
+}
