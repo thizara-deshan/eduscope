@@ -1,0 +1,33 @@
+[Unit]
+Description=Eduscope campus quiz service
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=eduscope-quiz
+Group=eduscope-quiz
+WorkingDirectory=/opt/eduscope/current
+EnvironmentFile=/etc/eduscope/quiz-service.env
+ExecStartPre=/usr/bin/node /opt/eduscope/current/services/quiz-service/dist/src/db/migrate-cli.js
+ExecStart=/usr/bin/node /opt/eduscope/current/services/quiz-service/dist/src/server.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/opt/eduscope/current/apps/quiz/.next/cache
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,48 @@
+{
+  "name": "@eduscope/quiz-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/server.js",
+    "migrate": "tsx src/db/migrate-cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:contract": "vitest run test/contract",
+    "load:200": "tsx test/load/join-answer-ws.ts",
+    "provision:device": "tsx scripts/provision-device.ts",
+    "backup": "tsx scripts/backup.ts",
+    "restore": "tsx scripts/restore.ts",
+    "smoke:staging": "tsx test/operations/staging-smoke.ts",
+    "gate": "pnpm typecheck && pnpm test",
+    "gate:d": "node scripts/gate-quiz-service.mjs"
+  },
+  "dependencies": {
+    "@eduscope/shared": "workspace:*",
+    "@fastify/cookie": "^11",
+    "@fastify/cors": "^10",
+    "@fastify/rate-limit": "^10",
+    "@fastify/websocket": "^11",
+    "argon2": "^0.44",
+    "drizzle-orm": "^0.44",
+    "fastify": "^5",
+    "next": "^14.2.18",
+    "postgres": "^3.4",
+    "ulidx": "^2.4",
+    "ws": "^8",
+    "zod": "^3.23"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10",
+    "@types/node": "^22.9",
+    "@types/ws": "^8.5",
+    "drizzle-kit": "^0.31",
+    "tsx": "^4.20",
+    "typescript": "^5.6",
+    "vitest": "^3",
+    "yaml": "^2.6"
+  }
+}
