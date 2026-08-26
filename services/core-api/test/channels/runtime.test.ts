@@ -50,7 +50,13 @@ class SpyRelay implements RelayTargetActivator {
   }
 }
 
-async function waitFor(check: () => boolean, timeoutMs = 2000): Promise<void> {
+// Polls real wall-clock time for an async effect that follows a fake-clock
+// advance(). The deadline is generous on purpose: the whole 79-file core-api
+// suite runs in parallel, and under CPU contention promise propagation after
+// an advance() can take well over a second. A stuck condition still fails —
+// just later — so a larger deadline removes load-induced flakes without
+// masking a real hang.
+async function waitFor(check: () => boolean, timeoutMs = 10000): Promise<void> {
   const start = Date.now();
   while (!check()) {
     if (Date.now() - start > timeoutMs) throw new Error('waitFor: condition not met in time');

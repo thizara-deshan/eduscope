@@ -100,7 +100,6 @@ describe('deploy/campus/eduscope-quiz.service', () => {
 
   it('passes systemd-analyze verify when the binary is available on this platform', () => {
     if (!binaryAvailable('systemd-analyze')) {
-      // eslint-disable-next-line no-console
       console.warn('systemd-analyze unavailable in this environment — structural checks above remain authoritative');
       return;
     }
@@ -257,7 +256,6 @@ describe('deploy/campus/render-config.mjs', () => {
 
   it('validates a rendered config with nginx -t when the binary is available', () => {
     if (!binaryAvailable('nginx')) {
-      // eslint-disable-next-line no-console
       console.warn('nginx unavailable in this environment — structural checks above remain authoritative');
       return;
     }

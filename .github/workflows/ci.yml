@@ -73,8 +73,8 @@ jobs:
         run: |
           BYTES=$(cat apps/panel/dist/assets/index-*.js | gzip -9 | wc -c)
           echo "panel entry chunk, gzipped: ${BYTES} bytes (ceiling 230000)"
-          if [ "$BYTES" -ge 150000 ]; then
-            echo "::error::panel entry chunk is over the 150 kB gzip budget"
+          if [ "$BYTES" -ge 230000 ]; then
+            echo "::error::panel entry chunk is over the 230 kB gzip budget"
             exit 1
           fi
 

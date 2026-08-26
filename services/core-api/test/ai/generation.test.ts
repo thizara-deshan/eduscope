@@ -54,6 +54,16 @@ async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 8000
   }
 }
 
+// The generation loop schedules its retry-backoff and outer-request-deadline
+// sleeps inside async steps (after an HTTP response is handled). Advancing the
+// fake clock before the relevant sleep is registered would miss it and the
+// retry would never fire, so wait for the timer to be scheduled first. Mirrors
+// the sleeps-guard the channel-runtime suite already uses.
+async function advanceTimer(ctx: TestContext, ms: number): Promise<void> {
+  await waitFor(() => ctx.clock.pendingSleepDurations().includes(ms));
+  ctx.clock.advance(ms);
+}
+
 interface TestContext {
   dir: string;
   app: FastifyInstance;
@@ -319,11 +329,11 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
     await triggerGeneration(ctx);
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 1);
 
-    ctx.clock.advance(10_000); // T-LLM-RETRY step 1
+    await advanceTimer(ctx, 10_000); // T-LLM-RETRY step 1
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 2);
     expect(ctx.setEvents.some((event) => event.state === 'generating' && event.attempt === 1)).toBe(true);
 
-    ctx.clock.advance(30_000); // T-LLM-RETRY step 2
+    await advanceTimer(ctx, 30_000); // T-LLM-RETRY step 2
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 3);
 
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'failed'));
@@ -342,17 +352,17 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
     await triggerGeneration(ctx);
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 1);
 
-    ctx.clock.advance(45_000); // T-LLM-REQUEST
+    await advanceTimer(ctx, 45_000); // T-LLM-REQUEST
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'generating' && event.attempt === 1));
 
-    ctx.clock.advance(10_000);
+    await advanceTimer(ctx, 10_000);
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 2);
-    ctx.clock.advance(45_000);
+    await advanceTimer(ctx, 45_000);
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'generating' && event.attempt === 2));
 
-    ctx.clock.advance(30_000);
+    await advanceTimer(ctx, 30_000);
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 3);
-    ctx.clock.advance(45_000);
+    await advanceTimer(ctx, 45_000);
 
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'failed'));
     const failed = ctx.setEvents.find((event) => event.state === 'failed')!;
@@ -368,7 +378,7 @@ describe('Question-set generation lifecycle (Q-11..Q-16, machine 2b)', () => {
     await triggerGeneration(ctx);
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 1);
 
-    ctx.clock.advance(10_000); // the one automatic regeneration
+    await advanceTimer(ctx, 10_000); // the one automatic regeneration
     await waitFor(() => ctx.ai.questionCalls.filter((call) => call.path === '/generate').length === 2);
 
     await waitFor(() => ctx.setEvents.some((event) => event.state === 'failed'));

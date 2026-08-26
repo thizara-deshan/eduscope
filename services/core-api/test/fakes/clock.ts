@@ -29,6 +29,17 @@ export class FakeClock implements Clock {
     return new Date(this.#nowMs);
   }
 
+  /**
+   * Durations (ms from the current virtual time) of sleeps that are scheduled
+   * but not yet resolved. A test whose production code schedules a timer inside
+   * an async step (e.g. a retry backoff registered only after an HTTP response
+   * is handled) must wait for that duration to appear here before advance()ing
+   * past it — advancing while the sleep is still unscheduled silently misses it.
+   */
+  pendingSleepDurations(): number[] {
+    return this.#sleeps.map((entry) => entry.dueAt - this.#nowMs);
+  }
+
   sleep(ms: number, signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) {
       return Promise.resolve();

@@ -150,6 +150,14 @@ async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs = 8_00
   }
 }
 
+// The retry-backoff sleeps are scheduled inside async 503 handling, so advancing
+// the fake clock before the sleep is registered would miss it. Wait for the
+// timer to be scheduled first (replaces a fragile fixed `delay`).
+async function advanceTimer(ctx: Ctx, ms: number): Promise<void> {
+  await waitFor(() => ctx.clock.pendingSleepDurations().includes(ms));
+  ctx.clock.advance(ms);
+}
+
 interface Ctx {
   dir: string;
   app: FastifyInstance;
@@ -376,9 +384,8 @@ describe('C-09: real-C/real-B AI live cycle (hermetic)', () => {
       const generateCallsBefore = ctx.setEvents.filter((event) => event.state === 'generating').length;
       await waitFor(() => ctx.setEvents.filter((event) => event.state === 'generating').length > generateCallsBefore);
 
-      ctx.clock.advance(10_000); // T-LLM-RETRY step 1
-      await delay(50);
-      ctx.clock.advance(30_000); // T-LLM-RETRY step 2
+      await advanceTimer(ctx, 10_000); // T-LLM-RETRY step 1
+      await advanceTimer(ctx, 30_000); // T-LLM-RETRY step 2
       await waitFor(() => ctx.setEvents.some((event) => event.state === 'failed' && event.error === 'unreachable'));
       await waitFor(async () => (await getCountdown()).state === 'degraded');
       expect(currentSession().state).toBe('recording'); // a dead LLM never stops recording (assertion 10)
