@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -64,7 +65,10 @@ async def fixture_process():
     runtime_root = Path(tempfile.mkdtemp(prefix="fixture-runtime-test-"))
     recordings_root = Path(tempfile.mkdtemp(prefix="fixture-recordings-test-"))
     process = await asyncio.create_subprocess_exec(
-        "python",
+        # Spawn the same interpreter running the tests so the fixture stack has
+        # this venv's dependencies, whether pytest was launched via an activated
+        # venv or directly through `.venv/bin/python -m pytest`.
+        sys.executable,
         str(SCRIPT),
         "--serve-fixtures",
         "--bearer",

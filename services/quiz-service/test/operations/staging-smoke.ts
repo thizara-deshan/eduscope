@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     body: JSON.stringify({ deviceId, lectureSessionId: ulid(), hallDisplayName: 'Staging Smoke' }),
   });
   if (wrongBearerResponse.status !== 401) throw new Error(`wrong bearer returned ${wrongBearerResponse.status}, expected 401`);
-  zQuizAppProblem.parse(await wrongBearerResponse.json()).status;
+  zQuizAppProblem.parse(await wrongBearerResponse.json());
   results.push('PASS: wrong bearer rejected with 401');
 
   // 4. Device create/publish/close authenticate with x-eduscope-contract:1.0.
@@ -181,7 +181,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  // eslint-disable-next-line no-console
   console.error(error);
   process.exitCode = 1;
 });

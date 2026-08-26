@@ -19,13 +19,31 @@ export default tseslint.config(
       // and a worktree under .claude/ carries its own full copy of prototype/
       // and legacy-Codebase/, which is how a clean tree lints 1142 errors.
       '.claude/**', '.agents/**', 'agent/**', 'revamp-guide/**',
+      // Python virtualenvs for the pipeline-manager (A) and AI (C) services.
+      // Gitignored and never present in CI, but a local checkout carries them
+      // and flat config walks into their vendored .js (e.g. urllib3's
+      // emscripten worker), which is not our code to lint.
+      '**/.venv/**',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['**/*.{ts,tsx}'],
+    // Node scripts (.mjs/.cjs/.js) as well as app/service source get both
+    // global sets; without .mjs here the campus/quiz gate scripts report
+    // `process`/`URL` as undefined.
+    files: ['**/*.{ts,tsx,js,mjs,cjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    rules: {
+      // `_`-prefixed names are the repo-wide "intentionally unused" signal —
+      // interface-mandated params (`_reply`, `_actor`, `_reason`) and
+      // destructure-to-omit idioms (`const { seq: _seq, ...rest } = ...`).
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
   },
   {
     files: ['apps/**/*.tsx'],

@@ -241,7 +241,12 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     expect(publishIndex).toBeGreaterThanOrEqual(0);
     expect(projectorIndex).toBeGreaterThan(-1);
 
-    await waitFor(() => publicationFor(ctx, questionId).state === 'open');
+    // projectorState reaches 'showing' only after the async pm.setProjectorConsumer
+    // call resolves (projector.ts markShowing), which is strictly after state
+    // becomes 'open' + isShowing true. Wait for that terminal step so the three
+    // assertions below don't race the projector call — waiting on 'open' alone
+    // can observe the row before markShowing has run.
+    await waitFor(() => publicationFor(ctx, questionId).projectorState === 'showing');
     const publication = publicationFor(ctx, questionId);
     expect(publication.isShowing).toBe(true);
     expect(publication.projectorState).toBe('showing');

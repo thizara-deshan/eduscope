@@ -5,6 +5,9 @@ import type { Clock } from './clock.js';
 
 const zUuid = z.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 const zDevNode = z.string().min(6).max(128).regex(/^\/dev\/[A-Za-z0-9._/-]+$/).refine((value) => !value.includes('..'));
+// Control chars are exactly what this label filter must reject before the
+// value crosses to the privileged helper; matching them is intentional.
+// eslint-disable-next-line no-control-regex
 const zLabel = z.string().min(1).max(64).regex(/^[^\u0000-\u001f\u007f]+$/);
 
 const zSmartDevNode = zDevNode;
