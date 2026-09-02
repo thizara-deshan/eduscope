@@ -50,7 +50,14 @@ for id in usb rtsp rtsp2 audio; do
     after="$(status)"
     new_pid="$("$JQ" -r --arg id "$id" '.publishers[$id].pid' <<<"$after")"
     new_state="$("$JQ" -r --arg id "$id" '.publishers[$id].state' <<<"$after")"
-    test "$new_pid" != "$old_pid" && { test "$new_state" = online || test "$new_state" = degraded; } && break
+    if [[ "$new_pid" =~ ^[1-9][0-9]*$ ]] && test "$new_pid" != "$old_pid" \
+      && test "$new_state" = online; then
+      "$SLEEP" 1
+      stable="$(status)"
+      test "$("$JQ" -r --arg id "$id" '.publishers[$id].pid' <<<"$stable")" = "$new_pid" \
+        && test "$("$JQ" -r --arg id "$id" '.publishers[$id].state' <<<"$stable")" = online \
+        && break
+    fi
     (( SECONDS < deadline )) || { echo "FAIL A15-PUB restart $id"; exit 1; }
     "$SLEEP" 1
   done

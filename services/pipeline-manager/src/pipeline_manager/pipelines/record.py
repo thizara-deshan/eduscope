@@ -92,10 +92,9 @@ def _build_composite_or_raw(
 
     if not multi_tile:
         tile = layout.tiles[0]
-        source_branch_normalized(
-            builder, platform, tile.role,
-            target_width=tile.w, target_height=tile.h, apply_scale=False, sink_pad=None,
-            healthy=is_role_healthy(tile.role), fps=profile.fps,
+        _record_source_branch(
+            builder, platform, tile.role, target_width=tile.w, target_height=tile.h,
+            apply_scale=False, sink_pad=None, healthy=is_role_healthy(tile.role), fps=profile.fps,
         )
         builder.add(*platform.encoder(profile), "!", "h264parse", "config-interval=1", "!", "queue", "!", "mux.")
         degraded_start_ok = True
@@ -103,7 +102,7 @@ def _build_composite_or_raw(
         pads = []
         for index, tile in enumerate(layout.tiles):
             sink_pad = f"comp.sink_{index}"
-            source_branch_normalized(
+            _record_source_branch(
                 builder, platform, tile.role,
                 target_width=tile.w, target_height=tile.h, apply_scale=True, sink_pad=sink_pad,
                 healthy=is_role_healthy(tile.role), fps=profile.fps,
@@ -135,7 +134,63 @@ def _build_composite_or_raw(
         encode_slots=1,
         outputs=(output_path,),
         degraded_start_ok=degraded_start_ok,
+        resilient_roles=tuple(
+            tile.role for tile in layout.tiles if tile.role in CAMERA_ROLES and is_role_healthy(tile.role)
+        ),
     )
+
+
+def _record_source_branch(
+    builder: PipelineBuilder,
+    platform: PlatformProfile,
+    role: SourceRole,
+    *,
+    target_width: int,
+    target_height: int,
+    apply_scale: bool,
+    sink_pad: str | None,
+    healthy: bool,
+    fps: int,
+) -> None:
+    """Build a camera branch with a live, switchable placeholder.
+
+    The resilient record worker handles errors from the named ``shmsrc`` and
+    changes this selector without rebuilding the mux or changing its PGID.
+    Non-camera roles retain the regular builder path.
+    """
+    if role not in CAMERA_ROLES:
+        source_branch_normalized(
+            builder, platform, role, target_width=target_width, target_height=target_height,
+            apply_scale=apply_scale, sink_pad=sink_pad, healthy=healthy, fps=fps,
+        )
+        return
+
+    if not healthy:
+        source_branch_normalized(
+            builder, platform, role, target_width=target_width, target_height=target_height,
+            apply_scale=apply_scale, sink_pad=sink_pad, healthy=False, fps=fps,
+        )
+        return
+
+    suffix = role.value.replace("-", "_")
+    selector = f"sel_{suffix}"
+    socket = ROLE_SOCKETS[role]
+    builder.add(
+        "shmsrc", f"name=source_{suffix}", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!",
+        platform.shm_video_caps(role), "!", "h264parse", "!", *platform.decoder(), "!", *platform.convert(), "!",
+        "queue", "max-size-buffers=6", "leaky=downstream", "!", f"{selector}.sink_0",
+        "videotestsrc", "is-live=true", "pattern=black", "!",
+        f"video/x-raw,format=I420,width={target_width},height={target_height},framerate={fps}/1", "!",
+        "textoverlay", 'text="SOURCE UNAVAILABLE"', "valignment=center", "halignment=center",
+        'font-desc="Sans Bold 48"', "!", f"{selector}.sink_1",
+        "input-selector", f"name={selector}", "!", *platform.convert(), "!",
+        "queue", "max-size-buffers=6", "leaky=downstream", "!", "videorate", "drop-only=true", "!",
+        f"video/x-raw,framerate={fps}/1", "!",
+    )
+    if apply_scale:
+        builder.add(*platform.scale(), "!", f"video/x-raw,width={target_width},height={target_height}", "!", "queue", "!")
+        if sink_pad:
+            builder.add(sink_pad)
 
 
 def _build_camera_passthrough(req: RecordRequest, layout: LayoutPreset, platform: PlatformProfile) -> PipelineSpec:

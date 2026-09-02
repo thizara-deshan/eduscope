@@ -114,8 +114,7 @@ def _run_gst_worker(interval_sec: int, output_path: str, video_caps: str) -> Non
     import gi
 
     gi.require_version("Gst", "1.0")
-    gi.require_version("GLibUnix", "2.0")
-    from gi.repository import GLib, GLibUnix, Gst
+    from gi.repository import GLib, Gst
 
     Gst.init(None)
 
@@ -154,7 +153,7 @@ def _run_gst_worker(interval_sec: int, output_path: str, video_caps: str) -> Non
         pipeline.send_event(Gst.Event.new_eos())
         return False  # one-shot: GLib removes this source after it returns False
 
-    GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
 
     pipeline.set_state(Gst.State.PLAYING)
     try:

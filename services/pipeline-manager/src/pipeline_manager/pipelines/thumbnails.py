@@ -179,6 +179,7 @@ def worker_graph(role: SourceRole, platform: PlatformProfile) -> str:
         return (
             f"shmsrc socket-path={socket} is-live=true do-timestamp=true ! {platform.audio_caps()} ! "
             f"audioconvert ! audioresample ! opusenc ! rtpopuspay pt=97 ! "
+            f"application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000,payload=97 ! "
             f"webrtcbin name=sendrecv bundle-policy=max-bundle"
         )
 
@@ -194,6 +195,7 @@ def worker_graph(role: SourceRole, platform: PlatformProfile) -> str:
         f"video/x-raw,framerate={THUMBNAIL_FPS}/1 ! videoscale ! "
         f"video/x-raw,width={THUMBNAIL_WIDTH},height={THUMBNAIL_HEIGHT} ! "
         f"{encoder} ! h264parse config-interval=-1 ! rtph264pay pt=96 ! "
+        f"application/x-rtp,media=video,encoding-name=H264,clock-rate=90000,payload=96 ! "
         f"webrtcbin name=sendrecv bundle-policy=max-bundle"
     )
 
@@ -213,8 +215,7 @@ def _run_gst_worker(graph: str) -> None:  # pragma: no cover - requires PyGObjec
     gi.require_version("Gst", "1.0")
     gi.require_version("GstSdp", "1.0")
     gi.require_version("GstWebRTC", "1.0")
-    gi.require_version("GLibUnix", "2.0")
-    from gi.repository import GLib, GLibUnix, Gst, GstSdp, GstWebRTC
+    from gi.repository import GLib, Gst, GstSdp, GstWebRTC
 
     Gst.init(None)
 
@@ -326,7 +327,7 @@ def _run_gst_worker(graph: str) -> None:  # pragma: no cover - requires PyGObjec
         loop.quit()
         return False
 
-    GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
 
     pipeline.set_state(Gst.State.PLAYING)
     try:

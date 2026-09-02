@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 from ..models import ConsumerState, SourceRole
@@ -20,6 +21,7 @@ from .base import (
 )
 
 START_CONFIRM_TIMEOUT_SECONDS = 5.0
+logger = logging.getLogger(__name__)
 
 
 class RecordConsumer(_ChildOwner):
@@ -96,6 +98,8 @@ class RecordConsumer(_ChildOwner):
                     timeout=START_CONFIRM_TIMEOUT_SECONDS,
                 )
             except Exception:
+                if process is not None:
+                    logger.error("record start failed (%s): %s", self.consumer_id, process.raw_lines[-20:])
                 self._ledger.release(self.consumer_id)
                 if process is not None:
                     await self._cleanup_failed_start(process)

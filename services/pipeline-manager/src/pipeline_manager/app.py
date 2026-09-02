@@ -248,6 +248,13 @@ async def _run_shutdown(app: FastAPI) -> None:
     if meter is not None:
         await meter.stop()
 
+    # Device-lifetime publishers are still children of this manager.  Stop
+    # each exact identity after consumers/meter taps have detached so a
+    # normal service shutdown never leaves stale shm writers behind.
+    for controller in state.publishers.values():
+        with suppress(Exception):
+            await state.stop_publisher(controller)
+
     state.flush_sidecars()
 
 

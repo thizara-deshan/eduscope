@@ -149,8 +149,7 @@ def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragm
     import gi
 
     gi.require_version("Gst", "1.0")
-    gi.require_version("GLibUnix", "2.0")
-    from gi.repository import GLib, GLibUnix, Gst
+    from gi.repository import GLib, Gst
 
     Gst.init(None)
 
@@ -221,7 +220,7 @@ def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragm
         pipeline.send_event(Gst.Event.new_eos())
         return False
 
-    GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, _on_sigint)
 
     pipeline.set_state(Gst.State.PLAYING)
     try:

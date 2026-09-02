@@ -52,7 +52,7 @@ def _to_posix(path: str) -> str:
 #: when unset, so this only matters for tests. MSYS bash always prepends its
 #: own /mingw64/bin:/usr/bin ahead of any $PATH we pass in, so pointing PATH
 #: at the fakes is not reliable; pinning each var to an absolute path is.
-OVERRIDE_VARS = ("CURL", "JQ", "FFPROBE", "STAT", "KILL", "SLEEP")
+OVERRIDE_VARS = ("CURL", "JQ", "FFPROBE", "FFMPEG", "STAT", "KILL", "SLEEP")
 
 
 def run_script(

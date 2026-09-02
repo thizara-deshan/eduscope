@@ -1,12 +1,32 @@
 from __future__ import annotations
 
+import asyncio
+import stat
+from pathlib import Path
+
 from ..models import PublisherId
 from ..pipelines.builder import PipelineSpec, UnsupportedPipeline
 from ..supervisor.health import HealthConfirmer
 from ..supervisor.process import ProcessSupervisor
 from ..supervisor.stop import STOP_DEADLINE_SECONDS, SignalFn, send_group_signal, stop_process
 from .audio import build_audio_publisher
-from .base import PublisherBinding, PublisherController, PublisherEvent
+from .base import PUBLISHER_SOCKETS, PublisherBinding, PublisherController, PublisherEvent
+
+
+def _remove_stale_socket(controller: PublisherController) -> None:
+    """Remove only this fixed publisher socket when no owned child is using it.
+
+    `shmsink` otherwise preserves the dead pathname and silently listens on a
+    suffixed name (`audio.sock.0`), making status look healthy while every
+    consumer still connects to the refused base path.
+    """
+    path = Path(PUBLISHER_SOCKETS[controller.publisher_id])
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISSOCK(mode):
+        path.unlink()
 from .rtsp import RtspCredentials, build_rtsp_publisher
 from .usb import build_usb_publisher
 
@@ -74,7 +94,11 @@ async def start_publisher(
     spawned but failed confirmation (killing the zombie child) is B3's
     failed-start-cleanup finding, not this coordinator's job.
     """
+    if controller.pid is not None:
+        return
+    controller.requested_stop = False
     try:
+        _remove_stale_socket(controller)
         spec = select_publisher_spec(controller)
         process = await supervisor.start(spec, controller.identity)
         await confirmer.confirm(process, is_record=False)
@@ -85,6 +109,59 @@ async def start_publisher(
 
     event = controller.mark_online(process.pid)
     await events.publish("evt.pm.publisher.running", _event_payload(event))
+    controller.exit_task = asyncio.create_task(
+        _watch_and_restart(controller, process, supervisor=supervisor, confirmer=confirmer, events=events)
+    )
+
+
+async def _watch_and_restart(controller, process, *, supervisor, confirmer, events) -> None:
+    """Own the device-lifetime publisher after its initial confirmation.
+
+    A requested stop cancels this task.  An unexpected exit affects only this
+    identity, consumes the controller's bounded 1/3/8-second restart budget,
+    and respawns from the current binding.  Consumers are never signalled.
+    """
+    current = process
+    try:
+        while True:
+            while current.popen.poll() is None:
+                # Process ownership is itself a fresh liveness observation.
+                # FPS/RMS samplers may enrich these fields independently, but
+                # their absence must not make a confirmed, live child stale.
+                controller.observe_telemetry()
+                await asyncio.sleep(0.1)
+            if controller.requested_stop:
+                return
+
+            supervisor.forget(controller.identity)
+            event = controller.on_unexpected_exit(f"publisher exited with status {current.popen.returncode}")
+            await events.publish(f"evt.pm.publisher.{event.kind}", _event_payload(event))
+            if event.backoff_seconds is None:
+                return
+            await asyncio.sleep(event.backoff_seconds)
+
+            try:
+                _remove_stale_socket(controller)
+                spec = select_publisher_spec(controller)
+                current = await supervisor.start(spec, controller.identity)
+                await confirmer.confirm(current, is_record=False)
+            except Exception as exc:
+                failed = supervisor.processes.get(controller.identity)
+                if failed is not None:
+                    from ..supervisor.stop import kill_and_reap
+
+                    await kill_and_reap(supervisor, failed)
+                event = controller.on_unexpected_exit(str(exc))
+                await events.publish(f"evt.pm.publisher.{event.kind}", _event_payload(event))
+                if event.backoff_seconds is None:
+                    return
+                await asyncio.sleep(event.backoff_seconds)
+                continue
+
+            event = controller.mark_online(current.pid)
+            await events.publish("evt.pm.publisher.running", _event_payload(event))
+    except asyncio.CancelledError:
+        return
 
 
 async def stop_publisher(
@@ -97,11 +174,17 @@ async def stop_publisher(
     """Idempotent: stopping a publisher with nothing running is a no-op —
     the same "stop before/after it's actually running" shape the consumer
     stop path already handles (`ConsumerController.stop`)."""
+    controller.requested_stop = True
+    watcher = controller.exit_task
+    if watcher is not None:
+        watcher.cancel()
+        controller.exit_task = None
     process = supervisor.processes.get(controller.identity)
     if process is None:
         return
 
     await stop_process(process, STOP_DEADLINE_SECONDS, send_signal=send_signal)
     supervisor.forget(controller.identity)
+    _remove_stale_socket(controller)
     event = controller.mark_offline()
     await events.publish(f"evt.pm.publisher.{event.kind}", _event_payload(event))
