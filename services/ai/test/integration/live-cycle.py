@@ -360,15 +360,35 @@ async def serve_fixtures(*, bearer: str, runtime_root: Path, recordings_root: Pa
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--serve-fixtures", action="store_true", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--serve-fixtures", action="store_true")
+    mode.add_argument("--run-live-cycle", action="store_true")
     parser.add_argument("--bearer", default="fixture-stack-internal-bearer-0123456789")
     parser.add_argument("--runtime-root", type=Path, default=None)
     parser.add_argument("--recordings-root", type=Path, default=None)
+    parser.add_argument("--core-url", default=None, help="core-api base URL (--run-live-cycle)")
+    parser.add_argument("--evidence-dir", type=Path, default=None, help="directory for the dated evidence JSON (--run-live-cycle)")
+    parser.add_argument("--db-path", default=None, help="core-api SQLite DB path, for read-only transcript/slide counts (--run-live-cycle)")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
+    if args.run_live_cycle:
+        if not args.core_url or not args.evidence_dir or not args.db_path or not args.recordings_root or not args.runtime_root:
+            raise SystemExit("--run-live-cycle requires --core-url, --evidence-dir, --db-path, --recordings-root, and --runtime-root")
+        from live_cycle_runner import run_live_cycle  # local import: real-hardware mode only
+
+        asyncio.run(
+            run_live_cycle(
+                core_url=args.core_url,
+                evidence_dir=args.evidence_dir,
+                db_path=args.db_path,
+                recordings_root=args.recordings_root,
+                runtime_root=args.runtime_root,
+            )
+        )
+        return
     runtime_root = args.runtime_root or Path(tempfile.mkdtemp(prefix="fixture-runtime-"))
     recordings_root = args.recordings_root or Path(tempfile.mkdtemp(prefix="fixture-recordings-"))
     asyncio.run(serve_fixtures(bearer=args.bearer, runtime_root=runtime_root, recordings_root=recordings_root))
