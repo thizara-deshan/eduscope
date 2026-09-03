@@ -148,8 +148,6 @@ def source_branch_normalized(
                 "!",
                 *platform.decoder(),
                 "!",
-                *platform.convert(),
-                "!",
             )
         else:
             builder.add(platform.shm_video_caps(role), "!")

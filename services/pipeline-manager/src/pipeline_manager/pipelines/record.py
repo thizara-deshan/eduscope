@@ -177,7 +177,7 @@ def _record_source_branch(
     socket = ROLE_SOCKETS[role]
     builder.add(
         "shmsrc", f"name=source_{suffix}", f"socket-path={socket}", "is-live=true", "do-timestamp=true", "!",
-        platform.shm_video_caps(role), "!", "h264parse", "!", *platform.decoder(), "!", *platform.convert(), "!",
+        platform.shm_video_caps(role), "!", "h264parse", "!", *platform.decoder(), "!",
         "queue", "max-size-buffers=6", "leaky=downstream", "!", f"{selector}.sink_0",
         "videotestsrc", "is-live=true", "pattern=black", "!",
         f"video/x-raw,format=I420,width={target_width},height={target_height},framerate={fps}/1", "!",

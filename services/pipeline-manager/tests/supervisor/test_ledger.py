@@ -17,6 +17,14 @@ def test_two_guaranteed_reservations_succeed() -> None:
             assert ledger.in_use == 2
 
 
+def test_zero_slot_consumer_is_not_reported_as_an_encoder_owner() -> None:
+    ledger = EncodeLedger()
+    reservation = ledger.acquire("jpeg-previews:main", 0, "guaranteed")
+    reservation.commit()
+    assert reservation.slots == 0
+    assert ledger.reserved_by() == ()
+
+
 def test_third_guaranteed_reservation_rejected() -> None:
     ledger = EncodeLedger()
     with ledger.reserve("record:1", 1, "guaranteed"), ledger.reserve("live:1", 1, "guaranteed"):

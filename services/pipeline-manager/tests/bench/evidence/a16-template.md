@@ -45,7 +45,7 @@ and never mark the task complete with a blank or invented PASS.
 | Worker pid disappears after close? | NOT RUN — gate failed |
 | Record pid/growth unchanged throughout? | NOT RUN — gate failed |
 
-Raw per-negotiation rows: see `webrtc-latencies.jsonl` in the evidence
+Legacy diagnostic per-negotiation rows, when run: see `webrtc-latencies.jsonl` in the evidence
 directory (60 rows: `{role, ms}`).
 
 ## /proc/stat CPU idle

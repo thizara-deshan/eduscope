@@ -61,6 +61,8 @@ class EncodeLedger:
         """Reserve before spawn; call `.commit()` on the result after spawn
         succeeds. Release on every terminal path (including spawn/confirm
         failure) via `release(owner)`."""
+        if slots == 0:
+            return Reservation(owner=owner, slots=0, priority=priority)
         if owner in self._reservations:
             raise AlreadyReserved(f"{owner} already holds a reservation")
 

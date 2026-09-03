@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the localhost-only RK3588 pipeline-manager that generates and supervises independent GStreamer publishers and consumers, confirms health, stops only the requested process with EOS, exposes authenticated status/SSE and WebRTC preview signaling, applies real mic/LED controls, and recovers the presentation capture card.
+**Goal:** Build the localhost-only RK3588 pipeline-manager that generates and supervises independent GStreamer publishers and consumers, confirms health, stops only the requested process with EOS, exposes authenticated status/SSE and one-second JPEG source previews, applies real mic/LED controls, and recovers the presentation capture card. WebRTC remains an optional diagnostic path, not the RK3588 production preview.
 
-**Architecture:** A FastAPI parent owns typed requests, process-group supervision, state, restart budgets, the encode ledger, and one sequenced SSE stream. Device-lifetime publishers feed fixed shm sockets; independently supervised record/live/meeting/projector/snapshot/WebRTC workers attach to those sockets. Platform-specific GStreamer tokens live only behind `PlatformProfile`; the manager spawns argv arrays with `shell=False`, and the WebRTC worker remains crash-isolated as a child process even though it uses GStreamer's Python bindings for SDP/ICE control.
+**Architecture:** A FastAPI parent owns typed requests, process-group supervision, state, restart budgets, the encode ledger, and one sequenced SSE stream. Device-lifetime publishers feed fixed shm sockets; independently supervised record/live/meeting/projector/snapshot workers attach to those sockets. One encode-free JPEG preview worker atomically publishes 480×270 images for presentation, lecturer camera, and students camera at 1 Hz under the runtime filesystem. Platform-specific GStreamer tokens live only behind `PlatformProfile`.
+
+> **RK3588 decision — 2026-09-03:** real-board measurement found about 9.58% mean CPU idle during the artificial A-16 full mix, below the unchanged 30% engineering target, and WebRTC first-frame latency crossed the strict 1 s boundary. The board image exposes no supported RGA GStreamer compositor. Product direction accepts proceeding to Workstream E with this recorded capacity risk and replaces continuous WebRTC preview with 1 Hz JPEG preview. This is an explicit exception, not a CPU or WebRTC PASS. The supported classroom profile is record + meeting; simultaneous record + meeting + RTMP stream + projector + snapshot remains unqualified until separately measured.
 
 **Tech Stack:** Python 3.11+ · FastAPI · Pydantic 2 / pydantic-settings · Uvicorn · PyGObject/GStreamer 1.x on RK3588 · pytest/pytest-asyncio · httpx/ASGITransport · PyYAML · POSIX process groups · Bash bench runners · `ffprobe`, `gst-inspect-1.0`, `v4l2-ctl`, `amixer`, `wmctrl`.
 
@@ -1228,7 +1230,7 @@ Expected: FAIL because scripts/parsers are absent.
 With strict mode and token handling identical to A-15, the script:
 
 1. Captures baseline publisher pids and ledger.
-2. Starts composite Local record (`fifty-fifty`, B-56 override 4000 kbps/30 fps), Live (`fifty-fifty`, 4000 kbps/30 fps, bench stream key), Meeting (`cams-fifty-fifty`), Projector passthrough, Snapshot at 1 fps, and one presentation thumbnail negotiation.
+2. Starts composite Local record (`fifty-fifty`, B-56 override 4000 kbps/30 fps), Live (`fifty-fifty`, 4000 kbps/30 fps, bench stream key), Meeting (`cams-fifty-fifty`), Projector passthrough, Snapshot at 1 fps, and the three-role 1 Hz JPEG preview worker.
 3. Waits for every consumer to confirm; records start-confirm latency and process ids.
 4. Samples `/status` once/second for 300 s, writing JSONL. Fail immediately on unexpected pid change, state outside running/degraded, record bytes not growing, or ledger use beyond declared capacity.
 5. EOS-stops record/live/meeting and stops aux consumers; `ffprobe` verifies the record. Parse the record's `avg_frame_rate` and `nb_read_frames`; sustained effective fps must be ≥30.00. Live relay is probed with `ffprobe rtmp://127.0.0.1:1935/live/bench`; its video rate must be ≥30.00.
@@ -1245,17 +1247,16 @@ total_delta = sum(all fields)_2 - sum(all fields)_1
 idle_percent = 100 * idle_delta / total_delta
 ```
 
-Collect 300 samples while `outputs.sh` is steady. Record min, p05, median, and mean idle; the gate criterion is mean aggregate idle/headroom ≥30.00%, and no 30-second rolling mean below 20%. Also snapshot process RSS and per-process CPU from `/proc/<pid>/stat`, ledger `capacity/inUse/reservedBy`, and SoC temperature from `/sys/class/thermal/thermal_zone*/temp`. Attempting a second thumbnail while three slots are reserved must return 409 `encoder_budget_exceeded` without disturbing record/live/first thumbnail. Print `PASS A16-RES cpu-headroom=<value> ledger-enforced` only after both conditions.
+Collect 300 samples while `outputs.sh` is steady. Record min, p05, median, and mean idle; the engineering criterion remains mean aggregate idle/headroom ≥30.00%, with no 30-second rolling mean below 20%. The accepted 2026-09-03 exception must report the measured failure and may never print the `PASS A16-RES` marker. JPEG previews reserve no H.264 encode slot. Also snapshot process RSS and per-process CPU from `/proc/<pid>/stat`, ledger `capacity/inUse/reservedBy`, and SoC temperature from `/sys/class/thermal/thermal_zone*/temp`.
 
-- [ ] **Step 4: Implement `webrtc.sh` first-frame probe**
+- [ ] **Step 4: Verify one-second JPEG previews**
 
-Call the A-06 loopback probe, which creates an offer, sends it through A-14, applies answer/ICE, and timestamps the first decoded video frame with `time.monotonic_ns()`. Run 20 negotiations each for `presentation`, `lecturer-cam`, and `students-cam`, closing every negotiation before the next. Require every result `<1000 ms`, report p50/p95/max, verify the thumbnail worker pid disappears after close, and prove record pid/file growth remain unchanged throughout. Print `PASS A16-WEBRTC max-first-frame-ms=<n>` only when all 60 pass.
+Start `/consumers/thumbnails/start`, then fetch `presentation.jpg`, `lecturer-cam.jpg`, and `students-cam.jpg` twice through the authenticated internal endpoint. Require HTTP 200, `image/jpeg`, nonzero bytes, changed modification time within 2 s, atomic publication (no partial final image), one stable preview-worker pid, zero H.264 ledger slots, and unchanged record pid/file growth. WebRTC probing remains diagnostic and cannot block the selected JPEG production path.
 
-Exact invocation:
+Internal image shape:
 
 ```bash
-python -m pipeline_manager.pipelines.thumbnails --loopback-probe \
-  --base-url http://127.0.0.1:8091 --role "$role" --iterations 20 --json
+GET /consumers/thumbnails/{presentation|lecturer-cam|students-cam}.jpg
 ```
 
 The token is provided through `EDUSCOPE_PM_TOKEN`, never a CLI argument.

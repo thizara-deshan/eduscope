@@ -88,6 +88,7 @@ class _ChildOwner:
         self._lock = asyncio.Lock()
         self._exit_task: asyncio.Task | None = None
         self._terminal_event: ConsumerEvent | None = None
+        self.last_error: str | None = None
 
     async def _cleanup_failed_start(self, process: ManagedProcess) -> None:
         await kill_and_reap(self._supervisor, process, send_signal=self._send_signal)
@@ -107,6 +108,8 @@ class _ChildOwner:
             if self.process is not process:
                 return  # already claimed by a requested stop, or superseded by a new spawn
 
+            diagnostics = [line for line in process.raw_lines if line.startswith("ERROR")]
+            self.last_error = diagnostics[-1] if diagnostics else f"process exited with status {process.popen.returncode}"
             self.process = None
             self._supervisor.forget(self.consumer_id)
             event = self.on_unexpected_exit()  # type: ignore[attr-defined]
@@ -172,6 +175,7 @@ class ConsumerController(_ChildOwner):
             self.process = process
             self.pgid = process.pgid
             self.state = ConsumerState.RUNNING
+            self.last_error = None
             self.restart_budget.reset()
             self._start_exit_watcher(process)
             return ConsumerEvent(

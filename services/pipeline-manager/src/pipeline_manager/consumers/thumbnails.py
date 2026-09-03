@@ -186,6 +186,13 @@ class ThumbnailController:
                     if message is not None and self._events is not None:
                         await self._events.publish("evt.pm.thumbnails.signal", _event_payload(message))
                 if process.popen.poll() is not None:
+                    current = self.negotiations.get(negotiation.negotiation_id)
+                    if current is negotiation:
+                        self.negotiations.pop(negotiation.negotiation_id, None)
+                        self._pump_tasks.pop(negotiation.negotiation_id, None)
+                        consumer_id = self._consumer_id(negotiation.negotiation_id)
+                        self._supervisor.forget(consumer_id)
+                        self._ledger.release(consumer_id)
                     return
                 await asyncio.sleep(OUTPUT_POLL_INTERVAL_SECONDS)
         except asyncio.CancelledError:

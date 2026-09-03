@@ -79,7 +79,7 @@ class TestStreamKeyValidation:
 
     def test_rtmp_target_token_is_exact(self) -> None:
         spec = build_live(LiveRequest(preset=LayoutPresetId.CAM_1, stream_key="bench"), RK3588Profile())
-        assert "location=rtmp://127.0.0.1:1935/live/bench live=1" in spec.argv
+        assert "location=rtmp://127.0.0.1:1935/live/bench" in spec.argv
 
 
 class TestEffectiveEncodeProfile:

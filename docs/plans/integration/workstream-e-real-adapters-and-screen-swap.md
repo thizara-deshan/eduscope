@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Keep the existing mock environments intact while adding production HTTP, panel WebSocket, student WebSocket, and WebRTC adapters; route adapter choice at runtime by the master plan's fixed domain map; then prove every panel, student, preview, and projector screen against real services in the exact E-01 through E-50 order.
+**Goal:** Keep the existing mock environments intact while adding production HTTP, panel WebSocket, student WebSocket, and one-second JPEG preview adapters; route adapter choice at runtime by the master plan's fixed domain map; then prove every panel, student, preview, and projector screen against real services in the exact E-01 through E-50 order.
 
-**Architecture:** `/config.json` is fetched and validated before either app constructs a client. The panel owns one mock and one real `EduscopeClient`; a static operation/event domain catalog selects one producer per domain and exposes per-domain connection state. The quiz app selects its whole `QuizAppClient` through `studentQuiz`. Real REST is a contract-validating fetch boundary, panel realtime is a token-aware reconnecting WebSocket, student realtime buffers the contract's ordered connect snapshot before atomic replacement, and preview owns one browser `RTCPeerConnection`. Existing TanStack Query hooks, Zustand projections, mock scenarios, routes, and screen components remain the consumers.
+**Architecture:** `/config.json` is fetched and validated before either app constructs a client. The panel owns one mock and one real `EduscopeClient`; a static operation/event domain catalog selects one producer per domain and exposes per-domain connection state. The quiz app selects its whole `QuizAppClient` through `studentQuiz`. Real REST is a contract-validating fetch boundary, panel realtime is a token-aware reconnecting WebSocket, student realtime buffers the contract's ordered connect snapshot before atomic replacement, and real preview polls authenticated JPEG snapshots through `packages/api-client`. Existing TanStack Query hooks, Zustand projections, mock scenarios, routes, and screen components remain the consumers.
+
+> **Target decision — 2026-09-03:** use atomic 480×270 JPEG source previews refreshed once per second instead of WebRTC on RK3588. Cache-busting stays inside the real api-client adapter; components do not call `fetch` directly. A source is stale after 3 s without a successful image. Stop polling when the lightbox closes. This accepts the previously measured full-mix CPU-capacity risk without relabeling the failed 30% headroom target as PASS.
 
 **Tech Stack:** TypeScript 5.6, React 18, Vite 7, Next.js 14, Zustand 5, TanStack Query 5, Zod 3.23, browser Fetch/WebSocket/WebRTC, Vitest 3, Testing Library, Playwright, Fastify 5 core-api/quiz-service test peers, PostgreSQL 16 Testcontainers, Python 3.11/FastAPI pipeline-manager, Pillow and Python QR rendering for S-42.
 
@@ -385,7 +387,7 @@ git commit -m "feat(api-client): reconnect and resync panel events"
 
 ---
 
-### Task E-04: Real preview channel
+### Task E-04: Real JPEG preview channel
 
 **Files:**
 - Create: `packages/api-client/src/real/webrtc.ts`
@@ -396,7 +398,7 @@ git commit -m "feat(api-client): reconnect and resync panel events"
 - Modify: `apps/panel/src/screens/sources/use-preview.ts`
 - Modify: `apps/panel/src/screens/sources/use-preview.test.ts`
 
-**Produces:** one real preview socket/peer, five v1 message variants, remote `MediaStream`, supersession, and deterministic media cleanup. Screen selection remains `preview=mock` until E-48.
+**Produces:** one authenticated real JPEG preview poller, one-second refresh, three-second stale handling, supersession, and deterministic timer/object-URL cleanup. Screen selection remains `preview=mock` until E-48.
 
 - [ ] **Step 1: Add failing signaling/cleanup tests**
 
@@ -1558,7 +1560,7 @@ git commit -m "test(quiz): verify real terminal summaries"
 
 The next three tasks are the master plan's final E verification sequence. They are not replaceable by mock tests, in-process-only fakes, or screenshots without the named failure injection. Do not add any implementation task after E-50.
 
-### Task E-48: S-10 real WebRTC acceptance
+### Task E-48: S-10 real JPEG preview acceptance
 
 **Files:**
 - Modify: `apps/panel/src/screens/sources/use-preview.ts`
@@ -1570,11 +1572,11 @@ The next three tasks are the master plan's final E verification sequence. They a
 - Create: `scripts/bench/e48-preview-acceptance.mjs`
 - Create: `docs/evidence/phase-4/workstream-e/e48/e48-template.md`
 
-**Prerequisites:** accepted A-16 hardware evidence; target board running real A+B; browser with real WebRTC support; at least presentation, camera 1, and camera 2 online; an active local recording and, where provisioned, live/meeting consumers.
+**Prerequisites:** documented A-16 CPU exception and JPEG hardware result; target board running real A+B; at least presentation, camera 1, and camera 2 online; an active local recording and, where provisioned, a meeting consumer.
 
 - [ ] **Step 1: Add red media—not merely signaling—assertions**
 
-The real Playwright case must require `preview=real`, tap every online tile, and for each video record: offer time, first `loadeddata`, first `requestVideoFrameCallback`, two increasing `mediaTime` values, rendered dimensions ≤480×270, and time-to-first-moving-frame. It fails if it sees the mock ICE sentinel, a still image, no track, or ≥1,000 ms.
+The real Playwright case must require `preview=real`, tap every online tile, and for each source record first-image time, two different successful image responses, one-second refresh cadence, rendered dimensions ≤480×270, and stale recovery. It fails if it sees the mock sentinel, a partial/non-JPEG image, no refresh within 2 s, or polling after close.
 
 Run locally against the typed test track: `node packages/api-client/scripts/run-real-screen.mjs panel s10-preview`
 
@@ -1582,7 +1584,7 @@ Expected before completion: FAIL on the first missing real moving track or targe
 
 - [ ] **Step 2: Complete peer/screen cleanup behavior**
 
-Bind the real `MediaStream` to `<video autoPlay playsInline muted>`, show connecting/error/closed states, and clear `srcObject` on close. Opening a second tile closes/stops every first-peer track before creating the next. A source-offline or preview `error` is terminal for that lightbox, not a reconnecting spinner.
+Bind the latest authenticated JPEG to the existing image frame, show loading/stale/error/closed states, revoke superseded object URLs, and clear the timer and current URL on close. Opening a second tile stops the first poller before creating the next. Source-offline is shown as stale after 3 s while retaining the last successful frame.
 
 - [ ] **Step 3: Run the target-board acceptance procedure**
 

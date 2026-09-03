@@ -16,6 +16,7 @@ command -v "$JQ" >/dev/null || { echo "FAIL A16-RES jq is required"; exit 1; }
 
 BASE_URL="http://127.0.0.1:8091"
 DURATION_SEC=300
+CAPACITY_WAIT_SEC=30
 EVIDENCE_DIR=""
 MIN_HEADROOM="30.00"
 MIN_ROLLING="20.00"
@@ -24,6 +25,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-url) BASE_URL="$2"; shift 2 ;;
     --duration-sec) DURATION_SEC="$2"; shift 2 ;;
+    --capacity-wait-sec) CAPACITY_WAIT_SEC="$2"; shift 2 ;;
     --evidence-dir) EVIDENCE_DIR="$2"; shift 2 ;;
     *) echo "FAIL A16-RES unknown argument: $1"; exit 1 ;;
   esac
@@ -32,6 +34,26 @@ test -n "$EVIDENCE_DIR" || { echo "FAIL A16-RES --evidence-dir is required"; exi
 mkdir -p "$EVIDENCE_DIR"
 : "${EDUSCOPE_PM_TOKEN:?set EDUSCOPE_PM_TOKEN}"
 AUTH=( -H "Authorization: Bearer ${EDUSCOPE_PM_TOKEN}" )
+
+# outputs.sh starts several real pipelines before the steady-state window.
+# Do not consume CPU samples during that startup transient; synchronize on
+# the exact three-slot full mix first.
+deadline=$((SECONDS + CAPACITY_WAIT_SEC))
+while :; do
+  initial_status="$("$CURL" -fsS "${AUTH[@]}" "${BASE_URL}/status")"
+  initial_in_use="$("$JQ" -r '.encodeLedger.inUse' <<<"$initial_status")"
+  initial_capacity="$("$JQ" -r '.encodeLedger.capacity' <<<"$initial_status")"
+  ready_file="${EVIDENCE_DIR}/full-mix-ready"
+  if test "$initial_in_use" = "$initial_capacity" \
+      && { test "$CAPACITY_WAIT_SEC" = "0" || test -f "$ready_file"; }; then
+    break
+  fi
+  (( SECONDS < deadline )) || {
+    echo "FAIL A16-RES ledger not at capacity ($initial_in_use/$initial_capacity) — full mix never became steady"
+    exit 1
+  }
+  "${SLEEP:-sleep}" 1
+done
 
 # idle_percent = 100 * ((idle+iowait)_2 - (idle+iowait)_1) / (sum(all)_2 - sum(all)_1)
 cpu_idle_percent() {
@@ -53,18 +75,38 @@ cpu_idle_percent() {
 
 samples_file="${EVIDENCE_DIR}/cpu-idle-samples.txt"
 : > "$samples_file"
+process_file="${EVIDENCE_DIR}/process-stat-samples.tsv"
+printf 'sample\tconsumer\tpgid\tutime_ticks\tstime_ticks\trss_pages\n' > "$process_file"
+temperature_file="${EVIDENCE_DIR}/temperature-samples.tsv"
+printf 'sample\tzone\tmillicelsius\n' > "$temperature_file"
 
 before="$(head -n1 "$PROC_STAT")"
 for ((i = 0; i < DURATION_SEC; i++)); do
-  sleep 1
+  "${SLEEP:-sleep}" 1
   after="$(head -n1 "$PROC_STAT")"
   idle="$(cpu_idle_percent "$before" "$after")"
   echo "$idle" >> "$samples_file"
+  sample_status="$("$CURL" -fsS "${AUTH[@]}" "${BASE_URL}/status")"
+  if process_rows="$("$JQ" -r '.consumers[] | [.id, .pgid] | @tsv' <<<"$sample_status" 2>/dev/null)"; then
+    while IFS=$'\t' read -r consumer pgid; do
+      test -n "$pgid" && test "$pgid" != "null" && test -r "/proc/${pgid}/stat" || continue
+      read -r stat_pid stat_utime stat_stime stat_rss < <(awk '{print $1, $14, $15, $24}' "/proc/${pgid}/stat")
+      printf '%d\t%s\t%s\t%s\t%s\t%s\n' "$i" "$consumer" "$stat_pid" "$stat_utime" "$stat_stime" "$stat_rss" >> "$process_file"
+    done <<<"$process_rows"
+  fi
+  for zone in /sys/class/thermal/thermal_zone*/temp; do
+    test -r "$zone" && printf '%d\t%s\t%s\n' "$i" "$zone" "$(<"$zone")" >> "$temperature_file"
+  done
   before="$after"
 done
 
 mean_idle="$(awk '{ s += $1; n++ } END { if (n == 0) print 0; else printf "%.4f", s / n }' "$samples_file")"
 min_idle="$(sort -n "$samples_file" | head -n1)"
+p05_idle="$(sort -n "$samples_file" | awk -v n="$DURATION_SEC" 'NR == int((n - 1) * 0.05) + 1 { print; exit }')"
+median_idle="$(sort -n "$samples_file" | awk -v n="$DURATION_SEC" 'NR == int((n - 1) * 0.50) + 1 { print; exit }')"
+printf '{"samples":%d,"min":%s,"p05":%s,"median":%s,"mean":%s}\n' \
+  "$DURATION_SEC" "$min_idle" "$p05_idle" "$median_idle" "$mean_idle" \
+  > "${EVIDENCE_DIR}/cpu-idle-summary.json"
 
 awk -v m="$mean_idle" -v min="$MIN_HEADROOM" 'BEGIN { exit !(m >= min) }' \
   || { echo "FAIL A16-RES mean idle $mean_idle% < $MIN_HEADROOM%"; exit 1; }
@@ -72,7 +114,9 @@ awk -v m="$mean_idle" -v min="$MIN_HEADROOM" 'BEGIN { exit !(m >= min) }' \
 # 30-second rolling mean must never dip below MIN_ROLLING.
 rolling_ok=1
 awk -v w=30 -v min="$MIN_ROLLING" '
-  { buf[NR % w] = $1; sum += $1; if (NR > w) sum -= buf[(NR - w) % w]
+  { slot = (NR - 1) % w
+    if (NR > w) sum -= buf[slot]
+    buf[slot] = $1; sum += $1
     if (NR >= w) { avg = sum / w; if (avg < min) { print "LOW"; exit } } }
 ' "$samples_file" | grep -q LOW && rolling_ok=0
 test "$rolling_ok" = "1" || { echo "FAIL A16-RES 30s rolling mean idle dropped below $MIN_ROLLING%"; exit 1; }

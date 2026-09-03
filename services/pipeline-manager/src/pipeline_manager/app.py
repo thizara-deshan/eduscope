@@ -18,6 +18,7 @@ from .audio.levels import AudioLevelSampler, GstLevelMeterTap
 from .config import Settings
 from .consumers.base import CaptureCardRecovering, ConsumerNotRunning, PublisherNotRunning
 from .consumers.projector import ProjectorConsumer
+from .consumers.jpeg_previews import JpegPreviewConsumer
 from .consumers.record import RecordConsumer
 from .consumers.thumbnails import RoleNotPreviewable, ThumbnailController
 from .hardware.helper_client import HelperClient
@@ -238,6 +239,9 @@ async def _run_shutdown(app: FastAPI) -> None:
 
     for negotiation_id in list(state.thumbnails.negotiations):
         await state.thumbnails.close(negotiation_id)
+    if state.jpeg_previews.process is not None:
+        with suppress(Exception):
+            await state.jpeg_previews.stop()
 
     # Drain every open `/audio/levels/subscriptions` entry (A-REV-012) —
     # otherwise the sampler's background task, and a real meter tap's
@@ -356,6 +360,14 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
         events=app.state.events,
         platform=app.state.platform,
         is_role_online_and_bound=is_publisher_running,
+    )
+    app.state.jpeg_previews = JpegPreviewConsumer(
+        platform=app.state.platform,
+        output_dir=settings.runtime_root / "previews",
+        supervisor=app.state.supervisor,
+        ledger=app.state.ledger,
+        confirmer=app.state.confirmer,
+        events=app.state.events,
     )
 
     async def _default_audio_exec(argv) -> ExecResult:

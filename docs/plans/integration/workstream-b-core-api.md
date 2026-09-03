@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the localhost Fastify/TypeScript core-api that owns all device-side state, persists it crash-safely in SQLite/Drizzle, implements the 78 B-owned v1 REST operations and 22 panel events, brokers preview signaling, and acts as the outbound AI/quiz client.
+**Goal:** Build the localhost Fastify/TypeScript core-api that owns all device-side state, persists it crash-safely in SQLite/Drizzle, implements the B-owned v1 REST operations and panel events, proxies authenticated JPEG source previews, and acts as the outbound AI/quiz client.
+
+> **RK3588 preview decision — 2026-09-03:** continuous WebRTC preview is superseded on the production target by pipeline-manager atomic JPEG previews at 480×270/1 Hz. B must proxy those bytes through an authenticated panel-facing endpoint; the browser must never contact pipeline-manager directly. Existing WebRTC signaling stays compatibility-only and is not an E prerequisite. Contract operation totals must be regenerated when that endpoint is added rather than silently retaining the old count of 78.
 
 **Architecture:** One Fastify 5 process binds `127.0.0.1:5000`. Feature plugins share a single `better-sqlite3`/Drizzle connection, per-machine serial executors, a typed in-process domain bus, and one pipeline-manager SSE bridge; long-running media, copy, merge, probe, and upload work stays outside transactions. Public payloads are parsed with the existing `@eduscope/shared` v1 zod schemas, while pipeline-manager, AI, quiz-sync, helper, filesystem, and clock boundaries are injected so every task is testable without hardware or future workstreams.
 
@@ -1792,7 +1794,7 @@ git commit -m "feat(core-api): stream scoped panel events"
 - Modify: `services/core-api/src/app.ts`
 
 **Interfaces:**
-- Produces: authenticated `GET /api/v1/ws/preview`; five contracted message variants/brokering.
+- Produces: authenticated JPEG preview proxy for presentation, lecturer camera, and students camera; the existing signaling socket remains compatibility-only.
 - Consumes: B-09 source status, PM thumbnail offer/ICE/close endpoints, shared preview zod schemas.
 
 - [ ] **Step 1: Write failing negotiation tests**
@@ -1807,7 +1809,7 @@ Expected: FAIL because preview socket does not upgrade.
 
 - [ ] **Step 3: Implement one-connection/one-negotiation broker**
 
-Validate role status before forwarding. Map PM current endpoints: start preview capability, offer with negotiationId/roleId/sdp, forward ICE, and DELETE negotiation on close/replacement. Keep media entirely in A; B forwards only signaling data.
+Validate role status before proxying. Start PM's preview capability on first use, fetch `GET /consumers/thumbnails/{roleId}.jpg` with PM authentication, and return `image/jpeg` with `Cache-Control: no-store`. Stop capability when the last preview subscriber closes. Never persist image bytes and never expose PM credentials or its localhost endpoint.
 
 - [ ] **Step 4: Verify all five schema variants and isolation**
 
