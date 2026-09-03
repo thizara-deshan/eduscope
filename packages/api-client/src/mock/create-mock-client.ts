@@ -206,7 +206,7 @@ export function createMockClient(
       const cached = wrapped.get(prop);
       if (cached) return cached;
       /**
-       * The transport check sits HERE, not in each of the 77 operations: a
+       * The transport check sits HERE, not in each panel operation: a
        * transport failure is by definition the request not arriving, so it
        * cannot be the responsibility of the code that would have handled it.
        */

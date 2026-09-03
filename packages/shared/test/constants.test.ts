@@ -33,7 +33,7 @@ describe('constants', () => {
 
   it('partitions every contract operation into panel-facing or server-side', () => {
     const all = contractOperationIds();
-    expect(all.length).toBe(82);
+    expect(all.length).toBe(83);
     const declared = [...PANEL_OPERATION_IDS, ...SERVER_SIDE_ONLY_OPERATION_IDS];
     expect([...declared].sort()).toEqual([...all].sort());
   });
@@ -45,6 +45,6 @@ describe('constants', () => {
       'quizSyncCreateSession',
       'quizSyncPublish',
     ]);
-    expect(PANEL_OPERATION_IDS).toHaveLength(78);
+    expect(PANEL_OPERATION_IDS).toHaveLength(79);
   });
 });

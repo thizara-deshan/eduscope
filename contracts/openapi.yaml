@@ -405,6 +405,26 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/SourceStatus' }
 
+  /sources/{roleId}/preview.jpg:
+    get:
+      tags: [sources]
+      operationId: getSourcePreview
+      summary: Authenticated 480x270 JPEG preview for one video source role
+      description: |
+        Proxies pipeline-manager's latest atomic 1 Hz JPEG. The browser never
+        contacts pipeline-manager directly; preview bytes are not persisted.
+      parameters: [{ $ref: '#/components/parameters/roleId' }]
+      responses:
+        '200':
+          description: Latest complete JPEG frame.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/Problem' }
+
   /sources/inputs:
     get:
       tags: [sources]

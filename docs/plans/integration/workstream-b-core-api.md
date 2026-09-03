@@ -4,7 +4,7 @@
 
 **Goal:** Build the localhost Fastify/TypeScript core-api that owns all device-side state, persists it crash-safely in SQLite/Drizzle, implements the B-owned v1 REST operations and panel events, proxies authenticated JPEG source previews, and acts as the outbound AI/quiz client.
 
-> **RK3588 preview decision — 2026-09-03:** continuous WebRTC preview is superseded on the production target by pipeline-manager atomic JPEG previews at 480×270/1 Hz. B must proxy those bytes through an authenticated panel-facing endpoint; the browser must never contact pipeline-manager directly. Existing WebRTC signaling stays compatibility-only and is not an E prerequisite. Contract operation totals must be regenerated when that endpoint is added rather than silently retaining the old count of 78.
+> **RK3588 preview decision — 2026-09-03:** continuous WebRTC preview is superseded on the production target by pipeline-manager atomic JPEG previews at 480×270/1 Hz. B must proxy those bytes through authenticated panel operation `getSourcePreview`; the browser must never contact pipeline-manager directly. Existing WebRTC signaling stays compatibility-only and is not an E prerequisite. The additive contract amendment raises B-owned operations from 78 to 79 (83 total including four server-only quiz-sync operations).
 
 **Architecture:** One Fastify 5 process binds `127.0.0.1:5000`. Feature plugins share a single `better-sqlite3`/Drizzle connection, per-machine serial executors, a typed in-process domain bus, and one pipeline-manager SSE bridge; long-running media, copy, merge, probe, and upload work stays outside transactions. Public payloads are parsed with the existing `@eduscope/shared` v1 zod schemas, while pipeline-manager, AI, quiz-sync, helper, filesystem, and clock boundaries are injected so every task is testable without hardware or future workstreams.
 
@@ -111,7 +111,7 @@
 
 - [ ] **Step 1: Add the failing boot/config/version tests**
 
-`config.test.ts` must prove default host/port are `127.0.0.1:5000`, non-loopback host is rejected, production secrets shorter than 32 characters are rejected, and test paths may point at a temp directory. `clock.test.ts` proves fixed wall time, deterministic timer advancement, and deterministic monotonically ordered ULIDs. `lifecycle.test.ts` proves starts run in registration order, stops run once in reverse order, a partial-start failure stops only components that started, a second shutdown awaits the same promise, and DB close is registered first so it runs last. `version.test.ts` must read both YAML files, assert `info.version: 1.0.0`, assert events contains `Contract **v1.0.0**`, parse one `zEventEnvelope`, and assert `PANEL_OPERATION_IDS.length === 78`, `SERVER_SIDE_ONLY_OPERATION_IDS.length === 4`, and `PANEL_EVENT_NAMES.length === 22`.
+`config.test.ts` must prove default host/port are `127.0.0.1:5000`, non-loopback host is rejected, production secrets shorter than 32 characters are rejected, and test paths may point at a temp directory. `clock.test.ts` proves fixed wall time, deterministic timer advancement, and deterministic monotonically ordered ULIDs. `lifecycle.test.ts` proves starts run in registration order, stops run once in reverse order, a partial-start failure stops only components that started, a second shutdown awaits the same promise, and DB close is registered first so it runs last. `version.test.ts` must read both YAML files, assert `info.version: 1.0.0`, assert events contains `Contract **v1.0.0**`, parse one `zEventEnvelope`, and assert `PANEL_OPERATION_IDS.length === 79`, `SERVER_SIDE_ONLY_OPERATION_IDS.length === 4`, and `PANEL_EVENT_NAMES.length === 22`.
 
 - [ ] **Step 2: Run the tests to verify the service is absent**
 
@@ -198,7 +198,7 @@ Expected: PASS with no diagnostics.
 
 Run: `pnpm --filter @eduscope/core-api test -- test/unit/config.test.ts test/unit/clock.test.ts test/unit/lifecycle.test.ts test/contract/version.test.ts`
 
-Expected: PASS; clock/ULID and idempotent reverse teardown are deterministic, and 78/4/22 counts plus all v1 version assertions are green.
+Expected: PASS; clock/ULID and idempotent reverse teardown are deterministic, and 79/4/22 counts plus all v1 version assertions are green.
 
 Run: `pnpm --filter @eduscope/shared test`
 
@@ -341,7 +341,7 @@ Expected: PASS; restart fixture preserves valid sessions and revocations.
 
 Run: `pnpm --filter @eduscope/api-client test -- gate-contract-coverage.test.ts`
 
-Expected: PASS; mock still implements all 78 operations.
+Expected: PASS; mock still implements all 79 operations.
 
 - [ ] **Step 5: Commit**
 
@@ -1889,7 +1889,7 @@ This is the final Workstream B verification task from the master plan. Do not st
 
 - [ ] **Step 1: Write the exact ownership gate and make it fail on omission/excess**
 
-`operations.test.ts` must parse all `operationId`s from `contracts/openapi.yaml`, remove exactly the four `SERVER_SIDE_ONLY_OPERATION_IDS`, assert the remainder is exactly 78, introspect Fastify route metadata, and assert each B operation appears once with the contract method/path and no invented public route other than `/healthz` and two WS upgrades. For every operation, execute at least one declared success and every declared Problem status/code fixture, parsing bodies with shared zod.
+`operations.test.ts` must parse all `operationId`s from `contracts/openapi.yaml`, remove exactly the four `SERVER_SIDE_ONLY_OPERATION_IDS`, assert the remainder is exactly 79, introspect Fastify route metadata, and assert each B operation appears once with the contract method/path and no invented public route other than `/healthz` and two WS upgrades. For every operation, execute at least one declared success and every declared Problem status/code fixture, parsing bodies with shared zod.
 
 `events.test.ts` must assert exactly 22 panel names, exercise every payload union member, exactly five preview variants (`offer`, `answer`, bidirectional `ice` counted once, `close`, `error`), and exactly one B-owned sync message (`sync.hello`). It must fail on missing or extra ownership.
 
@@ -1942,7 +1942,7 @@ Add `"gate:core-api": "node scripts/gate-core-api.mjs"` to the service package s
 
 Run: `pnpm --filter @eduscope/core-api gate:core-api`
 
-Expected: PASS; core-api typecheck and all tests exit 0; ownership output reports exactly `78 REST / 22 panel events / 5 preview variants / 1 sync.hello`; shared and api-client suites are green; no open handles remain.
+Expected: PASS; core-api typecheck and all tests exit 0; ownership output reports exactly `79 REST / 22 panel events / 5 preview variants / 1 sync.hello`; shared and api-client suites are green; no open handles remain.
 
 - [ ] **Step 6: Run the explicit HTTP/WS evidence procedure**
 
@@ -1953,12 +1953,13 @@ pnpm --filter @eduscope/core-api exec tsx test/integration/fixture-stack.ts
 ```
 
 Expected: prints only loopback URLs, fixture ids, and `fixture-stack ready`; no credentials are printed.
+If the real-hardware core already owns port 5000, set `B38_FIXTURE_PORT` to an unused loopback port and use that same port in the curl commands below; do not stop the hardware process to make room for the fixture.
 
 From a second terminal, prove liveness and a named refusal with curl:
 
 ```bash
 curl --fail --silent http://127.0.0.1:5000/healthz
-curl --silent --header 'Content-Type: application/json' --data '{"username":"gate-lecturer","password":"GatePassphrase1!"}' http://127.0.0.1:5000/api/v1/auth/login
+curl --silent --header 'Content-Type: application/json' --data '{"username":"gate-lecturer","password":"GatePassphrase1!","client":"panel"}' http://127.0.0.1:5000/api/v1/auth/login
 curl --silent --header 'Content-Type: application/json' --data '{}' http://127.0.0.1:5000/api/v1/recording/start
 ```
 
@@ -1982,12 +1983,12 @@ Expected: no whitespace errors.
 
 Run: `git status --short`
 
-Expected: only B-38 files are uncommitted for this task; no contract, mock, or unrelated source drift.
+Expected: only B-38 files and the approved `getSourcePreview` contract amendment (OpenAPI, generated shared schemas/counts, API client/mock coverage, authorization, and corresponding integration-plan count references) are uncommitted; no unrelated source drift.
 
 - [ ] **Step 8: Commit and stop Workstream B**
 
 ```bash
-git add services/core-api
+git add contracts/openapi.yaml docs/plans/integration-plan.md docs/plans/integration/workstream-b-core-api.md docs/plans/integration/workstream-e-real-adapters-and-screen-swap.md packages/api-client packages/shared services/core-api
 git commit -m "test(core-api): gate v1 device workflow"
 ```
 
@@ -2000,7 +2001,7 @@ Stop. Do not begin Workstream C, D, E, F, or real-adapter implementation in this
 ### Master-scope coverage
 
 - B-01..B-38 appear exactly once and in master order; no master task is added, dropped, split, or reassigned.
-- Contract ownership remains exactly 78 B-hosted REST operations, 22 B-emitted panel events, five preview variants brokered by B, and B-owned `sync.hello`; four quiz-sync server operations and student surfaces remain D-owned.
+- Contract ownership remains exactly 79 B-hosted REST operations, 22 B-emitted panel events, five preview variants brokered by B, and B-owned `sync.hello`; four quiz-sync server operations and student surfaces remain D-owned.
 - KEEP coverage is preserved at its master task: B-03 (B-05), B-07/B-10 (B-06), B-15 (B-07), B-23 (B-13), B-31/B-33 (B-14), B-32 (B-16), B-27/B-28 (B-17), B-53 (B-19), B-50 (B-22), B-56 (B-24), B-59 (B-25), B-43 (B-27), B-44 (B-28).
 - B-18 remains placeholder-only at D-02b; no institute payload or production acceptance is claimed.
 - The master-plan encoder-ingress contradiction was updated and gate-flagged in the same run; B-24 consumes the exact corrected internal interface and does not hide the A dependency.

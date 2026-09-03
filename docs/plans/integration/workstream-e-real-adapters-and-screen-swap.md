@@ -28,7 +28,7 @@
 ### Workstream E fixed decisions and boundaries
 
 - Workstream E is exactly E-01 through E-50 in master order. E-48, E-49, and E-50 are the final expanded verification tasks and remain last.
-- E owns no v1 operation or event. It consumes the 78 panel-facing core operations, three student REST operations, 22 panel events, five preview messages, and four student events already owned by B/D.
+- E owns no v1 operation or event. It consumes the 79 panel-facing core operations, three student REST operations, 22 panel events, five preview messages, and four student events already owned by B/D.
 - The `SERVER_SIDE_ONLY_OPERATION_IDS` quiz-sync operations never enter either browser client.
 - Runtime domains are exactly `auth`, `recording`, `channels`, `sourcesAudio`, `preview`, `libraryExport`, `uploads`, `provisioningHealth`, `alerts`, `devicePower`, `storage`, `network`, `encoder`, `streamTargets`, `firmware`, `users`, `aiQuiz`, `logs`, and `studentQuiz`.
 - Demo/UI development defaults to mock. Production is accepted only with `{default:"real",overrides:{}}`. Overrides are rejected in production and are never editable from a screen.
@@ -121,7 +121,7 @@ Expected now: exit 1 with named missing A/B/C/D/E witnesses. After reviewers clo
 
 - [ ] **Step 2: Add red config/catalog/routing tests**
 
-Assert invalid URLs/domains/defaults fail; production overrides fail; all 78 `PANEL_OPERATION_IDS` occur exactly once; all 22 `PANEL_EVENT_NAMES` occur exactly once; `studentQuiz` owns no panel operation; inactive adapter events are discarded; opposite overrides route calls to opposite spies; connection state is projected only to selected real domains; switching runtime JSON between two provider mounts requires no rebuild; `dispose()` unsubscribes and disposes both clients exactly once.
+Assert invalid URLs/domains/defaults fail; production overrides fail; all 79 `PANEL_OPERATION_IDS` occur exactly once; all 22 `PANEL_EVENT_NAMES` occur exactly once; `studentQuiz` owns no panel operation; inactive adapter events are discarded; opposite overrides route calls to opposite spies; connection state is projected only to selected real domains; switching runtime JSON between two provider mounts requires no rebuild; `dispose()` unsubscribes and disposes both clients exactly once.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/mixed && pnpm --filter @eduscope/panel test -- src/config src/client/client-provider.test.tsx`
 
@@ -177,7 +177,7 @@ Export `PANEL_OPERATION_DOMAIN` as a `satisfies Record<PanelOperationId, Adapter
 
 Run: `pnpm --filter @eduscope/api-client test -- test/mixed test/operation-coverage.test.ts test/event-coverage.test.ts && pnpm --filter @eduscope/panel test -- src/config src/client src/devtools && pnpm --filter @eduscope/panel build`
 
-Expected: PASS; coverage reports 78 operations and 22 panel events exactly once, demo config selects mock, and the production bundle contains no `VITE_EDUSCOPE_REAL_API` branch.
+Expected: PASS; coverage reports 79 operations and 22 panel events exactly once, demo config selects mock, and the production bundle contains no `VITE_EDUSCOPE_REAL_API` branch.
 
 - [ ] **Step 5: Commit E-01**
 
@@ -204,7 +204,7 @@ git commit -m "feat(api-client): route adapters by runtime domain"
 - Modify: `apps/panel/src/auth/token-store.ts`
 - Modify: `apps/panel/src/auth/token-store.test.ts` (create if absent)
 
-**Produces:** all 78 real REST methods; response/Problem zod validation; JSON/form/blob/text/void handling; memory token subscription; one refresh for concurrent 401s.
+**Produces:** all 79 real REST methods; response/Problem zod validation; JSON/form/blob/text/void handling; memory token subscription; one refresh for concurrent 401s.
 
 - [ ] **Step 1: Add failing transport tests**
 
@@ -262,6 +262,7 @@ export const OPERATION_ROUTE = {
   listLayoutPresets: ['GET', '/layouts'],
   listSourceRoles: ['GET', '/sources/roles'],
   getSourcesStatus: ['GET', '/sources/status'],
+  getSourcePreview: ['GET', '/sources/{roleId}/preview.jpg'],
   listPhysicalInputs: ['GET', '/sources/inputs'],
   updatePhysicalInput: ['PUT', '/sources/inputs/{inputId}'],
   listSourceBindings: ['GET', '/sources/bindings'],
@@ -333,7 +334,7 @@ Keep explicit typed methods in `create-real-client.ts`; do not use a `Proxy` or 
 
 Run: `pnpm --filter @eduscope/api-client test && pnpm --filter @eduscope/core-api test:contract && pnpm --filter @eduscope/panel test -- src/screens/login src/screens/reset src/auth`
 
-Expected: PASS; 78/78 panel operations are implemented, four quiz-sync operations remain absent, representative GET/PUT/POST/PATCH/DELETE/multipart/Range calls validate, and no `NotImplementedError` is reachable from an HTTP operation.
+Expected: PASS; 79/79 panel operations are implemented, four quiz-sync operations remain absent, representative GET/PUT/POST/PATCH/DELETE/multipart/Range calls validate, and no `NotImplementedError` is reachable from an HTTP operation.
 
 - [ ] **Step 5: Commit E-02**
 
@@ -508,7 +509,7 @@ git commit -m "feat(api-client): connect the real student quiz app"
 
 - [ ] **Step 1: Add red contract/parity tests**
 
-Assert the real stack exposes exactly 78 panel operations, three student operations, two B sockets, and one student socket; every successful/Problem/event frame parses; no quiz-sync server method leaks to a browser; representative normalized auth/recording/channel/storage/user/AI/quiz results match mock semantics after replacing ids/instants; and direct credentials/secret fields never appear. Assert `run-real-screen` fails when a spec does not declare a real witness.
+Assert the real stack exposes exactly 79 panel operations, three student operations, two B sockets, and one student socket; every successful/Problem/event frame parses; no quiz-sync server method leaks to a browser; representative normalized auth/recording/channel/storage/user/AI/quiz results match mock semantics after replacing ids/instants; and direct credentials/secret fields never appear. Assert `run-real-screen` fails when a spec does not declare a real witness.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/real/contract-honesty.test.ts test/real/parity.test.ts`
 
@@ -528,7 +529,7 @@ Test controls use a loopback-only, random-port test peer endpoint owned by the p
 
 Run: `pnpm --filter @eduscope/api-client gate:dual`
 
-Expected: PASS; mock suite runs with no servers, real suite runs against B+D, 78+3 operations and all message variants validate, the existing scenario overlay suite remains unchanged, and teardown reports no live child/container.
+Expected: PASS; mock suite runs with no servers, real suite runs against B+D, 79+3 operations and all message variants validate, the existing scenario overlay suite remains unchanged, and teardown reports no live child/container.
 
 - [ ] **Step 5: Commit E-06**
 
@@ -1800,7 +1801,7 @@ The config template must parse after deploy token substitution and equal:
 }
 ```
 
-Tests reject every production override, omitted domain, build-time adapter env reference, direct app `fetch|WebSocket|RTCPeerConnection`, real adapter `NotImplementedError`, and mock removal. Audit totals must be 85 REST operations overall (78 panel + four server-only + three student), 22 panel events, five preview messages, four sync messages, and four student events, with exactly one contract owner and exactly one client-domain mapping where applicable.
+Tests reject every production override, omitted domain, build-time adapter env reference, direct app `fetch|WebSocket|RTCPeerConnection`, real adapter `NotImplementedError`, and mock removal. Audit totals must be 86 REST operations overall (79 panel + four server-only + three student), 22 panel events, five preview messages, four sync messages, and four student events, with exactly one contract owner and exactly one client-domain mapping where applicable.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/mixed/production-config.test.ts`
 
@@ -1885,7 +1886,7 @@ Stop. Do not begin Workstream F, alter deployment/device files beyond the produc
 
 - E-01..E-50 appear exactly once and in master order; no task, domain, contract owner, or KEEP assignment is added/dropped/reassigned.
 - E-01..E-06 are the six adapter-foundation tasks. E-07..E-47 are the ordered panel/student screen swaps. E-48 real WebRTC, E-49 projector overlay, and E-50 all-real gate are the final master verification sequence.
-- E owns zero public contract elements. The plan consumes 78 panel operations, three student operations, 22 panel events, five preview messages, and four student events; the four quiz-sync operations remain browser-excluded.
+- E owns zero public contract elements. The plan consumes 79 panel operations, three student operations, 22 panel events, five preview messages, and four student events; the four quiz-sync operations remain browser-excluded.
 - Mock regression is explicit in every task through the api-client suite and independently executable in E-06/E-50.
 - The master plan was updated in this planning run for upstream gate evidence, the stale E-44→E-49 QO-1 reference, and the real A/B projector payload mismatch. E-49 resolves the internal interface without changing public v1.
 - D-02b, QO-1 pre-publication QR, D-10 room hardware, DIO-1 editing, and retention-period decisions remain excluded exactly as the master requires.

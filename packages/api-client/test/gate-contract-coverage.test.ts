@@ -23,7 +23,7 @@ describe('GATE 2 — contract coverage', () => {
     const expected = all.filter((id) => !excluded.has(id));
     const client = createMockClient('happy') as unknown as Record<string, unknown>;
 
-    expect(expected.length).toBe(78);
+    expect(expected.length).toBe(79);
     const missing = expected.filter((id) => typeof client[id] !== 'function');
     expect(missing, `mock does not implement: ${missing.join(', ')}`).toEqual([]);
   });

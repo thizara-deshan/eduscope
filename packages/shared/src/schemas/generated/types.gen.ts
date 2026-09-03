@@ -1768,6 +1768,33 @@ export type GetSourcesStatusResponses = {
 
 export type GetSourcesStatusResponse = GetSourcesStatusResponses[keyof GetSourcesStatusResponses];
 
+export type GetSourcePreviewData = {
+    body?: never;
+    path: {
+        roleId: SourceRoleId;
+    };
+    query?: never;
+    url: '/sources/{roleId}/preview.jpg';
+};
+
+export type GetSourcePreviewErrors = {
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    404: Problem;
+};
+
+export type GetSourcePreviewError = GetSourcePreviewErrors[keyof GetSourcePreviewErrors];
+
+export type GetSourcePreviewResponses = {
+    /**
+     * Latest complete JPEG frame.
+     */
+    200: Blob | File;
+};
+
+export type GetSourcePreviewResponse = GetSourcePreviewResponses[keyof GetSourcePreviewResponses];
+
 export type ListPhysicalInputsData = {
     body?: never;
     path?: never;

@@ -16,7 +16,7 @@ export const PANEL_OPERATION_IDS = [
   'listChannels', 'updateChannelConfig', 'enableChannel', 'disableChannel',
   'listLayoutPresets',
   // sources (8)
-  'listSourceRoles', 'getSourcesStatus', 'listPhysicalInputs', 'updatePhysicalInput',
+  'listSourceRoles', 'getSourcesStatus', 'getSourcePreview', 'listPhysicalInputs', 'updatePhysicalInput',
   'listSourceBindings', 'updateSourceBinding', 'listAudioControls', 'updateAudioControl',
   // recordings + exports (9)
   'listRecordings', 'getRecording', 'deleteRecording', 'retryMergeRecording',

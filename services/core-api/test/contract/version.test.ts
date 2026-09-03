@@ -26,8 +26,8 @@ describe('v1.0.0 contract baseline', () => {
     expect(() => zEventEnvelope.parse(sampleEventEnvelope)).not.toThrow();
   });
 
-  it('partitions exactly 78 panel operations, 4 server-side-only operations, and 22 panel events', () => {
-    expect(PANEL_OPERATION_IDS.length).toBe(78);
+  it('partitions exactly 79 panel operations, 4 server-side-only operations, and 22 panel events', () => {
+    expect(PANEL_OPERATION_IDS.length).toBe(79);
     expect(SERVER_SIDE_ONLY_OPERATION_IDS.length).toBe(4);
     expect(PANEL_EVENT_NAMES.length).toBe(22);
   });
