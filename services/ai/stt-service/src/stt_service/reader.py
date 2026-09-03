@@ -24,7 +24,7 @@ def build_reader_argv(socket_path: str) -> tuple[str, ...]:
     return (
         "gst-launch-1.0", "-q",
         "shmsrc", f"socket-path={socket_path}", "is-live=true", "do-timestamp=true",
-        "!", "audio/x-raw,format=S16LE,rate=48000,channels=2",
+        "!", "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved",
         "!", "audioconvert", "!", "audioresample",
         "!", "audio/x-raw,format=S16LE,rate=16000,channels=1",
         "!", "fdsink", "fd=1",
