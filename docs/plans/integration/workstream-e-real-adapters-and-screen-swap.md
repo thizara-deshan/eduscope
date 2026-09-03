@@ -52,6 +52,14 @@ Before checking E-01 Step 1, reviewers must supply and acknowledge all of:
 4. dated D-08/D-09/D-10/D-11 witnesses, a green `pnpm --filter @eduscope/quiz-service gate:d`, and reviewer acknowledgement of D's gate flag;
 5. reviewer acknowledgement of the Workstream E master-plan gate flag, including the E-49 A/B payload correction.
 
+Target exception record (2026-09-03): reviewers may acknowledge the A-16 CPU
+headroom result as `APPROVED EXCEPTION`, measured full-mix mean idle 9.5778%
+against the unchanged ≥30.00% criterion. This does not qualify the artificial
+full-output mix; the interim supported profile is record + meeting + one-second
+JPEG previews. The HDMI #2 receiver-microphone and projector latency/mode
+measurements are `DEFERRED — NOT PASS`. Unless the Workstream E prerequisite
+owner formally accepts those two deferrals, they remain STOP blockers for E-01.
+
 If any witness is missing or contains `NOT RUN — gate failed`, stop. Do not create an E implementation commit and do not reinterpret a template as evidence.
 
 ### Repository and test conventions

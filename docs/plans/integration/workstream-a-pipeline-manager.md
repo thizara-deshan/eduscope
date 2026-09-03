@@ -1204,6 +1204,17 @@ Expected: commit includes the scripts, parser tests, README, template, and the f
 
 This is the final Workstream A task and the second final verification task from the master plan. Nothing follows it except plan self-review. It runs only after A-15 passes on the same target commit.
 
+> **Target disposition — 2026-09-03:** the previously measured full-mix mean
+> CPU idle of 9.5778% against the unchanged ≥30.00% criterion is an
+> **APPROVED EXCEPTION**, not a PASS. The interim supported workload is record
+> + meeting + one-second JPEG previews; the artificial all-output mix remains
+> unqualified and must be optimized later. The HDMI #2 receiver-microphone and
+> projector latency/mode measurements are explicitly **DEFERRED — NOT PASS**
+> because the required receiving/projector measurement setup is unavailable.
+> Their evidence rows remain unrun, and A-16 cannot be represented as an
+> unconditional physical-gate PASS until those deferrals are resolved or the
+> prerequisite gate formally accepts them.
+
 **Files:**
 - Create: `services/pipeline-manager/scripts/bench/outputs.sh`
 - Create: `services/pipeline-manager/scripts/bench/resource-ledger.sh`
@@ -1301,6 +1312,13 @@ bash scripts/bench/webrtc.sh --base-url http://127.0.0.1:8091 \
 ```
 
 Then execute Step 5, copy/fill the evidence template, and run `sha256sum "$EVIDENCE"/*`. Expected automated markers: `PASS A16-OUT`, `PASS A16-RES cpu-headroom>=30.00`, and `PASS A16-WEBRTC max-first-frame-ms<1000`; manual HDMI/projector rows are complete and passing/recorded.
+
+For the 2026-09-03 target disposition, `A16-RES` must instead report
+`APPROVED EXCEPTION` with the measured 9.5778% result and must not emit its
+PASS marker. WebRTC is diagnostic after the JPEG-preview decision and is not
+a production-preview closure condition. HDMI microphone and projector rows
+remain `DEFERRED — NOT PASS`; do not manufacture evidence or check A-16 as an
+unconditional physical PASS.
 
 - [ ] **Step 9: Run final Workstream A regression**
 
