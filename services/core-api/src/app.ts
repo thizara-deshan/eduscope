@@ -50,6 +50,7 @@ import { PipelineManagerBridge } from './modules/recording/pm/dispatcher.js';
 import { registerRecordingRoutes } from './modules/recording/routes.js';
 import { SourceExecutor } from './modules/sources/status.js';
 import { registerSourceRoutes } from './modules/sources/routes.js';
+import { registerJpegPreviewRoute } from './modules/sources/preview-route.js';
 import { lectureSessions, storageVolumes } from './db/schema.js';
 import { and, eq } from 'drizzle-orm';
 import { execFile } from 'node:child_process';
@@ -459,6 +460,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   lifecycle.register(sourceExecutor);
   registerSourceRoutes(app, authService, sourceExecutor);
+  registerJpegPreviewRoute(app, authService, pmClient);
 
   const secretStore = await SecretStore.create({
     dir: join(dirname(config.dbPath), 'secrets'),
