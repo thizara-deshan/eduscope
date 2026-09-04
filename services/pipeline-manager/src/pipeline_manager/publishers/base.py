@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field, replace
 from typing import Callable, Literal
+import asyncio
 
 from ..models import PublisherId, PublisherState, SourceRole
 
@@ -143,6 +144,8 @@ class PublisherController:
         self.health = PublisherHealth()
         self.binding: PublisherBinding | str | None = None
         self.pid: int | None = None
+        self.exit_task: asyncio.Task | None = None
+        self.requested_stop = False
 
     def bind(self, binding: "PublisherBinding | str") -> None:
         """A binding change or manual retry resets the restart budget. Accepts

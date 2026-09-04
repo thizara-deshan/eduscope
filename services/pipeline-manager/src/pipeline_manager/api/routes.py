@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response
 
@@ -393,6 +393,7 @@ async def start_thumbnails(body: ThumbnailStartBody, request: Request) -> Respon
         except ValueError as exc:
             raise DomainProblem("invalid_preset", "Unknown roleId in sources", 400) from exc
     request.app.state.thumbnails.set_allowed_roles(roles)
+    await request.app.state.jpeg_previews.start()
     return Response(status_code=202)
 
 
@@ -404,7 +405,23 @@ async def stop_thumbnails(request: Request) -> Response:
     for negotiation_id in list(controller.negotiations):
         await controller.close(negotiation_id)
     controller.set_allowed_roles(None)
+    if request.app.state.jpeg_previews.process is not None:
+        await request.app.state.jpeg_previews.stop()
     return Response(status_code=202)
+
+
+@router.get("/consumers/thumbnails/{role_id}.jpg")
+async def get_jpeg_thumbnail(role_id: str, request: Request) -> FileResponse:
+    try:
+        role = SourceRole(role_id)
+    except ValueError:
+        raise DomainProblem("consumer_not_found", "Unknown preview role", 404, {"roleId": role_id}) from None
+    if role not in (SourceRole.PRESENTATION, SourceRole.LECTURER_CAM, SourceRole.STUDENTS_CAM):
+        raise DomainProblem("consumer_not_found", "Role has no JPEG preview", 404, {"roleId": role_id})
+    path = request.app.state.jpeg_previews.output_dir / f"{role.value}.jpg"
+    if not path.is_file():
+        raise DomainProblem("consumer_not_found", "JPEG preview is not ready", 404, {"roleId": role_id})
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/consumers/thumbnails/offer", status_code=202)
@@ -551,8 +568,35 @@ async def get_status(request: Request) -> dict:
                 "state": consumer.state.value,
                 "output": getattr(consumer, "output_path", None),
                 "pgid": consumer.pgid,
+                "lastError": getattr(consumer, "last_error", None),
             }
             for consumer_id, consumer in state.consumers.items()
+        ] + ([{
+            "id": state.projector.consumer_id,
+            "kind": "projector",
+            "state": state.projector.state.value,
+            "output": None,
+            "pgid": state.projector.pgid,
+            "lastError": getattr(state.projector, "last_error", None),
+        }] if state.projector.process is not None else []) + [
+            *([{
+                "id": state.jpeg_previews.consumer_id,
+                "kind": "jpeg-previews",
+                "state": state.jpeg_previews.state.value,
+                "output": str(state.jpeg_previews.output_dir),
+                "pgid": state.jpeg_previews.pgid,
+                "lastError": state.jpeg_previews.last_error,
+            }] if state.jpeg_previews.process is not None else []),
+        ] + [
+            {
+                "id": f"thumbnails:{negotiation_id}",
+                "kind": "thumbnails",
+                "state": "running",
+                "output": None,
+                "pgid": negotiation.process.pgid,
+                "lastError": None,
+            }
+            for negotiation_id, negotiation in state.thumbnails.negotiations.items()
         ],
         "device": {"captureCardState": state.watchdog.state, "led": "off"},
         "sequence": state.events.sequence,

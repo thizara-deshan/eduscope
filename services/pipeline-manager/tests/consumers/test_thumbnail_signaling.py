@@ -235,6 +235,22 @@ async def test_close_cancels_the_output_pump_task() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unexpected_worker_exit_releases_negotiation_and_encode_slot() -> None:
+    controller = _controller()
+    await controller.offer(_offer(negotiation_id="n1"))
+    negotiation = controller.negotiations["n1"]
+    assert controller._ledger.in_use == 1
+
+    negotiation.process.popen.returncode = 1
+    await asyncio.sleep(0.2)
+
+    assert "n1" not in controller.negotiations
+    assert "n1" not in controller._pump_tasks
+    assert controller._ledger.in_use == 0
+    assert negotiation.process.identity not in controller._supervisor.processes
+
+
+@pytest.mark.asyncio
 async def test_source_loss_reports_negotiations_bound_to_that_role() -> None:
     # Only one provisional ledger slot exists system-wide (A-07 §4.1's
     # unmeasured-risk note, B-T1) — one active negotiation is the realistic case.

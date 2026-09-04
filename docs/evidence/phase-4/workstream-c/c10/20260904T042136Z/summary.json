@@ -1,0 +1,64 @@
+{
+  "failures": [],
+  "passed": true,
+  "summary": {
+    "durationSec": 5400,
+    "final": {
+      "decodeErrors": 0,
+      "ffprobeDurationSec": 5615.907122,
+      "type": "final"
+    },
+    "generationCount": 4,
+    "generations": [
+      {
+        "acceptedAt": "2026-09-04T04:26:44.290626+00:00",
+        "latencyMs": 15040,
+        "outcome": "ready",
+        "terminalAt": "2026-09-04T04:26:59.331543+00:00",
+        "type": "generation"
+      },
+      {
+        "acceptedAt": "2026-09-04T04:47:26.709153+00:00",
+        "latencyMs": 14,
+        "outcome": "ready",
+        "terminalAt": "2026-09-04T04:47:26.723181+00:00",
+        "type": "generation"
+      },
+      {
+        "acceptedAt": "2026-09-04T05:07:56.164130+00:00",
+        "latencyMs": 17,
+        "outcome": "ready",
+        "terminalAt": "2026-09-04T05:07:56.181991+00:00",
+        "type": "generation"
+      },
+      {
+        "acceptedAt": "2026-09-04T05:28:38.594466+00:00",
+        "latencyMs": 27,
+        "outcome": "ready",
+        "terminalAt": "2026-09-04T05:28:38.621748+00:00",
+        "type": "generation"
+      }
+    ],
+    "largestSampleGapSec": 60,
+    "peakRssKiB": {
+      "coreApi": 55220,
+      "pipelineManager": 52416,
+      "question": 58504,
+      "slide": 115464,
+      "stt": 5215312
+    },
+    "postWarmupGrowthKiB": {
+      "coreApi": 0.0,
+      "pipelineManager": 104.0,
+      "question": 260.0,
+      "slide": 11988.0,
+      "stt": 31548.0
+    },
+    "recordingOutputBytesStartEnd": {
+      "end": 659316000,
+      "start": 65800
+    },
+    "sampleCount": 91,
+    "sttQueueDepthPeak": 5
+  }
+}

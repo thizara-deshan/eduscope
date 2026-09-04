@@ -62,7 +62,7 @@ def test_ledger_at_capacity_exercises_refusal_and_passes(state_dir, tmp_path) ->
     write_sequence(state_dir, [{"encodeLedger": {"inUse": 3, "capacity": 3}}])
     result = run_script(
         "resource-ledger.sh",
-        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1"],
+        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1", "--capacity-wait-sec", "0"],
         state_dir,
         timeout=15,
         env_overrides={"SLEEP": "sleep"},
@@ -82,7 +82,7 @@ def test_ledger_below_capacity_fails_honestly_instead_of_claiming_enforcement(st
     write_sequence(state_dir, [{"encodeLedger": {"inUse": 1, "capacity": 3}}])
     result = run_script(
         "resource-ledger.sh",
-        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1"],
+        ["--base-url", "http://fake", "--evidence-dir", str(tmp_path), "--duration-sec", "1", "--capacity-wait-sec", "0"],
         state_dir,
         timeout=15,
         env_overrides={"SLEEP": "sleep"},

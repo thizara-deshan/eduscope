@@ -11,5 +11,5 @@
   "queue", "!", "audioconvert", "!", "audioresample", "!", "voaacenc", "bitrate=128000", "!", "aacparse", "!",
   "queue", "max-size-buffers=200", "!", "mux.",
   "flvmux", "name=mux", "streamable=true", "!", "queue", "max-size-buffers=400", "!",
-  "rtmpsink", "location=rtmp://127.0.0.1:1935/live/test live=1", "sync=false"
+  "rtmpsink", "location=rtmp://127.0.0.1:1935/live/test", "sync=false"
 ]

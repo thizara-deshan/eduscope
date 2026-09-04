@@ -79,6 +79,9 @@ class PipelineSpec:
     # roles offline instead of refusing outright. False (the default) keeps
     # every existing pipeline kind's original all-required-roles-online gate.
     degraded_start_ok: bool = False
+    # Camera roles whose named shmsrc branches are managed inside the
+    # session-lifetime record worker instead of fatal gst-launch handling.
+    resilient_roles: tuple[SourceRole, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -144,8 +147,6 @@ def source_branch_normalized(
                 "h264parse",
                 "!",
                 *platform.decoder(),
-                "!",
-                *platform.convert(),
                 "!",
             )
         else:

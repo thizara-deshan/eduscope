@@ -137,6 +137,23 @@ export class PipelineManagerClient {
     await this.#request('POST', '/consumers/thumbnails/start', sources !== undefined ? { sources } : {});
   }
 
+  async getJpegThumbnail(roleId: string, signal?: AbortSignal): Promise<Uint8Array> {
+    const init: RequestInit = { headers: { authorization: `Bearer ${this.#bearerToken}` } };
+    if (signal !== undefined) init.signal = signal;
+    const response = await this.#fetch(
+      `${this.#baseUrl}/consumers/thumbnails/${encodeURIComponent(roleId)}.jpg`, init,
+    );
+    if (!response.ok) throw new PipelineManagerError(await this.#toProblem(response));
+    if (response.headers.get('content-type')?.split(';', 1)[0] !== 'image/jpeg') {
+      throw new PipelineManagerError({ code: 'internal', title: 'pipeline-manager returned a non-JPEG preview', status: 502 });
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > 2_000_000) {
+      throw new PipelineManagerError({ code: 'internal', title: 'pipeline-manager returned an invalid preview size', status: 502 });
+    }
+    return bytes;
+  }
+
   /** B-36 (events.md §3 `offer`): forwards a client SDP offer. 202-accepted only — the SDP answer arrives asynchronously (`evt.pm.thumbnail.answer`, see `pm/types.ts`). */
   async offerThumbnail(body: ThumbnailOfferBody): Promise<PmCommandAccepted> {
     return this.#request<PmCommandAccepted>('POST', '/consumers/thumbnails/offer', body);

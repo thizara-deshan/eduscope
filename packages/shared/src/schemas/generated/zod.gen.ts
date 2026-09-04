@@ -1575,6 +1575,8 @@ export const zGetSourcesStatusResponse = z.object({
     items: z.array(zSourceStatus)
 });
 
+export const zGetSourcePreviewResponse = z.string();
+
 export const zListPhysicalInputsResponse = z.object({
     items: z.array(zPhysicalInput)
 });

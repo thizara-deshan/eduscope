@@ -29,6 +29,11 @@ def test_script_exists_and_is_valid_bash() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_restart_requires_a_real_positive_replacement_pid() -> None:
+    script = (Path(__file__).resolve().parents[2] / "scripts" / "bench" / "publishers.sh").read_text()
+    assert '[[ "$new_pid" =~ ^[1-9][0-9]*$ ]]' in script
+
+
 def test_missing_required_binary_fails_fast(state_dir: Path) -> None:
     write_sequence(state_dir, [ONLINE_SNAPSHOT])
     result = run_script(
@@ -93,7 +98,16 @@ def test_restart_isolation_success_fixture(state_dir: Path) -> None:
     restart_audio = json.loads(json.dumps(restart_rtsp2))
     restart_audio["publishers"]["audio"] = {"pid": 203, "state": "online"}
 
-    write_sequence(state_dir, [ONLINE_SNAPSHOT, restart_usb, restart_rtsp, restart_rtsp2, restart_audio])
+    write_sequence(
+        state_dir,
+        [
+            ONLINE_SNAPSHOT,
+            restart_usb, restart_usb,
+            restart_rtsp, restart_rtsp,
+            restart_rtsp2, restart_rtsp2,
+            restart_audio, restart_audio,
+        ],
+    )
 
     result = run_script("publishers.sh", ["http://fake"], state_dir, timeout=60)
 

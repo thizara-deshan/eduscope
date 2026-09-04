@@ -111,7 +111,7 @@ class TestControlLineValidation:
 def test_worker_argv_is_one_process_per_invocation() -> None:
     argv = worker_argv("python3")
     assert argv[0] == "python3"
-    assert "--worker" in argv
+    assert "pipeline_manager.pipelines.webrtc_worker" in argv
 
 
 def test_worker_argv_carries_the_graph_as_a_single_argv_element() -> None:

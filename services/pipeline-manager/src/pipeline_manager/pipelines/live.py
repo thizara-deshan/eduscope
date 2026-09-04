@@ -90,7 +90,7 @@ def build_live(req: LiveRequest, platform: PlatformProfile) -> PipelineSpec:
 
     target = f"{RTMP_BASE}/{req.stream_key}"
     builder.add(*platform.mux("flv", "mux"), "!", "queue", "max-size-buffers=400", "!")
-    builder.add(*platform.rtmp_sink(f"{target} live=1"))
+    builder.add(*platform.rtmp_sink(target))
 
     return PipelineSpec(
         argv=builder.build(),

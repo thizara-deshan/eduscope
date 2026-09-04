@@ -39,6 +39,15 @@ export function createSourcesOperations(ctx: RestContext) {
         return validated(zSourceStatus, { ...payload, since: nowIsoZ(world.clock) });
       }),
 
+    getSourcePreview: async (roleId: SourceRoleId): Promise<Blob> => {
+      const status = await createSourcesOperations(ctx).getSourcesStatus();
+      const source = status.find((row) => row.roleId === roleId);
+      if (!source || !BOUND_SOURCE_ROLES.includes(roleId)) {
+        throw new ProblemError({ status: 404, code: 'not-found', title: `No preview for ${roleId}` });
+      }
+      return new Blob([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' });
+    },
+
     listPhysicalInputs: async (): Promise<PhysicalInput[]> => {
       requireAdmin(ctx);
       return seed.physicalInputs.map((i) => validated(zPhysicalInput, i));

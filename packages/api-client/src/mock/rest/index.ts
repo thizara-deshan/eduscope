@@ -43,7 +43,7 @@ export interface RestContext {
   readonly connection?: ConnectionController;
 }
 
-/** One factory per contracts/openapi.yaml tag; all 77 PanelOperationIds land in the merged object below. */
+/** One factory per contracts/openapi.yaml tag; all PanelOperationIds land in the merged object below. */
 export function createRestOperations(ctx: RestContext) {
   return {
     ...createAuthOperations(ctx),

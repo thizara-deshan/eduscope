@@ -67,6 +67,8 @@ export interface EduscopeClient {
   // ── sources & audio (machine 5a) ────────────────────────────────────────
   listSourceRoles(): Promise<SourceRole[]>;
   getSourcesStatus(): Promise<SourceStatus[]>;
+  /** Latest authenticated 480x270 JPEG frame; never a direct pipeline-manager URL. */
+  getSourcePreview(roleId: SourceRoleId): Promise<Blob>;
   listPhysicalInputs(): Promise<PhysicalInput[]>;
   updatePhysicalInput(inputId: Ulid, body: PhysicalInputUpdate): Promise<PhysicalInput>;
   listSourceBindings(): Promise<SourceBinding[]>;

@@ -49,10 +49,29 @@ stays `NOT RUN — gate failed`.
 
 Runs only after A-15 passes on the same target commit, and requires the local
 nginx-RTMP relay named above. Run `scripts/bench/outputs.sh`,
-`scripts/bench/resource-ledger.sh`, and `scripts/bench/webrtc.sh`, then the
-manual HDMI-#2-mic and projector-latency procedures (plan A-16 Step 5).
+`scripts/bench/resource-ledger.sh`, verify the authenticated 1 Hz JPEG previews,
+then run the manual HDMI-#2-mic and projector-latency procedures (plan A-16
+Step 5). `webrtc.sh` is retained as a diagnostic only after the 2026-09-03
+RK3588 JPEG-preview decision; it is not the production preview gate.
 `evidence/a16-template.md` mirrors the same fill-in-from-the-actual-run
 discipline.
+
+The measured full-mix CPU result remains below the original 30% engineering
+target. Proceeding is an explicitly documented capacity exception, not a PASS.
+The supported interim classroom workload is record + meeting; do not infer that
+the artificial all-output mix is qualified.
+
+Approved target disposition (2026-09-03): the measured full-mix mean idle is
+9.5778%. Record it as `APPROVED EXCEPTION — CPU HEADROOM`, retain the ≥30.00%
+criterion, and never emit `PASS A16-RES` for that run. The supported interim
+profile is record + meeting + the zero-encode-slot one-second JPEG previews.
+
+The HDMI #2 receiver-microphone check and projector latency/mode measurements
+are explicitly `DEFERRED — NOT PASS`. The receiver/projector measurement setup
+is unavailable. Leave the corresponding evidence fields unrun; device presence,
+pipeline health, or use of a separate screen does not prove either physical
+result. A-16 therefore remains conditionally accepted/open for these physical
+items rather than an unconditional gate PASS.
 
 ## Running the wrapper/parser tests (any host, no board needed)
 

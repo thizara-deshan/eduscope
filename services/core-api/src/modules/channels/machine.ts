@@ -137,7 +137,7 @@ export interface ChannelExecutorDeps {
  * Machine 1c (state-machines.md §2.2, design/core-api.md §4.1): the only
  * writer of `meeting`/`streaming` runtime state. Enabling/disabling one
  * channel touches only its own PM consumer — publishers and the record
- * consumer are untouched (INV-CC-2, the death of B-06's global `killall`).
+ * consumer are untouched (INV-CC-2, replacing B-06's global process termination).
  * Runtime state is process-local; `channelActivations` on the active
  * `LectureSession` is the durable audit trail (LP-7).
  */

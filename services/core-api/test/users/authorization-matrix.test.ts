@@ -84,7 +84,7 @@ const OWNER_OR_ADMIN_OPERATIONS = new Set<PanelOperationId>([
 ]);
 
 describe('centralized operation/role/owner authorization matrix (B-43 KEEP)', () => {
-  it('covers exactly the 78 panel operation ids', () => {
+  it('covers exactly the 79 panel operation ids', () => {
     expect(Object.keys(OPERATION_AUTHORIZATION).sort()).toEqual([...PANEL_OPERATION_IDS].sort());
   });
 

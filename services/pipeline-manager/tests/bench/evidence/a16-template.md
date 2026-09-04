@@ -5,6 +5,12 @@ actual target run. Runs only after A-15 has passed on the same target
 commit. An unrun row stays `NOT RUN — gate failed` — never leave it blank
 and never mark the task complete with a blank or invented PASS.
 
+For the 2026-09-03 RK3588 disposition, use the literal verdicts
+`APPROVED EXCEPTION — CPU HEADROOM (measured mean idle 9.5778%; criterion
+unchanged at >=30.00%)` and `DEFERRED — NOT PASS` where applicable. An
+exception or deferral is never a PASS marker and never substitutes for raw
+measurement evidence.
+
 ## Identity
 
 | Field | Value |
@@ -45,7 +51,7 @@ and never mark the task complete with a blank or invented PASS.
 | Worker pid disappears after close? | NOT RUN — gate failed |
 | Record pid/growth unchanged throughout? | NOT RUN — gate failed |
 
-Raw per-negotiation rows: see `webrtc-latencies.jsonl` in the evidence
+Legacy diagnostic per-negotiation rows, when run: see `webrtc-latencies.jsonl` in the evidence
 directory (60 rows: `{role, ms}`).
 
 ## /proc/stat CPU idle
@@ -60,6 +66,7 @@ directory (60 rows: `{role, ms}`).
 | mean idle % (headroom) | NOT RUN — gate failed |
 | Mean ≥ 30.00%? | NOT RUN — gate failed |
 | 30s rolling mean ever < 20%? | NOT RUN — gate failed |
+| Disposition | NOT RUN — gate failed |
 
 ## Encode-ledger refusal
 
@@ -78,6 +85,7 @@ directory (60 rows: `{role, ms}`).
 | `ffprobe` output (48kHz stereo, non-silent) | NOT RUN — gate failed |
 | Waveform/recording path | NOT RUN — gate failed |
 | Meeting-platform input-meter screenshot | NOT RUN — gate failed |
+| Deferral disposition | NOT RUN — gate failed |
 
 ## Projector latency (10 trials, 240fps phone capture)
 
@@ -100,6 +108,7 @@ directory (60 rows: `{role, ms}`).
 | p95 (ms) | NOT RUN — gate failed |
 | max (ms) | NOT RUN — gate failed |
 | Video hash | NOT RUN — gate failed |
+| Deferral disposition | NOT RUN — gate failed |
 
 No pass threshold is invented for this metric — latency is recorded and
 flagged for the gate, not hidden behind a made-up number.
@@ -143,3 +152,4 @@ NOT RUN — gate failed
 | A16-OUT full-mix-300s | NOT RUN — gate failed |
 | A16-RES cpu-headroom / ledger-enforced | NOT RUN — gate failed |
 | A16-WEBRTC max-first-frame-ms<1000 | NOT RUN — gate failed |
+| Overall physical closure | NOT RUN — gate failed |

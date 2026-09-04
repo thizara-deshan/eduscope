@@ -39,6 +39,7 @@ export const OPERATION_AUTHORIZATION: Record<PanelOperationId, AuthorizationRequ
   listLayoutPresets: 'any-authenticated',
   listSourceRoles: 'any-authenticated',
   getSourcesStatus: 'any-authenticated',
+  getSourcePreview: 'any-authenticated',
   listPhysicalInputs: 'admin',
   updatePhysicalInput: 'admin',
   listSourceBindings: 'admin',

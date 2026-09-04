@@ -10,6 +10,7 @@ set -euo pipefail
 CURL="${CURL:-curl}"
 JQ="${JQ:-jq}"
 FFPROBE="${FFPROBE:-ffprobe}"
+FFMPEG="${FFMPEG:-ffmpeg}"
 STAT="${STAT:-stat}"
 KILL="${KILL:-kill}"
 SLEEP="${SLEEP:-sleep}"
@@ -17,6 +18,7 @@ SLEEP="${SLEEP:-sleep}"
 command -v "$CURL" >/dev/null || { echo "FAIL A15-REC curl is required"; exit 1; }
 command -v "$JQ" >/dev/null || { echo "FAIL A15-REC jq is required"; exit 1; }
 command -v "$FFPROBE" >/dev/null || { echo "FAIL A15-REC ffprobe is required"; exit 1; }
+command -v "$FFMPEG" >/dev/null || { echo "FAIL A15-REC ffmpeg is required"; exit 1; }
 command -v "$STAT" >/dev/null || { echo "FAIL A15-REC stat is required"; exit 1; }
 command -v "$KILL" >/dev/null || { echo "FAIL A15-REC kill is required"; exit 1; }
 
@@ -101,6 +103,21 @@ wait_growth "$cam_out" 5 || { echo "FAIL A15-REC camera-only growth"; exit 1; }
 stop_eos "$cam_id" || { echo "FAIL A15-REC camera-only stop"; exit 1; }
 probe_positive_duration "$cam_out" || { echo "FAIL A15-REC camera-only duration"; exit 1; }
 "$CURL" -fsS -X POST "${AUTH[@]}" "${BASE_URL}/publishers/usb/start" >/dev/null
+deadline=$((SECONDS + 15))
+usb_pid=""
+until [[ "$(status | "$JQ" -r '.publishers.usb.state')" == "online" ]]; do
+  (( SECONDS < deadline )) || { echo "FAIL A15-REC camera-only usb restore"; exit 1; }
+  "$SLEEP" 1
+done
+while :; do
+  current_usb_pid="$(status | "$JQ" -r '.publishers.usb.pid')"
+  if [[ "$current_usb_pid" =~ ^[1-9][0-9]*$ ]] && test "$current_usb_pid" = "$usb_pid"; then
+    break
+  fi
+  usb_pid="$current_usb_pid"
+  (( SECONDS < deadline )) || { echo "FAIL A15-REC camera-only usb stable"; exit 1; }
+  "$SLEEP" 1
+done
 echo "PASS A15-REC camera-only"
 
 # ── 3. Targeted EOS ──────────────────────────────────────────────────────
@@ -115,10 +132,15 @@ live_pgid_before="$(status | "$JQ" -r --arg id "$live_id" '.consumers[] | select
 meeting_pgid_before="$(status | "$JQ" -r --arg id "$meeting_id" '.consumers[] | select(.id == $id) | .pgid')"
 stop_eos "$rec_id" || { echo "FAIL A15-REC targeted-eos stop"; exit 1; }
 probe_positive_duration "$rec_out" || { echo "FAIL A15-REC targeted-eos duration"; exit 1; }
-live_pgid_after="$(status | "$JQ" -r --arg id "$live_id" '.consumers[] | select(.id == $id) | .pgid')"
-meeting_pgid_after="$(status | "$JQ" -r --arg id "$meeting_id" '.consumers[] | select(.id == $id) | .pgid')"
+targeted_status="$(status)"
+live_pgid_after="$("$JQ" -r --arg id "$live_id" '.consumers[] | select(.id == $id) | .pgid' <<<"$targeted_status")"
+meeting_pgid_after="$("$JQ" -r --arg id "$meeting_id" '.consumers[] | select(.id == $id) | .pgid' <<<"$targeted_status")"
 test "$live_pgid_before" = "$live_pgid_after" || { echo "FAIL A15-REC targeted-eos live pgid changed"; exit 1; }
 test "$meeting_pgid_before" = "$meeting_pgid_after" || { echo "FAIL A15-REC targeted-eos meeting pgid changed"; exit 1; }
+test "$("$JQ" -r --arg id "$live_id" '.consumers[] | select(.id == $id) | .state' <<<"$targeted_status")" = running \
+  || { echo "FAIL A15-REC targeted-eos live not running"; exit 1; }
+test "$("$JQ" -r --arg id "$meeting_id" '.consumers[] | select(.id == $id) | .state' <<<"$targeted_status")" = running \
+  || { echo "FAIL A15-REC targeted-eos meeting not running"; exit 1; }
 stop_eos "$live_id" || true
 stop_eos "$meeting_id" || true
 echo "PASS A15-REC targeted-eos"
@@ -154,13 +176,32 @@ loss_id="$(post_json /consumers/record "$("$JQ" -n --arg p fifty-fifty --arg o "
 wait_consumer_state "$loss_id" running 5 || { echo "FAIL A15-REC source-loss confirm"; exit 1; }
 wait_growth "$loss_out" 5 || { echo "FAIL A15-REC source-loss initial growth"; exit 1; }
 size_before="$("$STAT" -c%s "$loss_out")"
+loss_pgid_before="$(status | "$JQ" -r --arg id "$loss_id" '.consumers[] | select(.id == $id) | .pgid')"
 rtsp_pid="$(status | "$JQ" -r '.publishers.rtsp.pid')"
 "$KILL" -TERM "$rtsp_pid"
-"$SLEEP" 12
+saw_loss=0
+for _ in {1..12}; do
+  "$SLEEP" 1
+  current_publisher_state="$(status | "$JQ" -r '.publishers.rtsp.state')"
+  [[ "$current_publisher_state" == degraded || "$current_publisher_state" == offline ]] && saw_loss=1
+done
 size_after="$("$STAT" -c%s "$loss_out")"
 (( size_after > size_before )) || { echo "FAIL A15-REC source-loss file did not grow"; exit 1; }
-loss_pgid="$(status | "$JQ" -r --arg id "$loss_id" '.consumers[] | select(.id == $id) | .pgid')"
-test -n "$loss_pgid" && test "$loss_pgid" != "null" || { echo "FAIL A15-REC source-loss consumer gone"; exit 1; }
+loss_status="$(status)"
+loss_pgid="$("$JQ" -r --arg id "$loss_id" '.consumers[] | select(.id == $id) | .pgid' <<<"$loss_status")"
+test "$saw_loss" = 1 || { echo "FAIL A15-REC source-loss transition not observed"; exit 1; }
+test "$loss_pgid" = "$loss_pgid_before" || { echo "FAIL A15-REC source-loss consumer pgid changed"; exit 1; }
+test "$("$JQ" -r --arg id "$loss_id" '.consumers[] | select(.id == $id) | .state' <<<"$loss_status")" = running \
+  || { echo "FAIL A15-REC source-loss consumer not running"; exit 1; }
+test "$("$JQ" -r '.publishers.rtsp.state' <<<"$loss_status")" = online \
+  || { echo "FAIL A15-REC source-loss publisher not restored"; exit 1; }
 stop_eos "$loss_id" || { echo "FAIL A15-REC source-loss stop"; exit 1; }
 probe_positive_duration "$loss_out" || { echo "FAIL A15-REC source-loss duration"; exit 1; }
+loss_duration="$("$FFPROBE" -v error -show_entries format=duration -of csv=p=0 "$loss_out" 2>/dev/null || echo 0)"
+awk -v d="$loss_duration" 'BEGIN { exit !(d >= 12.0) }' \
+  || { echo "FAIL A15-REC source-loss finalized duration $loss_duration < 12s"; exit 1; }
+placeholder_frame="${OUTPUT_DIR}/a15-source-loss-placeholder.png"
+"$FFMPEG" -hide_banner -loglevel error -y -ss 2 -i "$loss_out" -frames:v 1 "$placeholder_frame" \
+  || { echo "FAIL A15-REC source-loss placeholder frame extraction"; exit 1; }
+test -s "$placeholder_frame" || { echo "FAIL A15-REC source-loss placeholder frame empty"; exit 1; }
 echo "PASS A15-REC source-loss-placeholder"

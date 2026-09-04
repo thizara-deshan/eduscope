@@ -32,10 +32,14 @@ class TestGoldenArgv:
         spec = build_record(req, RK3588Profile())
         assert list(spec.argv) == _golden("rec_cam2.json")
 
-    def test_fifty_fifty_composite_matches_oracle(self) -> None:
+    def test_fifty_fifty_composite_adds_runtime_camera_fallback_to_oracle_shape(self) -> None:
         req = RecordRequest(preset=LayoutPresetId.FIFTY_FIFTY, ratio_a=50, ratio_b=50, output_path=OUT)
         spec = build_record(req, RK3588Profile())
-        assert list(spec.argv) == _golden("rec_usb_cam1_5050.json")
+        assert spec.argv[:3] == ("gst-launch-1.0", "-e", "-m")
+        assert "name=source_lecturer_cam" in spec.argv
+        assert 'text="SOURCE UNAVAILABLE"' in spec.argv
+        assert "name=sel_lecturer_cam" in spec.argv
+        assert spec.resilient_roles == (SourceRole.LECTURER_CAM,)
 
     def test_separate_files_matches_oracle(self) -> None:
         req = RecordRequest(

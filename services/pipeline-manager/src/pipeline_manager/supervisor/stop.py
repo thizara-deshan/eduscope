@@ -107,6 +107,4 @@ async def kill_and_reap(
         if stream is not None:
             with suppress(Exception):
                 stream.close()
-    for reader in process.reader_futures:
-        reader.cancel()
     supervisor.forget(process.identity)

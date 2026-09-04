@@ -9,6 +9,7 @@ from pipeline_manager.models import PublisherId, PublisherState
 from pipeline_manager.publishers.base import PublisherBinding, PublisherController
 from pipeline_manager.publishers.coordinator import (
     PublisherNotBound,
+    _remove_stale_socket,
     select_publisher_spec,
     start_publisher,
     stop_publisher,
@@ -120,6 +121,19 @@ class TestSelectPublisherSpec:
         controller.bind(PublisherBinding(address="hw:1,0"))
         spec = select_publisher_spec(controller)
         assert "device=hw:1,0" in spec.argv
+
+
+def test_remove_stale_socket_unlinks_only_a_socket(monkeypatch, tmp_path) -> None:
+    import socket
+    import pipeline_manager.publishers.coordinator as coordinator
+
+    path = tmp_path / "audio.sock"
+    monkeypatch.setitem(coordinator.PUBLISHER_SOCKETS, PublisherId.AUDIO, str(path))
+    server = socket.socket(socket.AF_UNIX)
+    server.bind(str(path))
+    server.close()
+    _remove_stale_socket(PublisherController(PublisherId.AUDIO))
+    assert not path.exists()
 
 
 # ── start_publisher coordinator ─────────────────────────────────────────────

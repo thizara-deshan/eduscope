@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
-    "gate": "pnpm typecheck && pnpm test"
+    "gate": "pnpm typecheck && pnpm test",
+    "gate:core-api": "node scripts/gate-core-api.mjs"
   },
   "dependencies": {
     "@eduscope/shared": "workspace:*",

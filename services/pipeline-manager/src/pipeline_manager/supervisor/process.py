@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 import subprocess
+import sys
+import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -49,9 +52,9 @@ class ManagedProcess:
     observations: "asyncio.Queue[Observation]" = field(default_factory=asyncio.Queue)
     raw_lines: list[str] = field(default_factory=list)
     eos_seen: asyncio.Event = field(default_factory=asyncio.Event)
-    # stdout/stderr reader futures (populated by `ProcessSupervisor.start`) so a
-    # failed-start rollback can cancel them once the pipes are closed (A-REV-005).
-    reader_futures: list = field(default_factory=list)
+    # Dedicated daemon readers avoid consuming asyncio's bounded default
+    # executor for the entire lifetime of every stdout/stderr pipe.
+    reader_threads: list[threading.Thread] = field(default_factory=list)
 
 
 PopenFactory = Callable[..., subprocess.Popen]
@@ -130,6 +133,19 @@ class ProcessSupervisor:
 
     async def start(self, spec: PipelineSpec, identity: str) -> ManagedProcess:
         argv = list(spec.argv)
+        # Test supervisors inject a fake Popen that deliberately consumes the
+        # declarative gst argv.  Only the real subprocess boundary needs the
+        # board worker wrapper.
+        if spec.resilient_roles and self._popen is subprocess.Popen:
+            argv = [
+                sys.executable,
+                "-m",
+                "pipeline_manager.pipelines.resilient_record",
+                "--graph",
+                " ".join(argv[3:]),
+                "--roles",
+                json.dumps([role.value for role in spec.resilient_roles]),
+            ]
         popen = self._popen(
             argv,
             shell=False,
@@ -148,8 +164,19 @@ class ProcessSupervisor:
         loop = asyncio.get_running_loop()
         for stream in (popen.stdout, popen.stderr):
             if stream is not None:
-                process.reader_futures.append(loop.run_in_executor(None, self._read_stream, stream, process, loop))
+                reader = threading.Thread(
+                    target=self._read_stream,
+                    args=(stream, process, loop),
+                    daemon=True,
+                    name=f"pm-pipe-{identity}",
+                )
+                reader.start()
+                process.reader_threads.append(reader)
 
+        if tuple(argv) != spec.argv:
+            from dataclasses import replace
+
+            spec = replace(spec, argv=tuple(argv))
         self._write_sidecar(spec, process)
         return process
 
