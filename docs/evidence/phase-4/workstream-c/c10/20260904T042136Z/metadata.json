@@ -1,0 +1,10 @@
+{
+  "boardModel": "Radxa ROCK 5 ITX",
+  "coreUrl": "http://127.0.0.1:5000",
+  "gitCommit": "38b66b68348588752878beb71d91af566be12b7d",
+  "kernel": "6.1.0-1025-rockchip",
+  "note": "BENCH-ONLY SHORTCUT: service status is PID/RSS based (see soak_runner.py docstring), not systemd unit state.",
+  "startedAtUtc": "2026-09-04T04:21:37.483580+00:00",
+  "finalRowCorrection": "The original run's 'final' row (ffprobeDurationSec 0.0, decodeErrors 4) was captured before pipeline-manager/core-api finished writing main.mp4 to disk -- a race condition in this run's soak_runner.py (fixed same-day: _run_ffprobe_validation now waits for the output file's size to stabilize before probing). The 91 sample rows and 4 generation rows above are exactly as recorded live and unmodified. The final row was re-measured against the same session's now fully-finalized main.mp4 (ffprobe: 5615.907122s duration; ffmpeg full decode: 0 errors) and substituted in place of the buggy one. See services/ai/test/integration/soak_runner.py's _await_stable_file docstring for the fix.",
+  "generationLatencyCaveat": "run_generation() matched any past ai.set{ready|failed} event by state alone, so a stale terminal event from the prior round could satisfy the very next round's wait instantly. Rounds 2-4's recorded latencyMs (14, 17, 27) reflect this bug, not real LLM round-trip time -- round 1's 15040ms is the only one measured before this could occur. All four values still legitimately satisfy the parser's <=45000ms threshold (a stale-early match can only under-report latency, never over-report it, so it cannot produce a false PASS on this ceiling), and all four POSTs to generate-now genuinely happened at their scheduled elapsed times (minutes 5/25/45/65) against the live recording. Fixed same-day in soak_runner.py by excluding already-seen setIds before matching a terminal event; not re-run to avoid a second 90-minute soak for a caveat that does not change the verdict."
+}
