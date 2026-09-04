@@ -70,6 +70,12 @@ import {
   createMemoryTokenStore,
   type TokenStore,
 } from './auth.js';
+import {
+  createPanelSocket,
+  type PanelWebSocketFactory,
+  type PanelWebSocketLike,
+} from './panel-ws.js';
+import type { WsClock } from './connection.js';
 import { fillPath, OPERATION_ROUTE } from './operation-specs.js';
 import type { z } from 'zod';
 import type { PanelOperationId } from '@eduscope/shared';
@@ -77,7 +83,23 @@ import type { PanelOperationId } from '@eduscope/shared';
 export interface RealClientOptions {
   fetch?: FetchLike;
   tokenStore?: TokenStore;
+  /** Injected for tests; defaults to the platform `WebSocket`. */
+  webSocket?: PanelWebSocketFactory;
+  /** Injected for tests; defaults to real timers. */
+  clock?: WsClock;
 }
+
+const defaultClock: WsClock = {
+  setTimeout: (handler, ms) => setTimeout(handler, ms) as unknown as number,
+  clearTimeout: (id) => clearTimeout(id),
+  now: () => Date.now(),
+};
+
+const defaultWebSocket: PanelWebSocketFactory = (url, protocols) => {
+  const Ctor = (globalThis as { WebSocket?: new (u: string, p: string[]) => unknown }).WebSocket;
+  if (!Ctor) throw new Error('createRealClient: no WebSocket implementation available');
+  return new Ctor(url, protocols) as unknown as PanelWebSocketLike;
+};
 
 export function createRealClient(
   baseUrl: string,
@@ -104,6 +126,13 @@ export function createRealClient(
     },
   });
   transport = createHttpTransport({ baseUrl, fetch: fetchImpl, authorized: coordinator.authorized });
+
+  const socket = createPanelSocket({
+    apiBaseUrl: baseUrl,
+    tokenStore: store,
+    webSocket: options.webSocket ?? defaultWebSocket,
+    clock: options.clock ?? defaultClock,
+  });
 
   /**
    * `R` follows the `EduscopeClient` interface (its return type flows in
@@ -135,12 +164,6 @@ export function createRealClient(
     };
     return transport.request(request);
   }
-
-  const deadStream = {
-    subscribe() {
-      throw new NotImplementedError('events$.subscribe');
-    },
-  };
 
   const client: EduscopeClient = {
     // ── auth ────────────────────────────────────────────────────────────
@@ -293,16 +316,14 @@ export function createRealClient(
     queryLogs: (query) => call('queryLogs', { query, response: zQueryLogsResponse }),
     exportLogsCsv: (query) => call('exportLogsCsv', { query, response: 'text' }),
 
-    // ── realtime (stubbed until E-03/E-04) ──────────────────────────────
-    events$: deadStream as unknown as EduscopeClient['events$'],
-    connection$: deadStream as unknown as EduscopeClient['connection$'],
+    // ── realtime (preview stays stubbed until E-04) ─────────────────────
+    events$: socket.events$,
+    connection$: socket.connection$,
     openPreview: () => {
       throw new NotImplementedError('openPreview');
     },
-    resync: () => {
-      throw new NotImplementedError('resync');
-    },
-    dispose: () => {},
+    resync: () => socket.resync(),
+    dispose: () => socket.dispose(),
   };
 
   return client;

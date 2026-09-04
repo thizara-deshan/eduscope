@@ -147,3 +147,51 @@ describe('ws store', () => {
     expect(useWsStore.getState().deviceHealthAt).not.toBeNull();
   });
 });
+
+describe('ws store — domain-scoped resync reset (E-03)', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('clears ONLY the given domains, leaving other domains untouched', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('system.alert', { id: 'A1', code: 'x', severity: 'warning' }, 0));
+    s.ingest(envelope('channel.state', { channelId: 'meeting', state: 'idle' }, 1));
+    s.ingest(envelope('storage.status', { pressure: 'nominal' }, 2));
+
+    useWsStore.getState().resetDomains(['alerts']);
+    const after = useWsStore.getState();
+    expect(after.alerts).toEqual({}); // alerts domain reset
+    expect(Object.keys(after.channels)).toEqual(['meeting']); // channels untouched
+    expect(after.storage).not.toBeNull(); // storage untouched
+  });
+
+  it('retains the recording chrome but marks it stale', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('recording.state', { state: 'recording' }, 0));
+    s.ingest(envelope('recording.segment', { state: 'closed', path: '/x.ts' }, 1));
+
+    useWsStore.getState().resetDomains(['recording']);
+    const after = useWsStore.getState();
+    // The device is still recording — the chrome stays, flagged stale.
+    expect(after.recording?.state).toBe('recording');
+    expect(after.stale).toBe(true);
+    // The closed-segment marker is cleared for the fresh snapshot.
+    expect(after.lastSegment).toBeNull();
+  });
+
+  it('resets the sequence tracker so the fresh snapshot is not seen as a gap', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('system.alert', { id: 'A1', code: 'x', severity: 'warning' }, 40));
+    useWsStore.getState().resetDomains(['alerts']);
+    expect(useTelemetryStore.getState().lastSeq).toBe(-1);
+    // A snapshot restarting at any seq is contiguous again (no false gap).
+    useWsStore.getState().ingest(envelope('system.alert', { id: 'A2', code: 'y', severity: 'info' }, 0));
+    expect(useWsStore.getState().needsResync).toBe(false);
+  });
+
+  it('never introduces an outbound command queue', () => {
+    useWsStore.getState().resetDomains(['recording', 'alerts']);
+    expect(Object.keys(useWsStore.getState())).not.toContain('pendingCommands');
+  });
+});

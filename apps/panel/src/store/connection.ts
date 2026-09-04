@@ -1,4 +1,4 @@
-import type { ConnectionStatus } from '@eduscope/api-client';
+import type { AdapterDomain, ConnectionStatus } from '@eduscope/api-client';
 import type { EventEnvelope } from '@eduscope/shared';
 
 /**
@@ -37,3 +37,38 @@ export const isStale = (status: ConnectionStatus, expectedShutdown = false): boo
  */
 export const hasSeqGap = (lastSeq: number | null, envelope: EventEnvelope): boolean =>
   lastSeq !== null && envelope.seq > lastSeq + 1;
+
+/**
+ * Which WS-fed slices each real domain owns, for a domain-scoped resync reset
+ * (E-03). A `seq` gap on the real socket resets ONLY the real-selected domains'
+ * slices in one Zustand update — it never touches mock-domain state or replays
+ * a command.
+ *
+ * `recording` is the deliberate exception: the recording CHROME (`recording`
+ * slice) is retained and marked stale, because the device is still recording
+ * whether or not the panel can see it — blanking it would be the dangerous lie
+ * (see `isStale`). Only `lastSegment` is cleared for that domain. Domains with
+ * no push slice (REST-only settings, `preview`, `studentQuiz`, `devicePower`)
+ * map to nothing.
+ */
+export const DOMAIN_SLICE_KEYS = {
+  auth: [],
+  recording: ['lastSegment'],
+  channels: ['channels'],
+  sourcesAudio: ['sources', 'audioControls'],
+  preview: [],
+  libraryExport: ['artifacts', 'exportJobs', 'usbVolumes'],
+  uploads: ['uploadJobs', 'uploadParts'],
+  provisioningHealth: ['deviceHealth', 'deviceHealthAt'],
+  alerts: ['alerts'],
+  devicePower: [],
+  storage: ['storage'],
+  network: [],
+  encoder: [],
+  streamTargets: [],
+  firmware: ['firmware'],
+  users: [],
+  aiQuiz: ['aiCountdown', 'aiSet', 'questions', 'quizSession', 'publications', 'responses'],
+  logs: ['logTail'],
+  studentQuiz: [],
+} as const satisfies Record<AdapterDomain, readonly string[]>;

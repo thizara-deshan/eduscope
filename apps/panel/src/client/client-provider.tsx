@@ -13,6 +13,7 @@ import {
   resolveSelection,
 } from '@eduscope/api-client';
 import type {
+  AdapterDomain,
   EduscopeClient,
   MockClient,
   RoutedClient,
@@ -109,9 +110,29 @@ export function ClientProvider({
       offs.push(
         routed.connection$.subscribe((s) => {
           useWsStore.getState().setConnection(s);
-          if (s.resyncReason) {
-            void routed.resync().then(() => useWsStore.getState().clearResync());
-          }
+        }),
+      );
+
+      // A `seq` gap surfaces as a `resyncReason` on the PER-DOMAIN connection
+      // stream, so only the affected domains are reset. A burst of per-domain
+      // signals from one socket is coalesced into a SINGLE reset + resync — the
+      // resync re-subscribes for a full snapshot and never replays a command
+      // (E-03, replacing the old global clearResync() timing race).
+      const resyncDomains = new Set<AdapterDomain>();
+      let scheduled = false;
+      offs.push(
+        routed.connectionByDomain$.subscribe((dc) => {
+          if (!dc.resyncReason) return;
+          resyncDomains.add(dc.domain);
+          if (scheduled) return;
+          scheduled = true;
+          queueMicrotask(() => {
+            const domains = [...resyncDomains];
+            resyncDomains.clear();
+            scheduled = false;
+            useWsStore.getState().resetDomains(domains);
+            void routed.resync();
+          });
         }),
       );
       setMockClient(mock);

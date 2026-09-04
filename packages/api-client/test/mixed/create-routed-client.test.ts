@@ -230,6 +230,27 @@ describe('createRoutedClient routing', () => {
     routed.dispose();
   });
 
+  it('projects a real seq-gap resync onto only the real-selected domains', () => {
+    const mock = fakeClient('mock');
+    const real = fakeClient('real');
+    const selection = selectAll('mock');
+    selection.recording = 'real';
+    selection.alerts = 'real';
+
+    const routed = createRoutedClient({ mock: mock.client, real: real.client, selection });
+    const gapped: DomainConnection[] = [];
+    const off = routed.connectionByDomain$.subscribe((c) => {
+      if (c.resyncReason) gapped.push(c);
+    });
+
+    real.connection.emit({ phase: 'reconnecting', attempt: 1, since: 'now', resyncReason: 'seq-gap' });
+    expect(gapped.map((g) => g.domain).sort()).toEqual(['alerts', 'recording']);
+    expect(gapped.every((g) => g.resyncReason === 'seq-gap' && g.kind === 'real')).toBe(true);
+
+    off();
+    routed.dispose();
+  });
+
   it('disposes and unsubscribes both underlying clients exactly once', () => {
     const mock = fakeClient('mock');
     const real = fakeClient('real');
