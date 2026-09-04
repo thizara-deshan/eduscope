@@ -17,7 +17,7 @@ def test_build_reader_argv_is_exact() -> None:
     assert build_reader_argv("/tmp/audio.sock") == (
         "gst-launch-1.0", "-q",
         "shmsrc", "socket-path=/tmp/audio.sock", "is-live=true", "do-timestamp=true",
-        "!", "audio/x-raw,format=S16LE,rate=48000,channels=2",
+        "!", "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved",
         "!", "audioconvert", "!", "audioresample",
         "!", "audio/x-raw,format=S16LE,rate=16000,channels=1",
         "!", "fdsink", "fd=1",
