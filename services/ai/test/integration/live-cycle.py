@@ -363,12 +363,16 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--serve-fixtures", action="store_true")
     mode.add_argument("--run-live-cycle", action="store_true")
+    mode.add_argument("--run-soak", action="store_true", help="C-10: >=90-minute resource/soak run (see soak_runner.py)")
     parser.add_argument("--bearer", default="fixture-stack-internal-bearer-0123456789")
     parser.add_argument("--runtime-root", type=Path, default=None)
     parser.add_argument("--recordings-root", type=Path, default=None)
-    parser.add_argument("--core-url", default=None, help="core-api base URL (--run-live-cycle)")
+    parser.add_argument("--core-url", default=None, help="core-api base URL (--run-live-cycle / --run-soak)")
     parser.add_argument("--evidence-dir", type=Path, default=None, help="directory for the dated evidence JSON (--run-live-cycle)")
     parser.add_argument("--db-path", default=None, help="core-api SQLite DB path, for read-only transcript/slide counts (--run-live-cycle)")
+    parser.add_argument("--duration-sec", type=int, default=None, help="soak duration in seconds, >=5400 (--run-soak)")
+    parser.add_argument("--metrics-jsonl", type=str, default=None, help="output path for one JSON line per sample (--run-soak)")
+    parser.add_argument("--metadata-json", type=str, default=None, help="output path for run identity metadata (--run-soak)")
     return parser.parse_args(argv)
 
 
@@ -386,6 +390,20 @@ def main(argv: list[str] | None = None) -> None:
                 db_path=args.db_path,
                 recordings_root=args.recordings_root,
                 runtime_root=args.runtime_root,
+            )
+        )
+        return
+    if args.run_soak:
+        if not args.core_url or not args.duration_sec or not args.metrics_jsonl or not args.metadata_json:
+            raise SystemExit("--run-soak requires --core-url, --duration-sec, --metrics-jsonl, and --metadata-json")
+        from soak_runner import run_soak  # local import: real-hardware mode only
+
+        asyncio.run(
+            run_soak(
+                core_url=args.core_url,
+                duration_sec=args.duration_sec,
+                metrics_jsonl=args.metrics_jsonl,
+                metadata_json=args.metadata_json,
             )
         )
         return
