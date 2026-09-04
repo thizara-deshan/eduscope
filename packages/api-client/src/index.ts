@@ -3,6 +3,9 @@ export type { ConnectionStatus, EventStream, Unsubscribe } from './stream.js';
 export { createEmitter } from './stream.js';
 export { NotImplementedError, ProblemError, TransportError } from './errors.js';
 export { createRealClient } from './real/create-real-client.js';
+export type { RealClientOptions } from './real/create-real-client.js';
+export { createMemoryTokenStore } from './real/auth.js';
+export type { TokenStore } from './real/auth.js';
 export { createMockClient } from './mock/create-mock-client.js';
 export type { MockClient } from './mock/create-mock-client.js';
 export {

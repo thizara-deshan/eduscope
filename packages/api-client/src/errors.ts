@@ -31,8 +31,8 @@ export class ProblemError extends Error {
  */
 export class TransportError extends Error {
   readonly operation: string;
-  constructor(operation: string) {
-    super(`${operation}: the device API is unreachable`);
+  constructor(operation: string, options?: { cause?: unknown }) {
+    super(`${operation}: the device API is unreachable`, options);
     this.name = 'TransportError';
     this.operation = operation;
   }

@@ -184,8 +184,8 @@ describe('createRoutedClient routing', () => {
     const routed = createRoutedClient({ mock: mock.client, real: real.client, selection });
     const r = routed as unknown as Record<string, () => unknown>;
 
-    expect(r.startRecording()).toBe('real:startRecording()');
-    expect(r.listChannels()).toBe('mock:listChannels()');
+    expect(r.startRecording!()).toBe('real:startRecording()');
+    expect(r.listChannels!()).toBe('mock:listChannels()');
     expect(real.calls).toEqual(['startRecording']);
     expect(mock.calls).toEqual(['listChannels']);
   });
