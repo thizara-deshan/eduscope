@@ -1,7 +1,26 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { createRealClient } from '@eduscope/api-client';
-import type { EduscopeClient, MockClient, ScenarioName } from '@eduscope/api-client';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import {
+  createRealClient,
+  createRoutedClient,
+  DEFAULT_RUNTIME_CONFIG,
+  resolveSelection,
+} from '@eduscope/api-client';
+import type {
+  EduscopeClient,
+  MockClient,
+  RoutedClient,
+  RuntimeConfig,
+  ScenarioName,
+} from '@eduscope/api-client';
 import { useWsStore } from '../store/ws-store.js';
+import { useOptionalRuntimeConfig } from '../config/runtime-config.js';
 
 /**
  * Exported ONLY for tests that need a synchronous stub client (`use-login`,
@@ -12,18 +31,34 @@ import { useWsStore } from '../store/ws-store.js';
 export const ClientContext = createContext<EduscopeClient | null>(null);
 
 /**
+ * The concrete mock, exposed separately so the dev overlay can reach
+ * `switchScenario` even though `useClient()` hands out the routed client (which
+ * is `EduscopeClient`-shaped and has no mock surface). Null when no domain
+ * selects mock — which is exactly when the overlay must stay hidden.
+ */
+const MockClientContext = createContext<MockClient | null>(null);
+
+/**
  * THE only place in apps/panel that constructs a client. Everything else takes
  * it from context, which is what makes the ESLint boundary rule enforceable:
- * there is no second path to the network.
+ * there is no second path to the network. Adapter selection is now RUNTIME, per
+ * domain, driven by the validated `RuntimeConfig` — no `import.meta.env`.
  */
 export function ClientProvider({
   children,
   scenario = 'happy',
+  config: configProp,
 }: {
   children: ReactNode;
   scenario?: ScenarioName;
+  config?: RuntimeConfig;
 }) {
-  const [client, setClient] = useState<EduscopeClient | null>(null);
+  const contextConfig = useOptionalRuntimeConfig();
+  const config = configProp ?? contextConfig ?? DEFAULT_RUNTIME_CONFIG;
+  const selection = useMemo(() => resolveSelection(config), [config]);
+
+  const [client, setClient] = useState<RoutedClient | null>(null);
+  const [mockClient, setMockClient] = useState<MockClient | null>(null);
 
   /**
    * The client is constructed INSIDE the effect, not in useMemo.
@@ -36,47 +71,51 @@ export function ClientProvider({
    * a matching cleanup.
    */
   useEffect(() => {
-    /**
-     * The mock adapter is imported DYNAMICALLY.
-     *
-     * It is a discrete-event simulation of every state machine plus all 77 REST
-     * operations — statically imported it lands in the entry chunk and is parsed
-     * on a 1280x800 kiosk that will never execute a line of it. A dynamic import
-     * gives it its own chunk that a real-API build never requests.
-     */
-    const load = async (): Promise<EduscopeClient> =>
-      import.meta.env.VITE_EDUSCOPE_REAL_API === '1'
-        ? createRealClient(import.meta.env.VITE_EDUSCOPE_API_URL ?? '/api/v1')
-        : (await import('@eduscope/api-client/mock')).createMockClient(scenario);
+    const anyMock = Object.values(selection).some((kind) => kind === 'mock');
 
     // Cleanup can run before the import resolves (StrictMode's discarded first
     // render, or a fast scenario switch). Every client that gets constructed
     // must still get a matching dispose(), so the late arrival checks this flag
     // rather than assuming it is still wanted.
     let cancelled = false;
-    let instance: EduscopeClient | null = null;
+    let instance: RoutedClient | null = null;
     const offs: Array<() => void> = [];
 
-    void load().then((created) => {
+    /**
+     * The mock adapter is imported DYNAMICALLY, and only when a domain actually
+     * selects it — a fully real deployment never requests its chunk. The real
+     * client is a lightweight constructor and is always built once.
+     */
+    const build = async (): Promise<{ routed: RoutedClient; mock: MockClient | null }> => {
+      const real = createRealClient(config.apiBaseUrl);
+      const mock = anyMock
+        ? (await import('@eduscope/api-client/mock')).createMockClient(scenario)
+        : null;
+      const routed = createRoutedClient({ mock, real, selection });
+      return { routed, mock };
+    };
+
+    void build().then(({ routed, mock }) => {
       if (cancelled) {
-        created.dispose();
+        routed.dispose();
         return;
       }
-      instance = created;
+      instance = routed;
       offs.push(
-        created.events$.subscribe((e) => {
+        routed.events$.subscribe((e) => {
           useWsStore.getState().ingest(e);
         }),
       );
       offs.push(
-        created.connection$.subscribe((s) => {
+        routed.connection$.subscribe((s) => {
           useWsStore.getState().setConnection(s);
           if (s.resyncReason) {
-            void created.resync().then(() => useWsStore.getState().clearResync());
+            void routed.resync().then(() => useWsStore.getState().clearResync());
           }
         }),
       );
-      setClient(created);
+      setMockClient(mock);
+      setClient(routed);
     });
 
     return () => {
@@ -85,14 +124,19 @@ export function ClientProvider({
       useWsStore.getState().reset();
       instance?.dispose();
       setClient(null);
+      setMockClient(null);
     };
-  }, [scenario]);
+  }, [scenario, selection, config]);
 
   // One frame with no client while the effect runs. The kiosk boots into U-1's
   // skeleton anyway, so there is nothing to show yet.
   if (!client) return null;
 
-  return <ClientContext.Provider value={client}>{children}</ClientContext.Provider>;
+  return (
+    <ClientContext.Provider value={client}>
+      <MockClientContext.Provider value={mockClient}>{children}</MockClientContext.Provider>
+    </ClientContext.Provider>
+  );
 }
 
 export function useClient(): EduscopeClient {
@@ -101,8 +145,10 @@ export function useClient(): EduscopeClient {
   return client;
 }
 
-/** Dev overlay only — narrows to the concrete mock. Returns null against real. */
+/**
+ * Dev overlay only — the concrete mock behind the routed client. Null against a
+ * real-only client, so the overlay cannot cast its way to a `MockClient`.
+ */
 export function useMockClient(): MockClient | null {
-  const client = useClient() as Partial<MockClient>;
-  return typeof client.switchScenario === 'function' ? (client as MockClient) : null;
+  return useContext(MockClientContext);
 }

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./mock": "./src/mock/create-mock-client.ts",
+    "./mixed": "./src/mixed/create-routed-client.ts",
     "./quiz": "./src/quiz/quiz-app-client.ts"
   },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
