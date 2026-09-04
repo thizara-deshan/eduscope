@@ -56,8 +56,7 @@ import {
   zUpdateUserResponse,
 } from '@eduscope/shared';
 import type { QuestionSet } from '@eduscope/shared';
-import type { EduscopeClient } from '../client.js';
-import { NotImplementedError } from '../errors.js';
+import type { EduscopeClient, PreviewChannel } from '../client.js';
 import {
   createHttpTransport,
   type FetchLike,
@@ -76,6 +75,7 @@ import {
   type PanelWebSocketLike,
 } from './panel-ws.js';
 import type { WsClock } from './connection.js';
+import { createPreviewPoller } from './preview.js';
 import { fillPath, OPERATION_ROUTE } from './operation-specs.js';
 import type { z } from 'zod';
 import type { PanelOperationId } from '@eduscope/shared';
@@ -150,6 +150,8 @@ export function createRealClient(
       body?: unknown;
       response: z.ZodTypeAny | 'blob' | 'text' | 'void';
       auth?: 'required' | 'none';
+      cache?: RequestCache;
+      signal?: AbortSignal;
     },
   ): Promise<R> {
     const [method, template] = OPERATION_ROUTE[id];
@@ -161,9 +163,14 @@ export function createRealClient(
       body: opts.body,
       response: opts.response as z.ZodType<R> | 'blob' | 'text' | 'void',
       auth: opts.auth ?? 'required',
+      ...(opts.cache ? { cache: opts.cache } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
     };
     return transport.request(request);
   }
+
+  let activePreview: PreviewChannel | null = null;
+  const previewClock = options.clock ?? defaultClock;
 
   const client: EduscopeClient = {
     // ── auth ────────────────────────────────────────────────────────────
@@ -319,11 +326,32 @@ export function createRealClient(
     // ── realtime (preview stays stubbed until E-04) ─────────────────────
     events$: socket.events$,
     connection$: socket.connection$,
-    openPreview: () => {
-      throw new NotImplementedError('openPreview');
+    openPreview: (roleId) => {
+      activePreview?.close();
+      let channel!: PreviewChannel;
+      channel = createPreviewPoller({
+        roleId,
+        clock: previewClock,
+        request: ({ roleId: requestedRole, cacheBust, signal }) => call('getSourcePreview', {
+          params: { roleId: requestedRole },
+          query: { preview: cacheBust },
+          response: 'blob',
+          cache: 'no-store',
+          signal,
+        }),
+        onClose: () => {
+          if (activePreview === channel) activePreview = null;
+        },
+      });
+      activePreview = channel;
+      return channel;
     },
     resync: () => socket.resync(),
-    dispose: () => socket.dispose(),
+    dispose: () => {
+      activePreview?.close();
+      activePreview = null;
+      socket.dispose();
+    },
   };
 
   return client;

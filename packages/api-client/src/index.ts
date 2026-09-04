@@ -1,4 +1,6 @@
-export type { ChannelSnapshot, EduscopeClient, PreviewChannel } from './client.js';
+export type {
+  ChannelSnapshot, EduscopeClient, PreviewChannel, PreviewErrorCode, PreviewUpdate,
+} from './client.js';
 export type { ConnectionStatus, EventStream, Unsubscribe } from './stream.js';
 export { createEmitter } from './stream.js';
 export { NotImplementedError, ProblemError, TransportError } from './errors.js';

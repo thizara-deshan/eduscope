@@ -29,6 +29,8 @@ export interface HttpRequest<T> {
   body?: unknown;
   response: z.ZodType<T> | 'blob' | 'text' | 'void';
   auth?: 'required' | 'none';
+  cache?: RequestCache;
+  signal?: AbortSignal;
 }
 
 export interface HttpResponseLike {
@@ -47,6 +49,7 @@ export type FetchLike = (
     headers: Headers;
     body?: BodyInit;
     signal?: AbortSignal;
+    cache?: RequestCache;
   },
 ) => Promise<HttpResponseLike>;
 
@@ -100,7 +103,11 @@ export function createHttpTransport(options: {
       method: string;
       headers: Headers;
       body?: BodyInit;
+      signal?: AbortSignal;
+      cache?: RequestCache;
     } = { method: req.method, headers };
+    if (req.signal) init.signal = req.signal;
+    if (req.cache) init.cache = req.cache;
     if (req.body !== undefined) {
       init.body = isForm ? (req.body as FormData) : JSON.stringify(req.body);
     }

@@ -279,8 +279,8 @@ describe('createRoutedClient routing', () => {
     selection.preview = 'real';
 
     const routed = createRoutedClient({ mock: mock.client, real: real.client, selection });
-    routed.openPreview();
-    expect(real.openPreview).toHaveBeenCalledTimes(1);
+    routed.openPreview('presentation');
+    expect(real.openPreview).toHaveBeenCalledWith('presentation');
     expect(mock.openPreview).not.toHaveBeenCalled();
     routed.dispose();
   });

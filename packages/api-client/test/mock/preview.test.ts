@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import type { PreviewServerMessage } from '@eduscope/shared';
+import { describe, expect, it, vi } from 'vitest';
+import type { PreviewUpdate } from '../../src/client.js';
 import { createVirtualClock } from '../../src/mock/clock.js';
-import { MockWorld } from '../../src/mock/world.js';
+import { createPreviewChannel } from '../../src/mock/events/preview.js';
 import { sourceMachine } from '../../src/mock/machines/health.js';
-import { createPreviewChannel, isMockPreviewFrame } from '../../src/mock/events/preview.js';
+import { MockWorld } from '../../src/mock/world.js';
 
 function world() {
   const clock = createVirtualClock('2026-07-30T09:00:00.000+00:00');
@@ -12,160 +12,66 @@ function world() {
   return { w, clock };
 }
 
-describe('createPreviewChannel', () => {
-  it('errors source-unbound for a role with no registered machine 5a instance', () => {
-    const { w } = world();
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-    // mic-room is permanently unbound (INV-SR-2, A-08) and is never registered.
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'mic-room', sdp: 'sdp-1' });
-    expect(seen).toEqual([
-      { type: 'error', negotiationId: 'neg-1', code: 'source-unbound', message: expect.any(String) },
-    ]);
-  });
-
-  it('errors source-unbound for a role explicitly in the `unbound` state', () => {
-    const { w } = world();
-    w.apply('HL-01@lecturer-cam'); // unknown -> unbound
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    expect(seen).toEqual([
-      { type: 'error', negotiationId: 'neg-1', code: 'source-unbound', message: expect.any(String) },
-    ]);
-  });
-
-  it('errors source-offline for a registered role that is not online', () => {
-    const { w } = world();
-    w.apply('HL-03@lecturer-cam'); // unknown -> offline
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    expect(seen).toEqual([
-      { type: 'error', negotiationId: 'neg-1', code: 'source-offline', message: expect.any(String) },
-    ]);
-  });
-
-  it('answers ~300ms after an offer for an online role, then streams frames at 8 fps as sentinel-tagged ice messages', () => {
+describe('mock JPEG preview channel', () => {
+  it.each([
+    ['mic-room', null, 'source-unbound'],
+    ['lecturer-cam', 'HL-01@lecturer-cam', 'source-unbound'],
+    ['lecturer-cam', 'HL-03@lecturer-cam', 'source-offline'],
+  ] as const)('reports %s as %s', (roleId, transition, code) => {
     const { w, clock } = world();
-    w.apply('HL-02@lecturer-cam'); // unknown -> online
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
+    if (transition) w.apply(transition);
+    const channel = createPreviewChannel(w, roleId);
+    const seen: PreviewUpdate[] = [];
+    channel.updates$.subscribe((update) => seen.push(update));
+    clock.advance(0);
+    expect(seen).toEqual([{ kind: 'error', code, message: expect.any(String) }]);
+    channel.close();
+  });
 
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(299);
-    expect(seen).toHaveLength(0);
-    clock.advance(1);
+  it('publishes deterministic JPEG frames once per second for an online source', () => {
+    const { w, clock } = world();
+    w.apply('HL-02@lecturer-cam');
+    const channel = createPreviewChannel(w, 'lecturer-cam');
+    const seen: PreviewUpdate[] = [];
+    channel.updates$.subscribe((update) => seen.push(update));
+    clock.advance(0);
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ type: 'answer', negotiationId: 'neg-1' });
-
-    clock.advance(1_000); // 8 fps => 8 frames in the next second
-    const frames = seen.slice(1);
-    expect(frames).toHaveLength(8);
-    for (const f of frames) expect(isMockPreviewFrame(f)).toBe(true);
-    // Frames vary — proves generateFrame's seq is actually advancing.
-    const candidates = frames.map((f) => (f as { candidate: string }).candidate);
-    expect(new Set(candidates).size).toBe(candidates.length);
+    expect(seen[0]).toMatchObject({ kind: 'frame', stale: false });
+    expect((seen[0] as Extract<PreviewUpdate, { kind: 'frame' }>).blob.type).toBe('image/jpeg');
+    clock.advance(2_000);
+    expect(seen.filter((update) => update.kind === 'frame')).toHaveLength(3);
+    channel.close();
   });
 
-  it('previews a degraded role until it becomes offline', () => {
+  it('retains the last frame, becomes stale after three seconds, and recovers', () => {
     const { w, clock } = world();
     w.apply('HL-02@lecturer-cam');
-    w.apply('HL-04@lecturer-cam');
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((message) => seen.push(message));
-
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(425);
-    expect(seen.some((message) => message.type === 'answer')).toBe(true);
-    expect(seen.some((message) => isMockPreviewFrame(message))).toBe(true);
-    expect(seen.some((message) => message.type === 'error')).toBe(false);
-
+    const channel = createPreviewChannel(w, 'lecturer-cam');
+    const seen: PreviewUpdate[] = [];
+    channel.updates$.subscribe((update) => seen.push(update));
+    clock.advance(0);
     w.apply('HL-06@lecturer-cam');
-    expect(seen.at(-1)).toMatchObject({ type: 'error', code: 'source-offline' });
-  });
-
-  it('a different negotiationId implicitly closes the previous one (events.md §3) rather than erroring', () => {
-    const { w, clock } = world();
-    w.apply('HL-02@lecturer-cam');
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(300); // neg-1 answered and streaming
-    expect(seen.filter((m) => m.type === 'answer')).toHaveLength(1);
-
-    channel.send({ type: 'offer', negotiationId: 'neg-2', roleId: 'lecturer-cam', sdp: 'sdp-2' });
-    clock.advance(300); // neg-2 answered
-    const answers = seen.filter((m) => m.type === 'answer');
-    expect(answers).toHaveLength(2);
-    expect(answers[1]).toMatchObject({ negotiationId: 'neg-2' });
-    expect(seen.some((m) => m.type === 'error')).toBe(false);
-
-    // Only neg-2's frame loop is still running.
-    const before = seen.filter((m) => isMockPreviewFrame(m)).length;
-    clock.advance(125); // one 8fps tick
-    const after = seen.filter((m) => isMockPreviewFrame(m)).length;
-    expect(after).toBe(before + 1);
-    const lastFrame = seen[seen.length - 1] as Extract<PreviewServerMessage, { type: 'ice' }>;
-    expect(lastFrame.negotiationId).toBe('neg-2');
-  });
-
-  it('a superseding offer sent while the first answer is still pending cancels the first — it never answers', () => {
-    const { w, clock } = world();
-    w.apply('HL-02@lecturer-cam');
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(100); // neg-1's answer is still pending (300ms delay)
-    channel.send({ type: 'offer', negotiationId: 'neg-2', roleId: 'lecturer-cam', sdp: 'sdp-2' });
-    clock.advance(300); // neg-1 would have answered by now if it weren't cancelled
-
-    const answers = seen.filter((m) => m.type === 'answer');
-    expect(answers).toHaveLength(1);
-    expect(answers[0]).toMatchObject({ negotiationId: 'neg-2' });
-  });
-
-  it('a re-offer of the SAME open negotiationId is idempotent, never an error (error is terminal per negotiation)', () => {
-    const { w, clock } = world();
-    w.apply('HL-02@lecturer-cam');
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(300); // answered, streaming
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1-retry' });
-
-    expect(seen.some((m) => m.type === 'error')).toBe(false);
-    // Frames for neg-1 keep flowing after the duplicate offer.
-    const before = seen.filter((m) => isMockPreviewFrame(m)).length;
-    clock.advance(125);
-    const after = seen.filter((m) => isMockPreviewFrame(m)).length;
-    expect(after).toBeGreaterThan(before);
-  });
-
-  it('close stops the frame loop and touches nothing else', () => {
-    const { w, clock } = world();
-    w.apply('HL-02@lecturer-cam');
-    const channel = createPreviewChannel(w);
-    const seen: PreviewServerMessage[] = [];
-    channel.messages$.subscribe((m) => seen.push(m));
-
-    channel.send({ type: 'offer', negotiationId: 'neg-1', roleId: 'lecturer-cam', sdp: 'sdp-1' });
-    clock.advance(300);
-    channel.send({ type: 'close', negotiationId: 'neg-1' });
-
-    const countAtClose = seen.length;
+    clock.advance(3_000);
+    expect(seen.at(-1)).toMatchObject({ kind: 'stale' });
+    w.apply('HL-07@lecturer-cam');
     clock.advance(1_000);
-    expect(seen).toHaveLength(countAtClose);
+    expect(seen.at(-1)).toMatchObject({ kind: 'frame', stale: false });
+    channel.close();
+  });
+
+  it('close is idempotent and stops timers and subscriptions', () => {
+    const { w, clock } = world();
+    w.apply('HL-02@lecturer-cam');
+    const onClose = vi.fn();
+    const channel = createPreviewChannel(w, 'lecturer-cam', onClose);
+    const seen: PreviewUpdate[] = [];
+    channel.updates$.subscribe((update) => seen.push(update));
+    clock.advance(0);
+    channel.close();
+    channel.close();
+    const count = seen.length;
+    clock.advance(10_000);
+    expect(seen).toHaveLength(count);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

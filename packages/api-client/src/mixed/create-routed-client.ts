@@ -12,6 +12,7 @@ import {
   PANEL_OPERATION_IDS,
   type EventEnvelope,
   type PanelEventName,
+  type SourceRoleId,
 } from '@eduscope/shared';
 import type { EduscopeClient, PreviewChannel } from '../client.js';
 import {
@@ -119,7 +120,8 @@ export function createRoutedClient(args: {
   routed.selection = selection;
 
   // Preview is its own channel and is never merged into panel events.
-  routed.openPreview = (): PreviewChannel => clientFor('preview').openPreview();
+  routed.openPreview = (roleId: SourceRoleId): PreviewChannel =>
+    clientFor('preview').openPreview(roleId);
 
   routed.resync = async (): Promise<void> => {
     const targets = new Set<EduscopeClient>();

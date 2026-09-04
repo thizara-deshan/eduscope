@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createVirtualClock } from '../../src/mock/clock.js';
 import { createMockClient } from '../../src/mock/create-mock-client.js';
 
 describe('audio.control is emitted (events.md §2.7)', () => {
@@ -61,19 +62,22 @@ describe('R-03 / R-21 guards (W2-D-11)', () => {
 });
 
 describe('the preview drops when its role leaves online (S-10)', () => {
-  it('emits error{source-offline} and stops frames', async () => {
-    const client = createMockClient('happy');
-    const preview = client.openPreview();
-    const seen: Array<{ type: string; code?: string }> = [];
-    preview.messages$.subscribe((m) => seen.push(m as { type: string; code?: string }));
-    preview.send({ type: 'offer', negotiationId: 'n1', roleId: 'lecturer-cam', sdp: 'v=0' });
-    await new Promise((r) => setTimeout(r, 600));
-    expect(seen.some((m) => m.type === 'answer')).toBe(true);
+  it('retains its frame, becomes stale, and stops after close', () => {
+    const clock = createVirtualClock('2026-09-04T00:00:00.000Z');
+    const client = createMockClient('happy', { clock });
+    const preview = client.openPreview('lecturer-cam');
+    const seen: Array<{ kind: string; code?: string }> = [];
+    preview.updates$.subscribe((update) => seen.push(update));
+    clock.advance(0);
+    expect(seen.some((update) => update.kind === 'frame')).toBe(true);
 
     client.world.apply('HL-06@lecturer-cam');
-    await new Promise((r) => setTimeout(r, 50));
-    expect(seen.at(-1)).toMatchObject({ type: 'error', code: 'source-offline' });
+    clock.advance(3_000);
+    expect(seen.at(-1)).toMatchObject({ kind: 'stale' });
     preview.close();
+    const count = seen.length;
+    clock.advance(5_000);
+    expect(seen).toHaveLength(count);
     client.dispose();
   });
 });

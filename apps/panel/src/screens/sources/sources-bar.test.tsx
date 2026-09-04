@@ -35,7 +35,7 @@ function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const never = () => new Promise<never>(() => undefined);
   const channel: PreviewChannel = {
-    send: vi.fn(), close: vi.fn(), messages$: { subscribe: () => () => undefined },
+    close: vi.fn(), updates$: { subscribe: () => () => undefined },
   };
   const openPreview = vi.fn(() => channel);
   const client = {

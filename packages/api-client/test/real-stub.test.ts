@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { PANEL_OPERATION_IDS } from '@eduscope/shared';
-import { NotImplementedError, createRealClient } from '../src/index.js';
+import { createRealClient } from '../src/index.js';
 import type { FetchLike, HttpResponseLike } from '../src/real/http.js';
 
 /**
  * Since E-02 the real client's REST operations are LIVE, and since E-03 so is
- * the panel socket (`events$`/`connection$`/`resync`). The one surface still an
- * honest Phase-4 stub is the WebRTC/JPEG preview (`openPreview`), wired in E-04.
+ * the panel socket (`events$`/`connection$`/`resync`). E-04 also wires the
+ * authenticated JPEG preview poller.
  */
 const neverCalled: FetchLike = async () => {
   throw new Error('fetch should not run in this test');
@@ -22,14 +22,14 @@ describe('createRealClient REST surface is live', () => {
   });
 });
 
-describe('createRealClient preview surface is still an honest stub', () => {
+describe('createRealClient preview surface is live', () => {
   const okFetch: FetchLike = async (): Promise<HttpResponseLike> => ({
     ok: true,
     status: 200,
-    headers: { get: () => null },
+    headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'image/jpeg' : null },
     json: async () => ({}),
     text: async () => '',
-    blob: async () => new Blob(),
+    blob: async () => new Blob([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' }),
   });
   const client = createRealClient('http://localhost:8080/api/v1', {
     fetch: okFetch,
@@ -38,7 +38,10 @@ describe('createRealClient preview surface is still an honest stub', () => {
     },
   });
 
-  it('openPreview throws NotImplementedError until E-04', () => {
-    expect(() => client.openPreview()).toThrow(NotImplementedError);
+  it('openPreview returns a closeable role-bound channel', async () => {
+    const channel = client.openPreview('presentation');
+    expect(channel.updates$.subscribe).toEqual(expect.any(Function));
+    channel.close();
+    await Promise.resolve();
   });
 });

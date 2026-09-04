@@ -1,4 +1,5 @@
 import type { EduscopeClient, PreviewChannel } from '../client.js';
+import type { SourceRoleId } from '@eduscope/shared';
 import { TransportError } from '../errors.js';
 import { createEmitter, type ConnectionStatus, type EventStream } from '../stream.js';
 import type { Clock } from './clock.js';
@@ -17,7 +18,6 @@ import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
 import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
-export { isMockPreviewFrame } from './events/preview.js';
 
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
@@ -168,6 +168,7 @@ export function createMockClient(
 
   build(scenario, options.seed ?? {});
 
+  let activePreview: PreviewChannel | null = null;
   const client = {
     get scenario() {
       return current;
@@ -184,7 +185,15 @@ export function createMockClient(
 
     events$: envelopes.events$,
     connection$: connectionStream,
-    openPreview: (): PreviewChannel => createPreviewChannel(world),
+    openPreview: (roleId: SourceRoleId): PreviewChannel => {
+      activePreview?.close();
+      let channel!: PreviewChannel;
+      channel = createPreviewChannel(world, roleId, () => {
+        if (activePreview === channel) activePreview = null;
+      });
+      activePreview = channel;
+      return channel;
+    },
     resync: async () => {
       // Re-stamp with the outer monotonic counter, same as the live forwarder
       // above — replaying `world.snapshot()`'s raw (world-internal, per-scenario)
@@ -193,6 +202,8 @@ export function createMockClient(
       envelopes.replay(world);
     },
     dispose() {
+      activePreview?.close();
+      activePreview = null;
       for (const stop of teardown) stop();
       teardown = [];
     },
