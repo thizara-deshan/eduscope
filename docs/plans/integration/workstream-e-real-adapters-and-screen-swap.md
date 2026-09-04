@@ -62,6 +62,35 @@ owner formally accepts those two deferrals, they remain STOP blockers for E-01.
 
 If any witness is missing or contains `NOT RUN — gate failed`, stop. Do not create an E implementation commit and do not reinterpret a template as evidence.
 
+### Prerequisite gate — re-baselined by the prerequisite owner (2026-09-04)
+
+The Workstream E prerequisite owner (PM) has formally reviewed the gate and green-lit E-01 with the recorded decisions below. This record amends the five acknowledgement items above; E-01 Step 1's `check-workstream-e-prereqs.mjs` must encode these amended criteria. It does not manufacture evidence: items still listed as open remain STOP conditions for the checker until each is closed locally.
+
+**Accepted as exception (no longer STOP blockers)**
+
+- **A-16 CPU headroom** — accepted as `APPROVED EXCEPTION` per the 2026-09-03 target exception record (full-mix mean idle 9.5778% against the ≥30.00% criterion). The interim supported profile is record + meeting + one-second JPEG previews.
+- **A-16 HDMI #2 receiver-microphone and projector latency/mode** — the two `DEFERRED — NOT PASS` measurements are formally accepted as non-blocking for E-01. They are re-measured during device bring-up (Workstream F); they no longer stop Workstream E.
+
+**Deferred to campus deployment (removed from the E-01 blocking set)**
+
+- **D-10 (campus packaging/staging)** and **D-11 (quiz workstream gate)** are DEFERRED. Both require an on-premises campus server, DNS hostname, and TLS certificate that are not yet available. They move to the pre-production / campus-rollout gate (Workstream F) and are no longer E-01 prerequisites. D's contract is exercised throughout E through the local real-D test peer (`packages/api-client/test/real/fixtures/real-stack.ts` + PostgreSQL Testcontainers), which needs none of that infrastructure.
+
+**Reviewer acknowledgements — recorded**
+
+- Workstream D master-plan gate flag (shared student-wire envelope + DM-10 rank helper). ✅ acknowledged 2026-09-04.
+- Workstream E master-plan gate flag, including the E-49 A/B projector payload correction. ✅ acknowledged 2026-09-04.
+
+**Prerequisite status (updated 2026-09-04 after Wave-0 closure)**
+
+- A-15 — dated evidence present. ✅
+- C-10 — dated ≥90-minute PASS evidence (`docs/evidence/phase-4/workstream-c/c10/20260904T042136Z/`). ✅
+- D-09 — 200-client load evidence (`services/quiz-service/test/load/evidence/d09-gate.json`, 0 privacy leaks). ✅
+- A-16 — **closed by APPROVED EXCEPTION.** The full output/resource/WebRTC bench was never captured (no runner, no raw artifacts); the prerequisite owner accepted the documented CPU-headroom disposition (mean idle 9.5778%) and formally deferred the HDMI #2 mic and projector-latency measurements to Workstream F. Dated record: `services/pipeline-manager/tests/bench/evidence/a16-20260904-80d0b02a32a9b909.md`. E-01 Step 1's checker accepts this exception record as the A-16 witness; it invents no measurement. ✅ (exception)
+- B-38 — gate runner present; run `pnpm --filter @eduscope/core-api gate:core-api` on this board and capture the dated B-38 evidence. (Wave-0 in progress.)
+- D-08 — two-backend sync code landed (commit `8524d5d`). **DEFERRED here: this board has no Docker, and D-08 requires PostgreSQL via Testcontainers (SQLite substitution is forbidden).** Run D-08 on a Docker-capable host before the checker is required to pass; until then E-01 Step 1's checker treats D-08 as an explicitly-deferred witness alongside D-10/D-11, not a silent skip.
+
+E-01 Step 1 remains the first executed step. Build the checker, run it, and continue only once it prints `PASS workstream-e prerequisites`. With A-16 closed by exception and D-08/D-10/D-11 explicitly deferred, the only remaining hard-required local witness is a green B-38 gate run. Branch creation and E-01 Step 1 itself (writing the checker) may proceed now.
+
 ### Repository and test conventions
 
 - Run Node commands from the repository root. Run pipeline-manager `pytest` commands from `services/pipeline-manager` with its managed environment.
