@@ -126,6 +126,55 @@ describe('StudentDetailDialog', () => {
     expect(screen.getByTestId('student-detail-row-pub1')).toHaveTextContent('Incorrect');
   });
 
+  it('missing: an unknown student renders by its own id, never the first leaderboard row', async () => {
+    // The leaderboard holds a DIFFERENT student at row 0. Opening a student
+    // with no entry must show that student's own id and a blank score/rank —
+    // never borrow the top row's identity.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = {
+      getLeaderboard: vi.fn(() => Promise.resolve(leaderboard({
+        entries: [{ studentIdNumber: 's1', displayName: 'K. Fernando', answered: 2, correct: 2, points: 20, accuracy: 1, avgResponseMs: 3000, rank: 1 }],
+      }))),
+      getQuizSession: vi.fn(() => Promise.resolve(openQuizSession())),
+      listPublications: vi.fn(() => Promise.resolve([publication()])),
+      listPublicationResponses: vi.fn(() => Promise.resolve({ items: [], syncedAt: '2026-08-05T10:00:00Z', stale: false })),
+    } as unknown as EduscopeClient;
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(
+      QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
+    );
+    render(<StudentDetailDialog studentIdNumber="IT99999999" onClose={vi.fn()} />, { wrapper });
+    await waitFor(() => expect(screen.getByTestId('student-detail-row-pub1')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('IT99999999');
+    expect(screen.getByRole('heading', { level: 2 })).not.toHaveTextContent('K. Fernando');
+    expect(screen.getByTestId('student-detail-score')).toHaveTextContent('Score 0');
+    expect(screen.getByTestId('student-detail-rank')).toHaveTextContent('Rank #—');
+    expect(screen.getByTestId('student-detail-row-pub1')).toHaveTextContent('Unanswered');
+  });
+
+  it('keyed by stable id, not row position: opening a lower-ranked student shows that student', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = {
+      getLeaderboard: vi.fn(() => Promise.resolve(leaderboard({
+        entries: [
+          { studentIdNumber: 's2', displayName: 'Top Scorer', answered: 2, correct: 2, points: 20, accuracy: 1, avgResponseMs: 2000, rank: 1 },
+          { studentIdNumber: 's1', displayName: 'K. Fernando', answered: 2, correct: 1, points: 10, accuracy: 0.5, avgResponseMs: 3000, rank: 2 },
+        ],
+      }))),
+      getQuizSession: vi.fn(() => Promise.resolve(openQuizSession())),
+      listPublications: vi.fn(() => Promise.resolve([publication()])),
+      listPublicationResponses: vi.fn(() => Promise.resolve({ items: [], syncedAt: '2026-08-05T10:00:00Z', stale: false })),
+    } as unknown as EduscopeClient;
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(
+      QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: client, children }),
+    );
+    // s1 is the SECOND row (rank 2); the dialog must show s1, not the top row s2.
+    render(<StudentDetailDialog studentIdNumber="s1" onClose={vi.fn()} />, { wrapper });
+    await waitFor(() => expect(screen.getByTestId('student-detail-row-pub1')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('K. Fernando');
+    expect(screen.getByRole('heading', { level: 2 })).not.toHaveTextContent('Top Scorer');
+    expect(screen.getByTestId('student-detail-rank')).toHaveTextContent('Rank #2');
+  });
+
   it('close (✕) invokes onClose', async () => {
     const { onClose } = renderDialog();
     await waitFor(() => expect(screen.queryByTestId('student-detail-loading')).toBeNull());

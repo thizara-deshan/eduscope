@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+import { getJson, publishOneQuestion, startRealRecording, waitForOpenQuizSession } from './fixtures/real-ai.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -52,4 +54,60 @@ test.describe('S-19 Student detail', () => {
     expect(await unanswered.count()).toBeGreaterThanOrEqual(0);
     expect(await incorrect.count()).toBe(0);
   });
+});
+
+// eduscope:needs-real-d — exercises real B<->D per-student projection replay.
+realTest.describe('S-19 Student detail — real', () => {
+  realTest(
+    'real: the dialog is keyed by stable student id (not the top row); a deleted B-side projection is replaced atomically by D\'s authoritative one',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      const { token, sessionId } = await startRealRecording(page, realStack);
+      await waitForOpenQuizSession(realStack, token);
+      const publicationId = await publishOneQuestion(realStack, token, sessionId);
+
+      const { submitted } = await realStack.control<{ submitted: Array<{ studentIdNumber: string; isCorrect: boolean }> }>(
+        'quiz.submit-answers', { count: 2, correctCount: 1 },
+      );
+      const wrongId = submitted.find((s) => !s.isCorrect)!.studentIdNumber;
+
+      await realExpect(page.getByTestId('insights-column')).toBeVisible();
+      await page.getByRole('tab', { name: 'Leaderboard' }).click();
+      await realExpect(page.getByTestId(`leaderboard-row-${wrongId}`)).toBeVisible({ timeout: 25_000 });
+
+      // Open the RANK-2 student — never the top row. The dialog must key on the
+      // stable student id, so it shows that student, at rank #2.
+      await page.getByTestId(`leaderboard-row-${wrongId}`).click();
+      const dialog = page.getByTestId('student-detail-dialog');
+      await realExpect(dialog).toBeVisible();
+      await realExpect(dialog.getByTestId('student-detail-rank')).toContainText('#2');
+      const identity = (await dialog.locator('h2').innerText()).trim();
+
+      // Cut B<->D, delete B's replicated projection, rewind its watermark.
+      await realStack.control('quiz.device-sync', { available: false });
+      await realStack.control('quiz.restart');
+      realExpect((await realStack.control<{ projections: number }>('core.reset-answer-projections')).projections, 'B-side projection deleted').toBe(0);
+
+      // The last-known identity is retained under a stale marker — never
+      // replaced by another student's row or blanked out.
+      await realExpect(dialog.getByTestId('student-detail-stale')).toBeVisible({ timeout: 30_000 });
+      await realExpect(dialog.locator('h2')).toHaveText(identity);
+      await realExpect(dialog.getByTestId('student-detail-rank')).toContainText('#2');
+
+      // Restore: B reconnects and D replays its authoritative history from
+      // scratch; B rebuilds the projection.
+      await realStack.control('quiz.device-sync', { available: true });
+      await realExpect(dialog.getByTestId('student-detail-stale')).toHaveCount(0, { timeout: 30_000 });
+      await realExpect.poll(async () => {
+        const responses = await getJson(`${realStack.coreBaseUrl}/quiz/publications/${publicationId}/responses`, token) as { items: unknown[] };
+        return responses.items.length;
+      }, { timeout: 20_000 }).toBe(2);
+
+      // One atomic identity/history replacement: same student, same rank — never
+      // a mixed-identity row.
+      await realExpect(dialog.locator('h2')).toHaveText(identity);
+      await realExpect(dialog.getByTestId('student-detail-rank')).toContainText('#2');
+    },
+  );
 });

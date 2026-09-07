@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { auditLogEntries, audioControls, lectureSessions, questions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
+import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
       case 'core.capabilities':
         return { actions: [
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
-          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit',
+          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
         ] };
       case 'core.start':
         await start();
@@ -336,6 +336,18 @@ async function main(): Promise<void> {
           liveStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/live').length,
           meetingStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/meeting').length,
         };
+      case 'core.reset-answer-projections': {
+        // Deletes B's replicated answer projections and rewinds its sync
+        // watermark to 0, so the next device-sync reconnect makes D replay its
+        // authoritative answer history from scratch. Lets an S-19 witness prove
+        // B rebuilds a student's projection from D rather than keeping a stale
+        // local copy. Reads nothing from D and adds no product route.
+        app?.db.delete(answerProjections).run();
+        app?.db.update(quizSessionProjections).set({ lastAnswerSeq: 0 }).run();
+        return {
+          projections: app?.db.select().from(answerProjections).all().length ?? 0,
+        };
+      }
       case 'core.question-audit': {
         // Every question row with its create-audit actor, so an S-15 witness
         // can prove a lecturer-authored draft carries `lecturer-authored`
