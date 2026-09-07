@@ -152,6 +152,7 @@ export function createRealClient(
       auth?: 'required' | 'none';
       cache?: RequestCache;
       signal?: AbortSignal;
+      acceptedStatuses?: readonly number[];
     },
   ): Promise<R> {
     const [method, template] = OPERATION_ROUTE[id];
@@ -165,6 +166,7 @@ export function createRealClient(
       auth: opts.auth ?? 'required',
       ...(opts.cache ? { cache: opts.cache } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.acceptedStatuses ? { acceptedStatuses: opts.acceptedStatuses } : {}),
     };
     return transport.request(request);
   }
@@ -287,7 +289,7 @@ export function createRealClient(
     importUsers: (body) => {
       const form = new FormData();
       form.append('file', body.file);
-      return call('importUsers', { body: form, response: zImportUsersResponse });
+      return call('importUsers', { body: form, response: zImportUsersResponse, acceptedStatuses: [422] });
     },
 
     // ── ai / quiz authoring ─────────────────────────────────────────────

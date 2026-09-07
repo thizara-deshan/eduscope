@@ -31,6 +31,12 @@ export interface HttpRequest<T> {
   auth?: 'required' | 'none';
   cache?: RequestCache;
   signal?: AbortSignal;
+  /**
+   * Non-2xx statuses whose body is still the declared success schema, not a
+   * Problem — `importUsers`'s 422 rejected-batch (openapi.yaml: the response
+   * IS the per-row verdict, not a refusal) is the only user today.
+   */
+  acceptedStatuses?: readonly number[];
 }
 
 export interface HttpResponseLike {
@@ -139,7 +145,7 @@ async function parseResponse<T>(
   req: HttpRequest<T>,
   response: HttpResponseLike,
 ): Promise<T> {
-  if (!response.ok) {
+  if (!response.ok && !req.acceptedStatuses?.includes(response.status)) {
     if (isProblemContentType(response.headers.get('content-type'))) {
       let body: unknown;
       try {

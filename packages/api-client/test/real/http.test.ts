@@ -205,6 +205,34 @@ describe('response handling', () => {
     ).rejects.toBeInstanceOf(TransportError);
   });
 
+  it('parses a listed acceptedStatuses non-2xx body against the response schema instead of a Problem (importUsers rejected-batch)', async () => {
+    const fetchImpl: FetchLike = async () =>
+      fakeResponse({ status: 422, body: { value: 'rejected-batch' }, contentType: 'application/json' });
+    await expect(
+      transportWith(fetchImpl).request({
+        operation: 'importUsers',
+        method: 'POST',
+        path: '/users/import',
+        response: okSchema,
+        acceptedStatuses: [422],
+      }),
+    ).resolves.toEqual({ value: 'rejected-batch' });
+  });
+
+  it('still surfaces a named Problem on a status not listed in acceptedStatuses', async () => {
+    const fetchImpl: FetchLike = async () =>
+      fakeResponse({ status: 403, body: { status: 403, code: 'not-authorized', title: 'nope' }, contentType: 'application/problem+json' });
+    await expect(
+      transportWith(fetchImpl).request({
+        operation: 'importUsers',
+        method: 'POST',
+        path: '/users/import',
+        response: okSchema,
+        acceptedStatuses: [422],
+      }),
+    ).rejects.toBeInstanceOf(ProblemError);
+  });
+
   it('treats a non-2xx with no problem body as a TransportError', async () => {
     const fetchImpl: FetchLike = async () => fakeResponse({ status: 502, body: '', contentType: 'text/html' });
     await expect(
