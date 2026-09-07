@@ -556,6 +556,7 @@ async function main(): Promise<void> {
           'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
           'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
           'core.seed-retention', 'core.retention-sweep', 'core.storage-pressure-step', 'core.mount-scratch-device',
+          'core.firmware',
         ] };
       case 'core.seed-retention':
         return seedRetention();
@@ -762,6 +763,16 @@ async function main(): Promise<void> {
         helper.failureVerb = value?.failureVerb === null || value?.failureVerb === undefined ? null : String(value.failureVerb);
         helper.hang = value?.hang === true;
         return { configured: true };
+      case 'core.firmware': {
+        // Queues the real JSON `detail` payload the real firmware.check/apply
+        // helper verbs return on success, matching zFirmwareCheckDetail/
+        // zFirmwareApplyDetail — the generic InMemoryHelperTransport's plain
+        // 'ok' string is not valid JSON, so a real check/apply outcome
+        // (done/bad-signature/boot-failed) needs this to ever resolve.
+        if (value?.checkDetail !== undefined) helper.nextDetail['firmware.check'] = JSON.stringify(value.checkDetail);
+        if (value?.applyDetail !== undefined) helper.nextDetail['firmware.apply'] = JSON.stringify(value.applyDetail);
+        return { configured: true };
+      }
       case 'core.relay':
         relayFailure = value?.fail === true;
         return { fail: relayFailure };
