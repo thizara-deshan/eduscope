@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -128,4 +129,88 @@ test.describe('S-10 Source preview lightbox', () => {
     expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
     expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(panelBox!.y + panelBox!.height);
   });
+});
+
+// Real `listSourceRoles` labels (services/core-api/src/db/seeds.ts) — distinct
+// from the mock's, which confirms the tile chrome is really real-backed.
+const REAL_PREVIEW_LABELS = {
+  presentation: 'PC',
+  'lecturer-cam': 'CAM 1',
+  'students-cam': 'CAM 2',
+} as const;
+
+realTest.describe('S-10 Wave-2 shell checkpoint — real source data, mock preview', () => {
+  realTest(
+    'real: every real source tile opens the mock JPEG sentinel with no real preview.jpg request or /ws/preview upgrade',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(75_000);
+
+      // Checkpoint, not integration acceptance. Every surrounding source
+      // domain (auth, recording, sourcesAudio) runs real, but `preview` is
+      // explicitly pinned to mock, so the lightbox is served by the
+      // deterministic mock JPEG sentinel rather than a real JPEG poll. This
+      // proves the mixed router keeps a real source screen and a mock preview
+      // channel side by side without either masquerading as the other. Real
+      // preview-over-JPEG acceptance (DR-23) stays unclaimed until E-48.
+      await page.route('**/config.json', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            apiBaseUrl: realStack.coreBaseUrl,
+            quizBaseUrl: realStack.quizTlsBaseUrl ?? realStack.quizBaseUrl,
+            environment: 'integration',
+            adapters: { default: 'real', overrides: { preview: 'mock' } },
+          }),
+        });
+      });
+
+      const realPreviewRequests: string[] = [];
+      const previewSockets: string[] = [];
+      page.on('request', (request) => {
+        if (/\/sources\/[^/]+\/preview\.jpg/.test(request.url())) realPreviewRequests.push(request.url());
+      });
+      page.on('websocket', (ws) => {
+        if (/\/ws\/preview/.test(ws.url())) previewSockets.push(ws.url());
+      });
+
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+
+      // Bring the real sources online so their (real) tiles are enabled.
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+        }, consumers: [],
+      } });
+
+      await page.getByRole('button', { name: 'Show sources' }).click();
+      await realExpect(page.getByTestId('source-tile')).toHaveCount(3);
+
+      for (const [role, label] of Object.entries(REAL_PREVIEW_LABELS)) {
+        const tile = page.locator(`[data-testid="source-tile"][data-role="${role}"]`);
+        await realExpect(tile).toHaveAttribute('data-state', 'online', { timeout: 15_000 });
+        await tile.click();
+        const dialog = page.getByRole('dialog', { name: `${label} preview` });
+        await realExpect(dialog).toBeVisible();
+        // The mock sentinel paints a live frame within the one-second budget.
+        await realExpect(page.getByTestId('preview-frame')).toBeVisible({ timeout: 2_000 });
+        await realExpect(dialog).toContainText('LIVE');
+        await page.getByRole('button', { name: 'Close preview' }).click();
+        await realExpect(dialog).toHaveCount(0);
+      }
+
+      // Provenance: the mock channel served every frame; the real JPEG
+      // endpoint and any preview-signaling socket were never touched.
+      realExpect(realPreviewRequests, 'preview stayed mock — no real preview.jpg poll').toEqual([]);
+      realExpect(previewSockets, 'no /ws/preview upgrade — JPEG decision is signaling-free').toEqual([]);
+    },
+  );
 });
