@@ -11,6 +11,17 @@ export function declaresRealWitness(source) {
     || /EDUSCOPE_E2E_ADAPTER[\s\S]{0,120}real/m.test(source);
 }
 
+/**
+ * A panel screen whose real witness exercises the quiz service (B→D
+ * publications, responses, leaderboard, sessions) needs the full B+D stack,
+ * not E-06's Docker-less panel-only stack. Such a spec opts in with the
+ * `eduscope:needs-real-d` sentinel; the default panel run stays D-free and
+ * runnable on boards without Docker.
+ */
+export function declaresRealD(source) {
+  return /eduscope:needs-real-d/.test(source);
+}
+
 async function main() {
   const [app, stem] = process.argv.slice(2);
   if ((app !== 'panel' && app !== 'quiz') || !stem || !/^[a-z0-9-]+$/.test(stem)) {
@@ -22,7 +33,8 @@ async function main() {
     throw new Error(`${specRelative} does not declare a real adapter witness`);
   }
 
-  const stack = await startStack({ env: app === 'panel' ? { EDUSCOPE_PANEL_ONLY: '1' } : {} });
+  const panelOnly = app === 'panel' && !declaresRealD(source);
+  const stack = await startStack({ env: panelOnly ? { EDUSCOPE_PANEL_ONLY: '1' } : {} });
   let failure;
   try {
     await run(pnpm, [

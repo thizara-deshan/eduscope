@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   const control = await listenControl(async (action, input) => {
     switch (action) {
       case 'quiz.capabilities':
-        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot'] };
+        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit'] };
       case 'quiz.start':
         await start();
         return { running: true };
@@ -165,6 +165,19 @@ async function main(): Promise<void> {
         return { available: deviceUpgradeAllowed };
       case 'quiz.capture-student-snapshot':
         return captureStudentSnapshot();
+      case 'quiz.publication-audit': {
+        // Counts the durable publication rows D has actually stored (optionally
+        // scoped to a state), so a screen witness can prove publish-before-project
+        // and that a failed publish left no row behind. Reads D's own store — the
+        // authoritative side of the B→D publish contract.
+        const state = (input as { state?: unknown } | undefined)?.state;
+        const running = app;
+        if (!running) throw new Error('quiz.publication-audit requires the quiz service running');
+        const rows = typeof state === 'string'
+          ? await running.sql`SELECT count(*)::int AS count FROM publications WHERE state = ${state}`
+          : await running.sql`SELECT count(*)::int AS count FROM publications`;
+        return { count: Number((rows[0] as { count: number } | undefined)?.count ?? 0) };
+      }
       default:
         throw new Error(`unknown quiz control action: ${action}`);
     }
