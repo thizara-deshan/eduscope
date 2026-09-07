@@ -88,6 +88,17 @@ describe('LogsScreen', () => {
     await waitFor(() => expect(queryLogs).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'S1' })));
   });
 
+  it('DR-01: an ai-service row renders its context.subservice alongside the closed service enum', async () => {
+    const queryLogs = vi.fn(() => Promise.resolve({
+      items: [log({ service: 'ai', context: { subservice: 'question' }, message: 'Question set ready: 4 question(s)' })],
+      nextCursor: null,
+    }));
+    build({ queryLogs });
+    await waitFor(() => expect(screen.getByTestId('log-row-L1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('log-row-L1').querySelector('button')!);
+    expect(screen.getByText('service: ai (question)')).toBeInTheDocument();
+  });
+
   it('live tail: an appended log.entry shows atop', async () => {
     build();
     await waitFor(() => expect(screen.getByTestId('log-row-L1')).toBeInTheDocument());

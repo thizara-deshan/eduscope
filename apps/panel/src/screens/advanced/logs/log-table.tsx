@@ -27,7 +27,12 @@ export function LogTable({ logs, onDrillIntoSession }: LogTableProps): JSX.Eleme
           </button>
           {expandedId === entry.id ? (
             <div className="us-logs__detail">
-              <p className="us-adm__note">service: {entry.service}</p>
+              <p className="us-adm__note">
+                service: {entry.service}
+                {/* DR-01: the closed `service` enum covers all AI sub-services (stt/slide/question) as one
+                    value; the sub-service rides `context.subservice` instead of widening the enum. */}
+                {typeof entry.context?.subservice === 'string' ? ` (${entry.context.subservice})` : ''}
+              </p>
               {entry.sessionId ? (
                 <button type="button" className="us-adm__secondary" onClick={() => onDrillIntoSession(entry.sessionId!)}>
                   View session {entry.sessionId}

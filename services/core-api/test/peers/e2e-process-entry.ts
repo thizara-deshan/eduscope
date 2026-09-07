@@ -556,7 +556,7 @@ async function main(): Promise<void> {
           'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
           'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
           'core.seed-retention', 'core.retention-sweep', 'core.storage-pressure-step', 'core.mount-scratch-device',
-          'core.firmware',
+          'core.firmware', 'core.internal-log',
         ] };
       case 'core.seed-retention':
         return seedRetention();
@@ -733,6 +733,28 @@ async function main(): Promise<void> {
         else if (service === 'question') ai.setQuestionOffline(offline);
         else throw new Error(`unknown AI service: ${service}`);
         return { service, offline };
+      }
+      case 'core.internal-log': {
+        // Exercises the real, production `POST /internal/logs` sink
+        // (loopback-only, bearer-protected) that pipeline-manager/AI
+        // services use to report their own log rows — the same path a real
+        // AI service restart would use, without exposing the raw bearer to
+        // the Playwright layer.
+        if (!app) throw new Error('core.internal-log requires the core service running');
+        const response = await fetch(`http://127.0.0.1:${String(port)}/internal/logs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${internalBearer}` },
+          body: JSON.stringify({
+            level: String(value?.level ?? 'INFO'),
+            category: String(value?.category ?? 'Session'),
+            service: String(value?.service ?? 'ai'),
+            message: String(value?.message ?? 'test log'),
+            context: value?.context ?? null,
+            sessionId: value?.sessionId ?? null,
+          }),
+        });
+        if (!response.ok) throw new Error(`core.internal-log: ${String(response.status)} ${await response.text()}`);
+        return await response.json();
       }
       case 'core.ai-generate': {
         // Queues one successful `POST /generate` response (A-14's 3–5 valid
