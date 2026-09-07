@@ -1,4 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+
+function sourcesOnline(consumers: ReadonlyArray<{ id: string; state: string; pgid: number }>) {
+  return {
+    publishers: {
+      usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+    },
+    consumers,
+  };
+}
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -243,4 +256,107 @@ test.describe('Wave-3 exit condition', () => {
     //    plus the Recording Library relocated into Advanced by S-21).
     await expect(page.getByRole('navigation', { name: 'Administration categories' }).getByRole('button')).toHaveCount(3);
   });
+});
+
+realTest.describe('S-08 Live Meeting card — real', () => {
+  realTest(
+    'real: a meeting consumer death restarts only the meeting output, leaving the record consumer and mic audio untouched',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(90_000);
+      await page.route('**/config.json', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            apiBaseUrl: realStack.coreBaseUrl,
+            quizBaseUrl: realStack.quizTlsBaseUrl ?? realStack.quizBaseUrl,
+            environment: 'integration',
+            adapters: { default: 'real', overrides: {} },
+          }),
+        });
+      });
+      await realStack.control('core.pm.status', { status: sourcesOnline([]) });
+
+      // Start a real recording (the record consumer).
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 4101 },
+      });
+      await realExpect(page.locator('[data-screen="S-05"]')).toBeVisible();
+
+      // Enable Live Meeting: its own independent output consumer.
+      const toggle = page.getByRole('switch', { name: 'Live Meeting' });
+      await toggle.click();
+      await realExpect.poll(async () => (await realStack.processAudit()).meetingStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'meeting:00000001', pgid: 8101 },
+      });
+      await realExpect(page.getByTestId('meeting-channel-state-word')).toHaveText('On', { timeout: 10_000 });
+
+      // A PC-inclusive preset is not valid on the meeting channel: contract refusal.
+      const login = await fetch(`${realStack.coreBaseUrl}/auth/login`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...REAL_STACK_ACCOUNTS.lecturer, client: 'panel' }),
+      });
+      const { tokens } = await login.json() as { tokens: { accessToken: string } };
+      const refused = await fetch(`${realStack.coreBaseUrl}/channels/meeting`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens.accessToken}` },
+        body: JSON.stringify({ presetId: 'fifty-fifty' }),
+      });
+      realExpect(refused.status).toBe(422);
+      realExpect((await refused.json() as { code: string }).code).toBe('config.invalid');
+
+      // Kill ONLY the meeting consumer; the record consumer is never touched.
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.exited', data: { consumerId: 'meeting:00000001', code: 'crashed' },
+      });
+      await realExpect(page.getByTestId('meeting-channel-state-word')).toHaveText('Restarting…', { timeout: 10_000 });
+
+      // CH-09: the meeting output auto-restarts as a fresh consumer.
+      await realExpect.poll(async () => (await realStack.processAudit()).meetingStarts, { timeout: 15_000 }).toBe(2);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'meeting:00000002', pgid: 8102 },
+      });
+      await realExpect(page.getByTestId('meeting-channel-state-word')).toHaveText('On', { timeout: 10_000 });
+
+      // The local recording is entirely undisturbed by the meeting churn.
+      const recording = await (await fetch(`${realStack.coreBaseUrl}/recording/state`, {
+        headers: { authorization: `Bearer ${tokens.accessToken}` },
+      })).json() as { state: string };
+      realExpect(recording.state, 'record stays live across the meeting restart').toBe('recording');
+
+      // The fake HDMI #2 receiver-mic probe still reports audio after recovery
+      // (A-16's HDMI #2 mic hardware measurement itself is deferred to
+      // Workstream F; here the mic source's audio path is proven intact).
+      await realStack.control('core.pm.status', { status: sourcesOnline([
+        { id: 'record:00000001', state: 'running', pgid: 4101 },
+        { id: 'meeting:00000002', state: 'running', pgid: 8102 },
+      ]) });
+      await page.getByRole('button', { name: 'Show sources' }).click();
+      const mic = page.getByTestId('mic-row');
+      await realExpect(mic).toHaveAttribute('data-state', 'live', { timeout: 10_000 });
+      await realExpect(page.getByRole('meter', { name: 'Lecturer microphone level' })).toHaveCSS('--level', '0.4');
+
+      // Process ledger: record started exactly once and never exited; only the
+      // meeting consumer restarted.
+      const audit = await realStack.processAudit();
+      realExpect(audit).toMatchObject({ recordStarts: 1, liveStarts: 0, meetingStarts: 2 });
+      realExpect(audit.processEvents.filter((event) => event.consumerId.startsWith('record:'))).toEqual([
+        { consumerId: 'record:00000001', pgid: 4101, state: 'running' },
+      ]);
+      realExpect(audit.processEvents.filter((event) => event.consumerId.startsWith('meeting:'))).toEqual([
+        { consumerId: 'meeting:00000001', pgid: 8101, state: 'running' },
+        { consumerId: 'meeting:00000001', pgid: null, state: 'exited' },
+        { consumerId: 'meeting:00000002', pgid: 8102, state: 'running' },
+      ]);
+    },
+  );
 });
