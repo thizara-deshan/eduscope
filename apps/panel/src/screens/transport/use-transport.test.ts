@@ -60,11 +60,29 @@ describe('useTransport', () => {
     expect(result.current.pending).toBeNull();
   });
 
-  it('T-CMD-RESOLVE produces a failure', () => {
+  it('T-CMD-RESOLVE produces a failure', async () => {
     const { result } = renderTransport();
-    act(() => result.current.run('stop'));
+    await act(async () => { result.current.run('stop'); await Promise.resolve(); });
     act(() => vi.advanceTimersByTime(TIMERS['T-CMD-RESOLVE']));
     expect(result.current.failure).toMatch(/did not resolve/i);
+  });
+
+  it('uses the accepted resolveBySec deadline, bounded by T-CMD-RESOLVE', async () => {
+    const { result } = renderTransport({ stopRecording: vi.fn(() => Promise.resolve({
+      commandId: me.id, acceptedAt: '2026-08-05T10:00:00.000Z', resolveBySec: 2,
+    })) });
+    await act(async () => { result.current.run('stop'); await Promise.resolve(); });
+    act(() => vi.advanceTimersByTime(1_999));
+    expect(result.current.pending).toBe('stop');
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current.failure).toMatch(/did not resolve/i);
+  });
+
+  it('does not let a 202 response invent final state', async () => {
+    const { result } = renderTransport();
+    await act(async () => { result.current.run('pause'); await Promise.resolve(); });
+    expect(result.current.pending).toBe('pause');
+    expect(useWsStore.getState().recording?.state).toBe('recording');
   });
 
   it('locks out non-owners and stale panels, and never queues an offline command', () => {

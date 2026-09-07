@@ -26,6 +26,7 @@ export function useTransport(): UseTransport {
   const [pending, setPending] = useState<TransportCommand | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const issuedFrom = useRef<string | null>(null);
+  const activeCommand = useRef<TransportCommand | null>(null);
   const ceiling = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearCeiling = useCallback(() => {
@@ -39,6 +40,7 @@ export function useTransport(): UseTransport {
     if (!pending || !session || session.state === issuedFrom.current) return;
     if (RESOLVED_BY[pending].includes(session.state)) {
       clearCeiling();
+      activeCommand.current = null;
       setPending(null);
       setFailure(null);
     }
@@ -53,22 +55,27 @@ export function useTransport(): UseTransport {
   const run = useCallback((command: TransportCommand) => {
     if (!canCommand || pending) return;
     issuedFrom.current = session?.state ?? null;
+    activeCommand.current = command;
     setPending(command);
     setFailure(null);
     clearCeiling();
-    ceiling.current = setTimeout(() => {
-      ceiling.current = null;
-      setPending(null);
-      setFailure(`${command[0]!.toUpperCase()}${command.slice(1)} did not resolve in time.`);
-    }, TIMERS['T-CMD-RESOLVE']);
-
     const request = command === 'pause'
       ? client.pauseRecording()
       : command === 'resume'
         ? client.resumeRecording()
         : client.stopRecording();
-    void request.catch((error: unknown) => {
+    void request.then((accepted) => {
+      if (activeCommand.current !== command) return;
+      const deadlineMs = Math.min(accepted.resolveBySec * 1_000, TIMERS['T-CMD-RESOLVE']);
+      ceiling.current = setTimeout(() => {
+        ceiling.current = null;
+        activeCommand.current = null;
+        setPending(null);
+        setFailure(`${command[0]!.toUpperCase()}${command.slice(1)} did not resolve in time.`);
+      }, deadlineMs);
+    }).catch((error: unknown) => {
       clearCeiling();
+      activeCommand.current = null;
       setPending(null);
       setFailure(error instanceof Error ? error.message : String(error));
     });

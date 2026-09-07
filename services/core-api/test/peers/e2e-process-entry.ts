@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { lectureSessions, storageVolumes, users } from '../../src/db/schema.js';
+import { lectureSessions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -312,6 +312,10 @@ async function main(): Promise<void> {
           takeoverAt: session.takeoverAt, state: session.state,
         })) };
       }
+      case 'core.transport-audit':
+        return { segments: app?.db.select().from(recordingSegments).all().map((segment) => ({
+          index: segment.index, state: segment.state, endReason: segment.endReason, durationMs: segment.durationMs,
+        })) ?? [] };
       default:
         throw new Error(`unknown core control action: ${action}`);
     }
