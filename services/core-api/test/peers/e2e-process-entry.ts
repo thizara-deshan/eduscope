@@ -1,0 +1,286 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { once } from 'node:events';
+import type { FastifyInstance } from 'fastify';
+import { buildApp } from '../../src/app.js';
+import { loadConfig } from '../../src/config.js';
+import { storageVolumes, users } from '../../src/db/schema.js';
+import { SystemClock } from '../../src/lib/clock.js';
+import { UlidGenerator } from '../../src/lib/ids.js';
+import { hashPassword } from '../../src/modules/auth/passwords.js';
+import { FakeAiServices } from '../fakes/ai-services.js';
+import { FakeBlockDeviceMonitor, type FakeBlockDevice } from '../fakes/block-devices.js';
+import { InMemoryHelperTransport } from '../fakes/helper-server.js';
+import { FakeMediaTools } from '../fakes/media-tools.js';
+import { FakePipelineManager } from '../fakes/pipeline-manager.js';
+import { UploadFixtureServer } from '../fakes/upload-fixture-server.js';
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`e2e core peer: missing ${name}`);
+  return value;
+}
+
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  const raw = Buffer.concat(chunks).toString('utf8');
+  return raw.length === 0 ? {} : JSON.parse(raw) as Record<string, unknown>;
+}
+
+function sendJson(response: ServerResponse, status: number, body: unknown): void {
+  response.writeHead(status, { 'content-type': 'application/json' });
+  response.end(JSON.stringify(body));
+}
+
+async function listenControl(
+  handler: (action: string, input: unknown) => Promise<unknown>,
+): Promise<{ server: Server; url: string }> {
+  const server = createServer((request, response) => {
+    void (async () => {
+      if (request.method !== 'POST' || request.url !== '/control') {
+        sendJson(response, 404, { error: 'not-found' });
+        return;
+      }
+      try {
+        const body = await readJson(request);
+        sendJson(response, 200, await handler(String(body.action ?? ''), body.input));
+      } catch (error) {
+        sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
+      }
+    })();
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address() as AddressInfo;
+  return { server, url: `http://127.0.0.1:${String(address.port)}/control` };
+}
+
+async function main(): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), 'eduscope-e06-core-'));
+  const recordingsRoot = join(dir, 'recordings');
+  const runtimeDir = join(dir, 'runtime');
+  mkdirSync(recordingsRoot, { recursive: true });
+  mkdirSync(runtimeDir, { recursive: true });
+
+  const internalBearer = required('E06_INTERNAL_BEARER');
+  const quizBaseUrl = required('E06_QUIZ_BASE_URL');
+  const quizDeviceId = required('E06_QUIZ_DEVICE_ID');
+  const quizDeviceBearer = required('E06_QUIZ_DEVICE_BEARER');
+  const provisioningPath = join(dir, 'provisioning.json');
+  writeFileSync(provisioningPath, JSON.stringify({
+    deviceId: quizDeviceId,
+    serialNumber: 'E06-REAL-STACK',
+    instituteProfileId: 'integration',
+    hallCode: 'E06-HALL',
+    hallDisplayName: 'E-06 Hall',
+    titlePattern: '{hall} – {date} {time}',
+    timezone: 'Asia/Colombo',
+    ntpServers: [],
+    expectedStorageVolumeUuid: 'e06-recordings',
+    featureFlags: { recordingEnabled: true, aiQuizEnabled: true, streamingEnabled: true },
+    quizServerBaseUrl: quizBaseUrl,
+    llmEndpoint: null,
+    provisionedAt: '2026-09-07T00:00:00.000Z',
+    provisionedBy: 'e06-real-stack',
+  }));
+
+  const pm = new FakePipelineManager({ bearerToken: internalBearer });
+  const ai = new FakeAiServices({ bearerToken: internalBearer });
+  const upload = new UploadFixtureServer();
+  const media = new FakeMediaTools();
+  const helper = new InMemoryHelperTransport();
+  const usbVolume: FakeBlockDevice = {
+    devicePath: '/dev/e06-usb', mountPath: join(dir, 'usb'), label: 'E-06 USB',
+    capacityBytes: 4_000_000, freeBytes: 3_000_000, usage: 'removable',
+  };
+  mkdirSync(usbVolume.mountPath, { recursive: true });
+  const usb = new FakeBlockDeviceMonitor([usbVolume]);
+  const [pmBaseUrl, aiBaseUrls, uploadBaseUrl] = await Promise.all([
+    pm.listen(), ai.listen(), upload.listen(),
+  ]);
+
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    CORE_API_HOST: '127.0.0.1',
+    CORE_API_DB_PATH: join(dir, 'core.db'),
+    CORE_API_RECORDINGS_ROOT: recordingsRoot,
+    CORE_API_RUNTIME_DIR: runtimeDir,
+    CORE_API_PROVISIONING_PATH: provisioningPath,
+    CORE_API_HELPER_SOCKET: join(dir, 'unused-helper.sock'),
+    CORE_API_PM_BASE_URL: pmBaseUrl,
+    CORE_API_INTERNAL_BEARER: internalBearer,
+    CORE_API_JWT_SECRET: required('E06_JWT_SECRET'),
+    CORE_API_SECRETBOX_KEY: required('E06_SECRETBOX_KEY'),
+  });
+
+  let app: FastifyInstance | null = null;
+  let port = 0;
+  let seeded = false;
+  let storage = { totalBytes: 1_000_000_000, freeBytes: 800_000_000 };
+  let relayFailure = false;
+  const relayCalls: unknown[] = [];
+  const start = async (): Promise<void> => {
+    if (app) return;
+    const next = await buildApp({
+      config,
+      clock: new SystemClock(),
+      ids: new UlidGenerator(),
+      mediaRunner: media,
+      blockDevices: usb as never,
+      uploadBaseUrl,
+      aiBaseUrls,
+      quizServiceBaseUrl: quizBaseUrl,
+      quizDeviceBearer,
+      helperTransport: helper,
+      storageStatfs: async () => storage,
+      relay: {
+        async activate(streamTargetIds) {
+          relayCalls.push({ action: 'activate', streamTargetIds });
+          if (relayFailure) throw new Error('relay activation failed');
+        },
+        async deactivate() {
+          relayCalls.push({ action: 'deactivate' });
+          if (relayFailure) throw new Error('relay deactivation failed');
+        },
+      },
+    });
+    await next.lifecycle.start();
+    if (!seeded) {
+      const now = new Date().toISOString();
+      const ids = new UlidGenerator();
+      await next.db.insert(users).values([
+        {
+          id: ids.next(new Date()), username: 'e06-lecturer', displayName: 'E-06 Lecturer', role: 'lecturer', source: 'local',
+          passwordHash: await hashPassword(required('E06_LECTURER_PASSWORD')), mustResetPassword: false, disabled: false, createdAt: now,
+        },
+        {
+          id: ids.next(new Date()), username: 'e06-admin', displayName: 'E-06 Admin', role: 'admin', source: 'local',
+          passwordHash: await hashPassword(required('E06_ADMIN_PASSWORD')), mustResetPassword: false, disabled: false, createdAt: now,
+        },
+        {
+          id: ids.next(new Date()), username: 'e06-reset', displayName: 'E-06 Reset', role: 'lecturer', source: 'local',
+          passwordHash: await hashPassword(required('E06_RESET_PASSWORD')), mustResetPassword: true, disabled: false, createdAt: now,
+        },
+        {
+          id: ids.next(new Date()), username: 'e06-disabled', displayName: 'E-06 Disabled', role: 'lecturer', source: 'local',
+          passwordHash: await hashPassword(required('E06_DISABLED_PASSWORD')), mustResetPassword: false, disabled: true, createdAt: now,
+        },
+      ]).run();
+      await next.db.insert(storageVolumes).values({
+        id: ids.next(new Date()), uuid: 'e06-recordings', devicePath: '/dev/e06-recordings', mountPath: recordingsRoot,
+        filesystem: 'ext4', capacityBytes: storage.totalBytes, freeBytes: storage.freeBytes,
+        smartStatus: 'good', role: 'recordings', state: 'mounted', registeredAt: now,
+      }).run();
+      seeded = true;
+    }
+    const address = await next.listen({ host: '127.0.0.1', port });
+    port = Number(new URL(address).port);
+    app = next;
+  };
+  const stop = async (): Promise<void> => {
+    const current = app;
+    app = null;
+    await current?.close();
+  };
+  await start();
+
+  const control = await listenControl(async (action, input) => {
+    const value = input as Record<string, unknown> | undefined;
+    switch (action) {
+      case 'core.capabilities':
+        return { actions: [
+          'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
+          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.upload', 'core.helper', 'core.relay', 'core.ledger',
+        ] };
+      case 'core.start':
+        await start();
+        return { running: true };
+      case 'core.stop':
+        await stop();
+        return { running: false };
+      case 'core.restart':
+      case 'core.ws.drop':
+        await stop();
+        await start();
+        return { running: true };
+      case 'core.pm.offline':
+        pm.setOffline(value?.offline === true);
+        return { offline: value?.offline === true };
+      case 'core.pm.publish':
+        return { sequence: pm.publish(String(value?.event ?? ''), value?.data ?? {}) };
+      case 'core.pm.response': {
+        const response = { status: Number(value?.status ?? 503), body: value?.body ?? {} };
+        const target = String(value?.target ?? '');
+        if (target === 'record') pm.queueRecordResponse(response);
+        else if (target === 'live') pm.queueLiveResponse(response);
+        else if (target === 'meeting') pm.queueMeetingResponse(response);
+        else if (target === 'binding') pm.queueBindingResponse(response);
+        else if (target === 'audio') pm.queueAudioResponse(response);
+        else if (target === 'projector') pm.queueProjectorResponse(response);
+        else throw new Error(`unknown PM response target: ${target}`);
+        return { queued: target };
+      }
+      case 'core.storage-pressure':
+        storage = { totalBytes: Number(value?.totalBytes), freeBytes: Number(value?.freeBytes) };
+        app?.storageProbe.setStatfs(async () => storage);
+        await app?.storageProbe.probe();
+        return storage;
+      case 'core.ai': {
+        const service = String(value?.service ?? 'question');
+        const offline = value?.offline === true;
+        if (service === 'stt') ai.setSttOffline(offline);
+        else if (service === 'slide') ai.setSlideOffline(offline);
+        else if (service === 'question') ai.setQuestionOffline(offline);
+        else throw new Error(`unknown AI service: ${service}`);
+        return { service, offline };
+      }
+      case 'core.upload':
+        if (value?.cutAtPatch !== undefined) upload.cutOnPatch(Number(value.cutAtPatch));
+        if (value?.failureStatus !== undefined) upload.failNextPatch(Number(value.failureStatus), String(value.error ?? 'failure'));
+        return { configured: true };
+      case 'core.helper':
+        helper.failureVerb = value?.failureVerb === null || value?.failureVerb === undefined ? null : String(value.failureVerb);
+        helper.hang = value?.hang === true;
+        return { configured: true };
+      case 'core.relay':
+        relayFailure = value?.fail === true;
+        return { fail: relayFailure };
+      case 'core.ledger':
+        return { pm: pm.calls, helper: helper.ledger, relay: relayCalls, ai: {
+          stt: ai.sttCalls, slide: ai.slideCalls, question: ai.questionCalls,
+        } };
+      default:
+        throw new Error(`unknown core control action: ${action}`);
+    }
+  });
+
+  process.stdout.write(`${JSON.stringify({
+    type: 'ready', service: 'core', baseUrl: `http://127.0.0.1:${String(port)}`, controlUrl: control.url,
+    fixtureIds: {
+      lecturerUsername: 'e06-lecturer', adminUsername: 'e06-admin',
+      resetUsername: 'e06-reset', disabledUsername: 'e06-disabled',
+    },
+  })}\n`);
+
+  let closing: Promise<void> | null = null;
+  const close = (): Promise<void> => closing ??= (async () => {
+    await new Promise<void>((resolve) => {
+      control.server.close(() => resolve());
+      control.server.closeAllConnections();
+    });
+    await stop();
+    await Promise.all([pm.close(), ai.close(), upload.close()]);
+    rmSync(dir, { recursive: true, force: true });
+  })();
+  process.once('SIGTERM', () => void close().then(() => process.exit(0)));
+  process.once('SIGINT', () => void close().then(() => process.exit(0)));
+}
+
+main().catch((error: unknown) => {
+  process.stdout.write(`${JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : String(error) })}\n`);
+  process.exitCode = 1;
+});
