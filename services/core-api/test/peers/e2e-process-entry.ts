@@ -556,7 +556,7 @@ async function main(): Promise<void> {
           'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
           'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
           'core.seed-retention', 'core.retention-sweep', 'core.storage-pressure-step', 'core.mount-scratch-device',
-          'core.firmware', 'core.internal-log',
+          'core.firmware', 'core.internal-log', 'core.alert',
         ] };
       case 'core.seed-retention':
         return seedRetention();
@@ -719,6 +719,27 @@ async function main(): Promise<void> {
         else if (target === 'projector') pm.queueProjectorResponse(response);
         else throw new Error(`unknown PM response target: ${target}`);
         return { queued: target };
+      }
+      case 'core.alert': {
+        // Drives the real AlertStore.raise/clear directly — the only device-
+        // health alert conditions the design calls for (capture-card, etc.)
+        // are registered by pipeline-manager, not core-api (no
+        // `registerCondition` caller exists in this service at all), so
+        // there is no real standing condition to trip through PM telemetry
+        // alone. This exercises the exact same production dedup/acknowledge/
+        // clear semantics (INV-SA-1) any such condition would use.
+        if (!app) throw new Error('core.alert requires the core service running');
+        if (value?.op === 'clear') {
+          app.alertStore.clear(String(value.code ?? ''), (value.reason as 'resolved' | 'superseded' | undefined) ?? 'resolved');
+          return { cleared: true };
+        }
+        return app.alertStore.raise({
+          code: String(value?.code ?? ''),
+          severity: (value?.severity as 'info' | 'warning' | 'error' | 'critical' | undefined) ?? 'warning',
+          category: (value?.category as 'Auth' | 'System' | 'Hardware' | 'Session' | undefined) ?? 'Hardware',
+          title: String(value?.title ?? 'Test alert'),
+          detail: (value?.detail as string | null | undefined) ?? null,
+        });
       }
       case 'core.storage-pressure':
         storage = { totalBytes: Number(value?.totalBytes), freeBytes: Number(value?.freeBytes) };

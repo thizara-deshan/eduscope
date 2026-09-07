@@ -522,13 +522,25 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('alertStore', alertStore);
 
   const execFileAsync = promisify(execFile);
+  // `DeviceHealth.deviceId` (openapi.yaml) is a ULID, so the placeholder
+  // string this used to hardcode unconditionally failed the real client's own
+  // response-schema validation (getDeviceHealth always threw a TransportError
+  // no test ever exercised through packages/api-client). Falling back to it
+  // only when provisioning genuinely isn't available yet preserves every
+  // existing not-yet-provisioned test harness unchanged.
+  let boundDeviceId = 'local-device';
+  try {
+    boundDeviceId = provisioningReader.read().deviceId;
+  } catch {
+    // not yet provisioned — keep the placeholder; nothing here may throw during construction.
+  }
   const healthAggregator = new HealthAggregator({
     get db(): DrizzleDb { return app.db; },
     clock,
     ids,
     bus,
     helper: helperClient,
-    deviceId: 'local-device',
+    deviceId: boundDeviceId,
     ntp: options.ntpReader ?? (config.nodeEnv === 'test'
       ? async () => ({ synced: true, offsetMs: 0 })
       : async () => {
