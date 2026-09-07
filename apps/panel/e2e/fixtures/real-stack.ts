@@ -25,6 +25,11 @@ export interface RealStack extends RealStackDescriptor {
     recordStarts: number; liveStarts: number; meetingStarts: number;
     processEvents: Array<{ consumerId: string; pgid: number | null; state: string }>;
   }>;
+  ledger(): Promise<{
+    helper: Array<{ verb: string }>;
+    pm: Array<{ method: string; path: string }>;
+    relay: unknown[];
+  }>;
 }
 
 function descriptor(): RealStackDescriptor {
@@ -95,6 +100,7 @@ export const test = base.extend<{ realStack: RealStack }>({
       },
       recordingAudit: () => control(stack, 'core.recording-audit'),
       processAudit: () => control(stack, 'core.process-audit'),
+      ledger: () => control(stack, 'core.ledger'),
     });
   },
 });
