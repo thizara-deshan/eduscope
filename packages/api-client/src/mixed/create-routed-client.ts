@@ -16,7 +16,6 @@ import {
 } from '@eduscope/shared';
 import type { EduscopeClient, PreviewChannel } from '../client.js';
 import {
-  createEmitter,
   type ConnectionStatus,
   type EventStream,
   type Unsubscribe,
@@ -30,6 +29,36 @@ import {
 } from './domains.js';
 
 export type DomainSelection = Record<AdapterDomain, AdapterKind>;
+
+/**
+ * Like `createEmitter`, but anything emitted before the FIRST subscriber
+ * attaches is buffered and flushed to that subscriber on `subscribe`. This is
+ * what lets the mock adapter's synchronous connect-snapshot (emitted while this
+ * router is still being constructed) reach the app, which subscribes a
+ * microtask later. Once a subscriber exists the buffer is dropped and it behaves
+ * as a plain fan-out emitter.
+ */
+function createBufferingEmitter<T>(): EventStream<T> & { emit(value: T): void; size(): number } {
+  const listeners = new Set<(value: T) => void>();
+  let buffer: T[] | null = [];
+  return {
+    subscribe(listener) {
+      const first = listeners.size === 0;
+      listeners.add(listener);
+      if (first && buffer) {
+        const pending = buffer;
+        buffer = null;
+        for (const value of pending) listener(value);
+      }
+      return () => { listeners.delete(listener); };
+    },
+    emit(value) {
+      if (buffer) buffer.push(value);
+      for (const l of [...listeners]) l(value);
+    },
+    size: () => listeners.size,
+  };
+}
 
 /** A connection status tagged with the domain it applies to. */
 export interface DomainConnection extends ConnectionStatus {
@@ -69,9 +98,18 @@ export function createRoutedClient(args: {
     return real;
   };
 
-  const events = createEmitter<EventEnvelope>();
-  const connection = createEmitter<ConnectionStatus>();
-  const connectionByDomain = createEmitter<DomainConnection>();
+  // The underlying mock adapter replays its whole connect snapshot SYNCHRONOUSLY
+  // the moment `wire()` subscribes to its `events$` — which happens here at
+  // construction, before the app has subscribed to the routed streams. A plain
+  // fan-out emitter would drop that snapshot (including the initial
+  // `recording.state`) onto zero listeners, leaving the app forever "checking
+  // recording status". These emitters instead buffer whatever is emitted before
+  // the first subscriber attaches and flush it on that first `subscribe`, so the
+  // snapshot survives the construction-then-subscribe gap. The real adapter is
+  // unaffected (its snapshot arrives asynchronously, after subscription).
+  const events = createBufferingEmitter<EventEnvelope>();
+  const connection = createBufferingEmitter<ConnectionStatus>();
+  const connectionByDomain = createBufferingEmitter<DomainConnection>();
   const subscriptions: Unsubscribe[] = [];
 
   const wire = (
