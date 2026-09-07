@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   const control = await listenControl(async (action, input) => {
     switch (action) {
       case 'quiz.capabilities':
-        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers'] };
+        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers', 'quiz.foreign-room'] };
       case 'quiz.start':
         await start();
         return { running: true };
@@ -206,6 +206,40 @@ async function main(): Promise<void> {
           submitted.push({ studentIdNumber, selectedOptionId, isCorrect });
         }
         return { publicationId: pub.id, submitted };
+      }
+      case 'quiz.foreign-room': {
+        // Plants a *different* device's room in D — its own open session,
+        // publication, student and answer with a distinctive identity — as bait,
+        // and has that foreign device attempt to hijack OUR lecture's session.
+        // A witness then proves D denies the cross-device attempt and that the
+        // foreign identity never bleeds into our room's names (cross-session
+        // isolation is structural: B only syncs its own session).
+        const running = app;
+        if (!running) throw new Error('quiz.foreign-room requires the quiz service running');
+        const ourLectureSessionId = String((input as { ourLectureSessionId?: unknown } | undefined)?.ourLectureSessionId ?? '');
+        const foreignDeviceId = '01K4A8E0600000000000000009';
+        const foreignBearer = 'e06-foreign-device-bearer-000000000000';
+        const foreignName = 'Zzz Foreign Intruder';
+        const foreignStudentIdNumber = 'IT99990001';
+        const options = JSON.stringify([{ id: 'fo1', label: 'A', text: 'a' }, { id: 'fo2', label: 'B', text: 'b' }]);
+        await running.sql`INSERT INTO devices (device_id, credential_hash, hall_display_name, enabled, created_at)
+          VALUES (${foreignDeviceId}, ${await hashDeviceCredential(foreignBearer)}, 'Foreign Hall', true, now()) ON CONFLICT (device_id) DO NOTHING`;
+        await running.sql`INSERT INTO quiz_sessions (id, lecture_session_id, device_id, hall_display_name, join_code, join_url, state, opened_at, next_answer_seq)
+          VALUES ('e06-foreign-session', 'e06-foreign-lecture', ${foreignDeviceId}, 'Foreign Hall', 'FGN00001', 'http://x/j/FGN00001', 'open', now(), 1) ON CONFLICT (id) DO NOTHING`;
+        await running.sql`INSERT INTO publications (id, quiz_session_id, question_id, prompt, options, correct_option_id, state, published_at)
+          VALUES ('e06-foreign-pub', 'e06-foreign-session', 'fq', 'Foreign question?', ${options}::jsonb, 'fo1', 'open', now()) ON CONFLICT (id) DO NOTHING`;
+        await running.sql`INSERT INTO students (id, student_id_number, full_name, auth_method, created_at, last_seen_at)
+          VALUES ('e06-foreign-student', ${foreignStudentIdNumber}, ${foreignName}, 'self-registered', now(), now()) ON CONFLICT (id) DO NOTHING`;
+        await running.sql`INSERT INTO participants (id, quiz_session_id, student_id, joined_at, last_seen_at, connection_state)
+          VALUES ('e06-foreign-part', 'e06-foreign-session', 'e06-foreign-student', now(), now(), 'online') ON CONFLICT (id) DO NOTHING`;
+        await running.sql`INSERT INTO answers (id, quiz_session_id, publication_id, student_id, selected_option_id, is_correct, points_awarded, response_time_ms, submitted_at, seq)
+          VALUES ('e06-foreign-answer', 'e06-foreign-session', 'e06-foreign-pub', 'e06-foreign-student', 'fo1', true, 10, 1000, now(), 1) ON CONFLICT (id) DO NOTHING`;
+        // The foreign device tries to seize OUR lecture's open session.
+        const attempt = await fetch(`${baseUrl}/device/v1/quiz-sessions`, {
+          method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${foreignBearer}` },
+          body: JSON.stringify({ lectureSessionId: ourLectureSessionId, deviceId: foreignDeviceId, hallDisplayName: 'Foreign Hall' }),
+        });
+        return { foreignName, foreignStudentIdNumber, crossDeviceStatus: attempt.status };
       }
       case 'quiz.publication-audit': {
         // Counts the durable publication rows D has actually stored (optionally
