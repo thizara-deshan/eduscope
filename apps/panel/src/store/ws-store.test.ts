@@ -194,4 +194,24 @@ describe('ws store — domain-scoped resync reset (E-03)', () => {
     useWsStore.getState().resetDomains(['recording', 'alerts']);
     expect(Object.keys(useWsStore.getState())).not.toContain('pendingCommands');
   });
+
+  it('E-09: setDomainConnection keys per-domain status without touching the global connection/stale flags', () => {
+    const s = useWsStore.getState();
+    s.setConnection({ phase: 'open', attempt: 0, since: '2026-07-30T09:00:00+00:00' });
+    s.setDomainConnection('alerts', { phase: 'stale', attempt: 3, since: '2026-07-30T09:00:10+00:00' });
+    const after = useWsStore.getState();
+    expect(after.connectionByDomain.alerts?.phase).toBe('stale');
+    expect(after.connectionByDomain.recording).toBeUndefined();
+    // A degraded real domain must never flip the (still-open) global flag.
+    expect(after.stale).toBe(false);
+  });
+
+  it('E-09: setDomainConnection tracks each domain independently', () => {
+    const s = useWsStore.getState();
+    s.setDomainConnection('alerts', { phase: 'stale', attempt: 3, since: '2026-07-30T09:00:10+00:00' });
+    s.setDomainConnection('provisioningHealth', { phase: 'open', attempt: 0, since: '2026-07-30T09:00:10+00:00' });
+    const after = useWsStore.getState();
+    expect(after.connectionByDomain.alerts?.phase).toBe('stale');
+    expect(after.connectionByDomain.provisioningHealth?.phase).toBe('open');
+  });
 });

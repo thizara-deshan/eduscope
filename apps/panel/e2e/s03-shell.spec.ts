@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: import('@playwright/test').Page) {
   await page.goto('/login');
@@ -146,4 +147,118 @@ test.describe('S-03 Panel shell, chrome & alert host', () => {
     await expect(page).toHaveURL(/\/login\/reset$/);
     await expect(page.locator('.us-header')).toHaveCount(0);
   });
+});
+
+realTest.describe('S-03 Panel shell, chrome & alert host — real', () => {
+  realTest(
+    'real: recording chrome stays mock-backed alongside real alerts/provisioningHealth, and a real alert appears and acknowledges over REST',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(60_000);
+
+      // Note on scope: this screen's real witness deliberately does not drive
+      // a genuine dropped real WebSocket end-to-end through the browser. A
+      // targeted repro (a raw in-page `new WebSocket(...)` against a stopped
+      // real-stack server) showed `page.evaluate` itself hang for the full
+      // test timeout the instant the connection attempt fails — Chromium's
+      // CDP-driven renderer appears to stall on a failed WS connect
+      // regardless of browser version (reproduced on both this sandbox's
+      // system Chromium 114 and a freshly installed 152). The app's own
+      // reconnect/backoff/stale logic for that same real adapter code is
+      // already covered end-to-end at the unit level, against a real fake
+      // WebSocket transport, in packages/api-client/test/real/panel-ws.test.ts
+      // (E-03) — this witness instead covers what IS safely drivable through
+      // a live browser: per-domain routing (mock recording vs. real
+      // alerts/provisioningHealth) and a genuine alert raised and
+      // acknowledged over real REST.
+
+      // `alerts`/`provisioningHealth` share the one real panel socket;
+      // `recording` (and everything else) stays mock so this proves a mixed
+      // selection never lets a mock domain masquerade as real or vice versa.
+      await page.route('**/config.json', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            apiBaseUrl: realStack.coreBaseUrl,
+            quizBaseUrl: realStack.quizTlsBaseUrl ?? realStack.quizBaseUrl,
+            environment: 'integration',
+            adapters: {
+              default: 'mock',
+              overrides: { auth: 'real', alerts: 'real', provisioningHealth: 'real' },
+            },
+          }),
+        });
+      });
+
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page).toHaveURL('/');
+
+      // A concrete mock-backed recording, unaffected by the real domains
+      // beside it.
+      const hotspot = page.getByTestId('scenario-hotspot');
+      const box = await hotspot.boundingBox();
+      if (!box) throw new Error('scenario hotspot has no box — is the mock client active?');
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.waitForTimeout(2_200);
+      await page.mouse.up();
+      await expect(page.getByRole('dialog', { name: /scenario/i })).toBeVisible();
+      await page.getByTestId('e2e-start-recording').click();
+      await expect(page.getByTestId('recording-frame')).toBeVisible({ timeout: 6_000 });
+      await page.getByRole('button', { name: /close scenarios/i }).click();
+      await expect(page.getByTestId('recording-frame')).not.toHaveClass(/--paused|--saving/);
+      await expect(page.getByTestId('recording-notch')).toContainText('RECORDING');
+      // No offline marker while the real socket is healthy, confirming the
+      // marker reflects genuine (real) connection state, not a fixed value.
+      await expect(page.getByTestId('offline-marker')).toHaveCount(0);
+
+      // Raise a genuine real alert (INV-SA-1 network.apply-failed): make the
+      // allowlisted helper verb fail, then trigger it via a real, admin-only
+      // updateNetworkConfig call (out of band from the signed-in lecturer
+      // session — this only needs the server-side condition to exist).
+      await realStack.control('core.helper', { failureVerb: 'net.apply' });
+      const adminLogin = await fetch(`${realStack.coreBaseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: REAL_STACK_ACCOUNTS.admin.username,
+          password: REAL_STACK_ACCOUNTS.admin.password,
+          client: 'panel',
+        }),
+      });
+      const { tokens: adminTokens } = await adminLogin.json() as { tokens: { accessToken: string } };
+      const configs = await fetch(`${realStack.coreBaseUrl}/settings/network`, {
+        headers: { authorization: `Bearer ${adminTokens.accessToken}` },
+      });
+      const { items } = await configs.json() as { items: { id: string; interfaceName: string }[] };
+      const target = items[0]!;
+      await fetch(`${realStack.coreBaseUrl}/settings/network/${target.id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${adminTokens.accessToken}` },
+        body: JSON.stringify({ kind: 'lan', addressMode: 'dhcp', dnsServers: [] }),
+      });
+
+      await page.getByRole('button', { name: /^Notifications,/ }).click();
+      await expect(page.getByRole('dialog', { name: 'Notifications' })).toContainText(
+        `Network settings failed to apply for ${target.interfaceName}`,
+      );
+      await page.getByRole('button', { name: /^Acknowledge/ }).click();
+
+      // The click dismisses it from this client's own list locally; prove the
+      // acknowledgement itself reached the server (INV-SA-1: it never clears).
+      await expect
+        .poll(async () => {
+          const after = await fetch(`${realStack.coreBaseUrl}/alerts`, {
+            headers: { authorization: `Bearer ${adminTokens.accessToken}` },
+          });
+          const { items: alerts } = await after.json() as { items: { code: string; acknowledgedBy: string | null }[] };
+          return alerts.find((a) => a.code === 'network.apply-failed')?.acknowledgedBy ?? null;
+        })
+        .not.toBeNull();
+    },
+  );
 });

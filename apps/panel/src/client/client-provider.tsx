@@ -123,6 +123,7 @@ export function ClientProvider({
       let scheduled = false;
       offs.push(
         routed.connectionByDomain$.subscribe((dc) => {
+          useWsStore.getState().setDomainConnection(dc.domain, dc);
           if (!dc.resyncReason) return;
           resyncDomains.add(dc.domain);
           if (scheduled) return;

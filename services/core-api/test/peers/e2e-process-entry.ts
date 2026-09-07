@@ -198,6 +198,13 @@ async function main(): Promise<void> {
   const stop = async (): Promise<void> => {
     const current = app;
     app = null;
+    // `lifecycle.stop()` is what actually tears down long-lived state — most
+    // relevantly here, `PanelHub.stop()` explicitly closes every open panel
+    // WS connection (code 1001). Fastify's own `close()` stops accepting new
+    // connections and drains in-flight HTTP requests, but never touches an
+    // already-upgraded WebSocket; skipping this left every real-stack
+    // `core.stop`/`core.ws.drop` leaving prior panel sockets connected.
+    await current?.lifecycle.stop();
     await current?.close();
   };
   await start();

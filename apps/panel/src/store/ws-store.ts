@@ -59,9 +59,18 @@ export interface WsState {
   needsResync: boolean;
   /** U-2: disconnected longer than T-WS-STALE — dim live regions. */
   stale: boolean;
+  /**
+   * E-09: one connection status per domain the panel currently owns (mock
+   * domains report their own, trivially-open, status). Selected-domain
+   * regions can read their own status instead of the shared/global one —
+   * an unaffected mock region must never render offline because an
+   * unrelated real domain's shared socket dropped.
+   */
+  connectionByDomain: Partial<Record<AdapterDomain, ConnectionStatus>>;
 
   ingest(envelope: EventEnvelope): void;
   setConnection(status: ConnectionStatus): void;
+  setDomainConnection(domain: AdapterDomain, status: ConnectionStatus): void;
   setExpectedShutdown(value: boolean): void;
   clearResync(): void;
   /**
@@ -80,11 +89,12 @@ const EMPTY = {
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
   firmware: null, logTail: [], deviceHealthAt: null,
-  connection: null, needsResync: false, stale: false,
+  connection: null, needsResync: false, stale: false, connectionByDomain: {},
 } satisfies Omit<
   WsState,
   | 'ingest'
   | 'setConnection'
+  | 'setDomainConnection'
   | 'setExpectedShutdown'
   | 'clearResync'
   | 'resetDomains'
@@ -198,6 +208,10 @@ export const useWsStore = create<WsState>((set, get) => ({
   setConnection(status) {
     // U-2: dim live regions, KEEP the recording slice — see store/connection.ts.
     set({ connection: status, stale: isStale(status, get().expectedShutdown) });
+  },
+
+  setDomainConnection(domain, status) {
+    set({ connectionByDomain: { ...get().connectionByDomain, [domain]: status } });
   },
 
   setExpectedShutdown(value) {

@@ -89,7 +89,13 @@ export function createRoutedClient(args: {
     );
     subscriptions.push(
       client.connection$.subscribe((status) => {
-        connection.emit(status);
+        // The mock adapter's connection is trivially always open and carries
+        // no meaning to a user — only the real backend's status may drive the
+        // single GLOBAL projection (E-09), or a mixed selection's mock status
+        // would intermittently clobber a genuinely degraded real one. Every
+        // selected domain, mock included, still gets its OWN per-domain
+        // status on `connectionByDomain$`.
+        if (kind === 'real') connection.emit(status);
         for (const domain of ownedDomains) {
           connectionByDomain.emit({ ...status, domain, kind });
         }

@@ -251,6 +251,26 @@ describe('createRoutedClient routing', () => {
     routed.dispose();
   });
 
+  it('E-09: the global connection$ reflects only the real adapter — mock never clobbers a degraded real status', () => {
+    const mock = fakeClient('mock');
+    const real = fakeClient('real');
+    const selection = selectAll('mock');
+    selection.alerts = 'real';
+
+    const routed = createRoutedClient({ mock: mock.client, real: real.client, selection });
+    const seen: string[] = [];
+    const off = routed.connection$.subscribe((s) => seen.push(s.phase));
+
+    real.connection.emit({ phase: 'open', attempt: 0, since: 'now' });
+    real.connection.emit({ phase: 'stale', attempt: 3, since: 'now' });
+    mock.connection.emit({ phase: 'open', attempt: 0, since: 'now' });
+
+    expect(seen).toEqual(['open', 'stale']);
+
+    off();
+    routed.dispose();
+  });
+
   it('disposes and unsubscribes both underlying clients exactly once', () => {
     const mock = fakeClient('mock');
     const real = fakeClient('real');

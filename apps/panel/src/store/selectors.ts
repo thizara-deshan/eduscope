@@ -1,5 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
+import type { AdapterDomain } from '@eduscope/api-client';
 import type { SourceRoleId, SystemAlert } from '@eduscope/shared';
+import { isStale } from './connection.js';
 import { useWsStore, type WsState } from './ws-store.js';
 
 /**
@@ -20,6 +22,15 @@ export const useWsShallow = <T>(selector: (s: WsState) => T): T =>
 export const useRecordingState = () => useWsStore((s) => s.recording?.state ?? 'idle');
 export const useRecordingSession = () => useWsStore((s) => s.recording);
 export const useIsStale = () => useWsStore((s) => s.stale);
+/** E-09: one domain's own connection status — undefined until its first event/status arrives. */
+export const useDomainConnection = (domain: AdapterDomain) =>
+  useWsStore((s) => s.connectionByDomain[domain]);
+/** E-09: U-2 scoped to a single domain — a mock-selected domain is never stale. */
+export const useIsDomainStale = (domain: AdapterDomain) =>
+  useWsStore((s) => {
+    const status = s.connectionByDomain[domain];
+    return status ? isStale(status, s.expectedShutdown) : false;
+  });
 export const useNeedsResync = () => useWsStore((s) => s.needsResync);
 export const useConnectionPhase = () => useWsStore((s) => s.connection?.phase ?? 'connecting');
 export const useStoragePressure = () => useWsStore((s) => s.storage?.pressure ?? 'ok');
