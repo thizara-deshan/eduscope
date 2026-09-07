@@ -30,6 +30,8 @@ export class UploadFixtureServer {
   }
   cutOnPatch(number: number): void { this.#cutAtPatch = number; }
   failNextPatch(status: number, error = 'checksum-mismatch'): void { this.#nextPatchFailure = { status, error }; }
+  /** Resets the PATCH counter and any pending fault so a cutOnPatch(n) is counted from a clean slate — the global counter otherwise carries across independent test uploads. */
+  resetFaults(): void { this.#patches = 0; this.#cutAtPatch = undefined; this.#nextPatchFailure = undefined; }
   async close(): Promise<void> { if (this.#server) { this.#server.close(); await once(this.#server, 'close'); } }
 
   async #handle(request: IncomingMessage, reply: ServerResponse): Promise<void> {

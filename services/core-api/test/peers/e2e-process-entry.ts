@@ -418,6 +418,68 @@ async function main(): Promise<void> {
     return { readyRecordingId: recA, readyFileId: fileA, failedRecordingId: recB, inFlightRecordingId: recC };
   };
 
+  // Seeds an S-35 upload fixture: a ready, merge-done recording with a real
+  // uploadable file the real upload scheduler will genuinely stream to the
+  // upload fixture server. `deadLetter` additionally enqueues it and parks it
+  // dead-letter so the requeue path can be driven live.
+  const seededUpload = { recordingIds: [] as string[], sessionIds: [] as string[] };
+  const seedUpload = (sizeBytes: number, deadLetter: boolean): unknown => {
+    const current = app;
+    if (!current) throw new Error('core.seed-upload requires the core service running');
+    const db = current.db;
+    const lecturer = db.select().from(users).where(eq(users.username, 'e06-lecturer')).get();
+    if (!lecturer) throw new Error('core.seed-upload: seeded lecturer is missing');
+
+    if (seededUpload.recordingIds.length > 0) {
+      const priorJobs = db.select({ id: uploadJobs.id }).from(uploadJobs).where(inArray(uploadJobs.recordingId, seededUpload.recordingIds)).all().map((row) => row.id);
+      if (priorJobs.length > 0) db.delete(uploadFileParts).where(inArray(uploadFileParts.uploadJobId, priorJobs)).run();
+      db.delete(uploadJobs).where(inArray(uploadJobs.recordingId, seededUpload.recordingIds)).run();
+      db.delete(recordingFiles).where(inArray(recordingFiles.recordingId, seededUpload.recordingIds)).run();
+      db.delete(recordings).where(inArray(recordings.id, seededUpload.recordingIds)).run();
+      db.delete(lectureSessions).where(inArray(lectureSessions.id, seededUpload.sessionIds)).run();
+    }
+    seededUpload.recordingIds = [];
+    seededUpload.sessionIds = [];
+
+    const ids = new UlidGenerator();
+    const startedAt = new Date(Date.now() - 3_600_000).toISOString();
+    const retentionDeleteAfter = new Date(Date.now() + 365 * 86_400_000).toISOString();
+    const sesId = ids.next(new Date(startedAt));
+    const recId = ids.next(new Date(startedAt));
+    const fileId = ids.next(new Date(startedAt));
+    db.insert(lectureSessions).values({
+      id: sesId, title: deadLetter ? 'Dead Letter Upload Lecture' : 'Resumable Upload Lecture', hallCode: 'E06-HALL',
+      hallDisplayName: 'E-06 Hall', deviceId: 'e34-device', ownerUserId: lecturer.id, startedByActor: 'user',
+      state: 'completed', startedAt, endedAt: startedAt, recordedDurationMs: 4_000, pauseCount: 0,
+      channelActivations: [], sourceSnapshot: {}, aiEnabledAtStart: false,
+    }).run();
+    const filePath = join(recordingsRoot, `${recId}-main.mp4`);
+    writeFileSync(filePath, Buffer.alloc(sizeBytes, 3));
+    db.insert(recordings).values({
+      id: recId, sessionId: sesId, ownerUserId: lecturer.id, state: 'ready', layoutPresetId: 'pc-only',
+      durationMs: 4_000, totalBytes: sizeBytes, segmentCount: 1, mergeState: 'done',
+      retentionDeleteAfter, playbackAuthRequired: true,
+    }).run();
+    db.insert(recordingFiles).values({
+      id: fileId, recordingId: recId, segmentId: null, kind: 'derived', streamKey: 'main', path: filePath,
+      container: 'mp4', sizeBytes, durationMs: 4_000, checksum: null, state: 'finalized', hasAudio: true, isUploadable: true,
+    }).run();
+    seededUpload.sessionIds.push(sesId);
+    seededUpload.recordingIds.push(recId);
+
+    let jobId: string | null = null;
+    if (deadLetter) {
+      // Create the real job + parts through the machine, then park it
+      // dead-letter (the scheduler never picks a dead-letter job, so it waits
+      // for the manual requeue).
+      jobId = current.uploadScheduler.machine.enqueue(recId);
+      if (jobId) {
+        db.update(uploadJobs).set({ state: 'dead-letter', failureClass: 'permanent', attempt: 2, lastError: 'checksum-mismatch', lastErrorAt: startedAt, nextAttemptAt: null }).where(eq(uploadJobs.id, jobId)).run();
+      }
+    }
+    return { recordingId: recId, sessionId: sesId, fileId, jobId };
+  };
+
   const control = await listenControl(async (action, input) => {
     const value = input as Record<string, unknown> | undefined;
     switch (action) {
@@ -427,7 +489,37 @@ async function main(): Promise<void> {
           'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
           'core.seed-recordings', 'core.publish-upload-job', 'core.seed-detail',
           'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
+          'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
         ] };
+      case 'core.upload-retry-now':
+        // Brings a failed job's retry due now (the real connectivity backoff is
+        // minutes) and wakes the scheduler — the device coming back online.
+        if (!app) throw new Error('core.upload-retry-now requires the core service running');
+        app.db.update(uploadJobs).set({ nextAttemptAt: new Date().toISOString() }).where(eq(uploadJobs.recordingId, String(value?.recordingId ?? ''))).run();
+        app.uploadScheduler.wake();
+        return { woken: true };
+      case 'core.seed-upload':
+        return seedUpload(Number(value?.sizeBytes ?? 4_096), value?.deadLetter === true);
+      case 'core.upload-enqueue-ready':
+        // The real finalized-recording trigger the scheduler listens for —
+        // enqueues and starts the genuine upload.
+        if (!app) throw new Error('core.upload-enqueue-ready requires the core service running');
+        app.bus.publish('artifact.ready', { recordingId: String(value?.recordingId ?? ''), sessionId: String(value?.sessionId ?? '') });
+        return { published: true };
+      case 'core.upload-audit': {
+        // The durable upload-job + per-part byte offsets, so a witness can prove
+        // a connectivity failure spent no attempt and a restart resumed from a
+        // non-zero byte offset (KEEP B-27/B-28).
+        if (!app) throw new Error('core.upload-audit requires the core service running');
+        const recordingId = String(value?.recordingId ?? '');
+        const job = app.db.select().from(uploadJobs).where(eq(uploadJobs.recordingId, recordingId)).get();
+        if (!job) return { found: false };
+        const parts = app.db.select().from(uploadFileParts).where(eq(uploadFileParts.uploadJobId, job.id)).all();
+        return {
+          found: true, jobId: job.id, state: job.state, attempt: job.attempt, failureClass: job.failureClass,
+          parts: parts.map((part) => ({ state: part.state, bytesSent: Number(part.bytesSent), bytesTotal: Number(part.bytesTotal) })),
+        };
+      }
       case 'core.delete-audit': {
         // The durable delete-audit row for a recording, resolved to the actor's
         // username — proves KEEP B-33's "audit actor equals the admin", never a
@@ -556,6 +648,7 @@ async function main(): Promise<void> {
         return { queued: count };
       }
       case 'core.upload':
+        if (value?.reset === true) upload.resetFaults();
         if (value?.cutAtPatch !== undefined) upload.cutOnPatch(Number(value.cutAtPatch));
         if (value?.failureStatus !== undefined) upload.failNextPatch(Number(value.failureStatus), String(value.error ?? 'failure'));
         return { configured: true };
