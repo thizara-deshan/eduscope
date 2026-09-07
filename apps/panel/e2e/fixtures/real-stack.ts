@@ -11,6 +11,7 @@ interface RealStackDescriptor {
 /** Fixed, non-secret credentials seeded by `packages/api-client/test/real/fixtures/core-peer.ts`. */
 export const REAL_STACK_ACCOUNTS = {
   lecturer: { username: 'e06-lecturer', password: 'E06LecturerPass1!' },
+  other: { username: 'e06-other', password: 'E06OtherLecturerPass1!' },
   admin: { username: 'e06-admin', password: 'E06AdminPassphrase1!' },
   reset: { username: 'e06-reset', password: 'E06ResetPassphrase1!' },
   disabled: { username: 'e06-disabled', password: 'E06DisabledPassphrase1!' },

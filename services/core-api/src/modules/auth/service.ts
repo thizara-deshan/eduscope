@@ -125,7 +125,7 @@ export class AuthService {
       throw INVALID_CREDENTIALS();
     }
     if (sessionRow.revokedAt) {
-      throw new ProblemError(401, 'auth.session-revoked', 'Session has been revoked');
+      throw sessionRevoked(sessionRow.revokedReason);
     }
     if (sessionRow.expiresAt <= nowIso) {
       await this.#writer.run('auth.refresh.expire', () => {
@@ -134,7 +134,7 @@ export class AuthService {
           .where(eq(authSessions.id, sessionRow.id))
           .run();
       });
-      throw new ProblemError(401, 'auth.session-revoked', 'Session has been revoked');
+      throw sessionRevoked('expiry');
     }
 
     const userRow = db.select().from(users).where(eq(users.id, sessionRow.userId)).get();
@@ -175,7 +175,7 @@ export class AuthService {
   async getMe(userId: string): Promise<SafeUser> {
     const userRow = this.#deps.db.select().from(users).where(eq(users.id, userId)).get();
     if (!userRow) {
-      throw new ProblemError(401, 'auth.session-revoked', 'Session has been revoked');
+      throw sessionRevoked();
     }
     return toSafeUser(userRow);
   }
@@ -205,7 +205,7 @@ export class AuthService {
     const { db } = this.#deps;
     const sessionRow = db.select().from(authSessions).where(eq(authSessions.id, claims.sid)).get();
     if (!sessionRow || sessionRow.revokedAt || sessionRow.expiresAt <= this.#deps.clock.now().toISOString()) {
-      throw new ProblemError(401, 'auth.session-revoked', 'Session has been revoked');
+      throw sessionRevoked(sessionRow?.revokedReason ?? (sessionRow ? 'expiry' : null));
     }
 
     const userRow = db.select().from(users).where(eq(users.id, sessionRow.userId)).get();
@@ -224,4 +224,9 @@ export class AuthService {
   #signAccessToken(claims: AccessTokenClaims): string {
     return this.#deps.jwt.sign(claims);
   }
+}
+function sessionRevoked(reason: 'logout' | 'takeover' | 'admin' | 'expiry' | null = null): ProblemError {
+  return new ProblemError(401, 'auth.session-revoked', 'Session has been revoked', {
+    meta: { reason: reason === 'expiry' ? 'expired' : reason ?? 'admin' },
+  });
 }

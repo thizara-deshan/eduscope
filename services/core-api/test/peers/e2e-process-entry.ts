@@ -173,6 +173,10 @@ async function main(): Promise<void> {
           passwordHash: await hashPassword(required('E06_LECTURER_PASSWORD')), mustResetPassword: false, disabled: false, createdAt: now,
         },
         {
+          id: ids.next(new Date()), username: 'e06-other', displayName: 'E-06 Other Lecturer', role: 'lecturer', source: 'local',
+          passwordHash: await hashPassword(required('E06_OTHER_PASSWORD')), mustResetPassword: false, disabled: false, createdAt: now,
+        },
+        {
           id: ids.next(new Date()), username: 'e06-admin', displayName: 'E-06 Admin', role: 'admin', source: 'local',
           passwordHash: await hashPassword(required('E06_ADMIN_PASSWORD')), mustResetPassword: false, disabled: false, createdAt: now,
         },
@@ -301,6 +305,13 @@ async function main(): Promise<void> {
           liveStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/live').length,
           meetingStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/meeting').length,
         };
+      case 'core.takeover-audit': {
+        const sessions = app?.db.select().from(lectureSessions).all() ?? [];
+        return { sessions: sessions.map((session) => ({
+          id: session.id, ownerUserId: session.ownerUserId, takeoverBy: session.takeoverBy,
+          takeoverAt: session.takeoverAt, state: session.state,
+        })) };
+      }
       default:
         throw new Error(`unknown core control action: ${action}`);
     }

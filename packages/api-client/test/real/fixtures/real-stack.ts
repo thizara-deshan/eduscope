@@ -7,6 +7,7 @@ import { startQuizPeer, type QuizPeerReady } from './quiz-peer.js';
 
 export const REAL_STACK_ACCOUNTS = {
   lecturer: { username: 'e06-lecturer', password: 'E06LecturerPass1!' },
+  other: { username: 'e06-other', password: 'E06OtherLecturerPass1!' },
   admin: { username: 'e06-admin', password: 'E06AdminPassphrase1!' },
   reset: { username: 'e06-reset', password: 'E06ResetPassphrase1!' },
   disabled: { username: 'e06-disabled', password: 'E06DisabledPassphrase1!' },
@@ -111,6 +112,7 @@ export async function startRealStack(): Promise<RealStackHandle> {
       E06_JWT_SECRET: `e06-jwt-${nonce}`,
       E06_SECRETBOX_KEY: `e06-secretbox-${nonce}`,
       E06_LECTURER_PASSWORD: REAL_STACK_ACCOUNTS.lecturer.password,
+      E06_OTHER_PASSWORD: REAL_STACK_ACCOUNTS.other.password,
       E06_ADMIN_PASSWORD: REAL_STACK_ACCOUNTS.admin.password,
       E06_RESET_PASSWORD: REAL_STACK_ACCOUNTS.reset.password,
       E06_DISABLED_PASSWORD: REAL_STACK_ACCOUNTS.disabled.password,
@@ -146,6 +148,7 @@ export async function startPanelRealStack(): Promise<RealStackHandle> {
     E06_JWT_SECRET: `e06-jwt-${nonce}`,
     E06_SECRETBOX_KEY: `e06-secretbox-${nonce}`,
     E06_LECTURER_PASSWORD: REAL_STACK_ACCOUNTS.lecturer.password,
+    E06_OTHER_PASSWORD: REAL_STACK_ACCOUNTS.other.password,
     E06_ADMIN_PASSWORD: REAL_STACK_ACCOUNTS.admin.password,
     E06_RESET_PASSWORD: REAL_STACK_ACCOUNTS.reset.password,
     E06_DISABLED_PASSWORD: REAL_STACK_ACCOUNTS.disabled.password,
