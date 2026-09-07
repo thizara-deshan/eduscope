@@ -81,6 +81,29 @@ describe('useAddQuestion', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
+  it('the 202 accept never closes the dialog, and a generated echo is ignored — only the lecturer-authored draft does', () => {
+    const { hook, onSaved } = build();
+    act(() => hook.result.current.setPrompt('Which layer routes packets?'));
+    act(() => hook.result.current.setChoice(0, 'Network'));
+    act(() => hook.result.current.setChoice(1, 'Physical'));
+    act(() => hook.result.current.save());
+    // The command resolved its 202 synchronously; the dialog must stay open.
+    expect(hook.result.current.saving).toBe(true);
+    expect(onSaved).not.toHaveBeenCalled();
+    // A concurrent generated draft echo is not this lecturer's question.
+    act(() => useWsStore.getState().ingest(envelope('ai.question', {
+      questionId: 'gen1', setId: 'set1', state: 'draft', provenance: 'generated', edited: false,
+    }, 0)));
+    expect(hook.result.current.saving).toBe(true);
+    expect(onSaved).not.toHaveBeenCalled();
+    // The lecturer-authored draft echo (the server's re-read cue) closes it.
+    act(() => useWsStore.getState().ingest(envelope('ai.question', {
+      questionId: 'mine1', setId: null, state: 'draft', provenance: 'lecturer-authored', edited: false,
+    }, 1)));
+    expect(hook.result.current.saving).toBe(false);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
   it('rejected (422/409): a rejected save keeps the form intact', async () => {
     const refusal = new ProblemError({ status: 422, code: 'validation.invalid', title: 'Invalid question' });
     const { hook } = build({ createQuestion: vi.fn(() => Promise.reject(refusal)) });

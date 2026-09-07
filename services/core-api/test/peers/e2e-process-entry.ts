@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { audioControls, lectureSessions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
+import { auditLogEntries, audioControls, lectureSessions, questions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
       case 'core.capabilities':
         return { actions: [
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
-          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger',
+          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit',
         ] };
       case 'core.start':
         await start();
@@ -336,6 +336,20 @@ async function main(): Promise<void> {
           liveStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/live').length,
           meetingStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/meeting').length,
         };
+      case 'core.question-audit': {
+        // Every question row with its create-audit actor, so an S-15 witness
+        // can prove a lecturer-authored draft carries `lecturer-authored`
+        // provenance and a user-actor audit row — and that a server-refused
+        // invalid submit left zero rows behind.
+        const rows = app?.db.select().from(questions).all() ?? [];
+        const audits = (app?.db.select().from(auditLogEntries).all() ?? [])
+          .filter((entry) => entry.entityType === 'question' && entry.action === 'create');
+        const createByEntity = new Map(audits.map((entry) => [entry.entityId, { actorUserId: entry.actorUserId, actorKind: entry.actorKind }]));
+        return { questions: rows.map((row) => ({
+          id: row.id, provenance: row.provenance, state: row.state, createdBy: row.createdBy,
+          createAudit: createByEntity.get(row.id) ?? null,
+        })) };
+      }
       case 'core.takeover-audit': {
         const sessions = app?.db.select().from(lectureSessions).all() ?? [];
         return { sessions: sessions.map((session) => ({
