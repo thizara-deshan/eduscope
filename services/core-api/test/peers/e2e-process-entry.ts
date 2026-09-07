@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
 import { eq, inArray } from 'drizzle-orm';
-import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordings, recordingSegments, storageVolumes, uploadJobs, users } from '../../src/db/schema.js';
+import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordingFiles, recordings, recordingSegments, storageVolumes, uploadJobs, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -304,6 +304,88 @@ async function main(): Promise<void> {
     return { lecturerId: lecturer.id, otherId: other.id, pageSize, lecturerTotal, uploadingRecordingId, uploadJobId, otherTitles, filterTitle };
   };
 
+  // Seeds the two S-22 detail fixtures against the real DB and real on-disk
+  // media: one `ready` recording with a playable merged file (real
+  // authenticated Range/blob transport), and one `failed`-merge recording with
+  // a real finalized segment the real merge worker can genuinely re-run
+  // (FakeMediaTools' ffmpeg succeeds, so a retry converges to `ready`).
+  const seededDetail = { recordingIds: [] as string[], sessionIds: [] as string[] };
+  const seedDetail = (): unknown => {
+    const current = app;
+    if (!current) throw new Error('core.seed-detail requires the core service running');
+    const db = current.db;
+    const lecturer = db.select().from(users).where(eq(users.username, 'e06-lecturer')).get();
+    if (!lecturer) throw new Error('core.seed-detail: seeded lecturer is missing');
+
+    if (seededDetail.recordingIds.length > 0) {
+      db.delete(recordingFiles).where(inArray(recordingFiles.recordingId, seededDetail.recordingIds)).run();
+      db.delete(recordingSegments).where(inArray(recordingSegments.recordingId, seededDetail.recordingIds)).run();
+      db.delete(recordings).where(inArray(recordings.id, seededDetail.recordingIds)).run();
+      db.delete(lectureSessions).where(inArray(lectureSessions.id, seededDetail.sessionIds)).run();
+    }
+    seededDetail.recordingIds = [];
+    seededDetail.sessionIds = [];
+
+    const ids = new UlidGenerator();
+    // Recent so that when the real merge worker re-runs on the failed recording
+    // and recomputes retentionDeleteAfter from the session's endedAt, the new
+    // deadline lands in the future — otherwise the retention sweep deletes the
+    // just-merged recording.
+    const startedAt = new Date(Date.now() - 3_600_000).toISOString();
+    const retentionDeleteAfter = new Date(Date.now() + 365 * 86_400_000).toISOString();
+
+    const insertSession = (sesId: string, title: string): void => {
+      db.insert(lectureSessions).values({
+        id: sesId, title, hallCode: 'E06-HALL', hallDisplayName: 'E-06 Hall', deviceId: 'e31-device',
+        ownerUserId: lecturer.id, startedByActor: 'user', state: 'completed', startedAt, endedAt: startedAt,
+        recordedDurationMs: 4_000, pauseCount: 0, channelActivations: [], sourceSnapshot: {}, aiEnabledAtStart: false,
+      }).run();
+      seededDetail.sessionIds.push(sesId);
+    };
+
+    // Ready recording with a real merged file on disk.
+    const sesA = ids.next(new Date(startedAt));
+    const recA = ids.next(new Date(startedAt));
+    const fileA = ids.next(new Date(startedAt));
+    insertSession(sesA, 'Ready Playback Lecture');
+    const mediaPath = join(recordingsRoot, `${recA}-main.mp4`);
+    writeFileSync(mediaPath, Buffer.alloc(4_096, 7));
+    db.insert(recordings).values({
+      id: recA, sessionId: sesA, ownerUserId: lecturer.id, state: 'ready', layoutPresetId: 'pc-only',
+      durationMs: 4_000, totalBytes: 4_096, segmentCount: 1, mergeState: 'done',
+      retentionDeleteAfter, playbackAuthRequired: true,
+    }).run();
+    seededDetail.recordingIds.push(recA);
+    db.insert(recordingFiles).values({
+      id: fileA, recordingId: recA, segmentId: null, kind: 'derived', streamKey: 'main', path: mediaPath,
+      container: 'mp4', sizeBytes: 4_096, durationMs: 4_000, checksum: null, state: 'finalized', hasAudio: true, isUploadable: true,
+    }).run();
+
+    // Failed-merge recording with a real finalized segment the worker can re-merge.
+    const sesB = ids.next(new Date(startedAt));
+    const recB = ids.next(new Date(startedAt));
+    const segB = ids.next(new Date(startedAt));
+    const fileB = ids.next(new Date(startedAt));
+    insertSession(sesB, 'Failed Merge Lecture');
+    const segmentPath = join(recordingsRoot, `${recB}-seg0.ts`);
+    writeFileSync(segmentPath, Buffer.alloc(8_192, 9));
+    db.insert(recordings).values({
+      id: recB, sessionId: sesB, ownerUserId: lecturer.id, state: 'failed', layoutPresetId: 'pc-only',
+      durationMs: null, totalBytes: null, segmentCount: 1, mergeState: 'failed',
+      retentionDeleteAfter, playbackAuthRequired: true,
+    }).run();
+    seededDetail.recordingIds.push(recB);
+    db.insert(recordingSegments).values({
+      id: segB, recordingId: recB, index: 0, startedAt, endedAt: startedAt, durationMs: 8_000, endReason: 'stop', state: 'finalized',
+    }).run();
+    db.insert(recordingFiles).values({
+      id: fileB, recordingId: recB, segmentId: segB, kind: 'segment', streamKey: 'main', path: segmentPath,
+      container: 'mpegts', sizeBytes: 8_192, durationMs: 8_000, checksum: null, state: 'finalized', hasAudio: true, isUploadable: true,
+    }).run();
+
+    return { readyRecordingId: recA, readyFileId: fileA, failedRecordingId: recB };
+  };
+
   const control = await listenControl(async (action, input) => {
     const value = input as Record<string, unknown> | undefined;
     switch (action) {
@@ -311,10 +393,12 @@ async function main(): Promise<void> {
         return { actions: [
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
           'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
-          'core.seed-recordings', 'core.publish-upload-job',
+          'core.seed-recordings', 'core.publish-upload-job', 'core.seed-detail',
         ] };
       case 'core.seed-recordings':
         return seedRecordings();
+      case 'core.seed-detail':
+        return seedDetail();
       case 'core.publish-upload-job': {
         // Re-publishes a seeded upload job at a new state on the SAME real
         // domain bus the upload machine uses, so the panel WS delivers a
