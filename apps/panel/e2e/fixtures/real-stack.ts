@@ -20,6 +20,10 @@ export interface RealStack extends RealStackDescriptor {
   control<T = unknown>(action: string, input?: unknown): Promise<T>;
   login(account?: keyof typeof REAL_STACK_ACCOUNTS): Promise<{ accessToken: string }>;
   recordingAudit(): Promise<{ lectureSessions: number; recordStarts: number }>;
+  processAudit(): Promise<{
+    recordStarts: number; liveStarts: number; meetingStarts: number;
+    processEvents: Array<{ consumerId: string; pgid: number | null; state: string }>;
+  }>;
 }
 
 function descriptor(): RealStackDescriptor {
@@ -89,6 +93,7 @@ export const test = base.extend<{ realStack: RealStack }>({
         return { accessToken: body.tokens.accessToken };
       },
       recordingAudit: () => control(stack, 'core.recording-audit'),
+      processAudit: () => control(stack, 'core.process-audit'),
     });
   },
 });

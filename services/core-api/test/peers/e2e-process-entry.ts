@@ -123,6 +123,7 @@ async function main(): Promise<void> {
   let storage = { totalBytes: 1_000_000_000, freeBytes: 800_000_000 };
   let relayFailure = false;
   const relayCalls: unknown[] = [];
+  const processEvents: Array<{ consumerId: string; pgid: number | null; state: string }> = [];
   const start = async (): Promise<void> => {
     if (app) return;
     const next = await buildApp({
@@ -232,7 +233,21 @@ async function main(): Promise<void> {
         pm.setOffline(value?.offline === true);
         return { offline: value?.offline === true };
       case 'core.pm.publish':
+        if (String(value?.event) === 'evt.pm.consumer.running') {
+          const data = value?.data as { consumerId?: unknown; pgid?: unknown } | undefined;
+          processEvents.push({ consumerId: String(data?.consumerId), pgid: Number(data?.pgid), state: 'running' });
+        } else if (String(value?.event) === 'evt.pm.consumer.exited') {
+          const data = value?.data as { consumerId?: unknown } | undefined;
+          processEvents.push({ consumerId: String(data?.consumerId), pgid: null, state: 'exited' });
+        }
         return { sequence: pm.publish(String(value?.event ?? ''), value?.data ?? {}) };
+      case 'core.pm.status': {
+        const status = value?.status as Parameters<typeof pm.setStatus>[0] | undefined;
+        if (!status) throw new Error('core.pm.status requires status');
+        pm.setStatus(status);
+        pm.forceResyncRequired();
+        return { applied: true };
+      }
       case 'core.pm.response': {
         const response = { status: Number(value?.status ?? 503), body: value?.body ?? {} };
         const target = String(value?.target ?? '');
@@ -278,6 +293,13 @@ async function main(): Promise<void> {
         return {
           lectureSessions: app?.db.select().from(lectureSessions).all().length ?? 0,
           recordStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/record').length,
+        };
+      case 'core.process-audit':
+        return {
+          processEvents,
+          recordStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/record').length,
+          liveStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/live').length,
+          meetingStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/meeting').length,
         };
       default:
         throw new Error(`unknown core control action: ${action}`);

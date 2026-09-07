@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { TIMERS } from '@eduscope/shared';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -162,4 +163,70 @@ test.describe('S-05 Dashboard — session with AI disabled', () => {
     expect(await boxes(page)).toEqual(disabledBoxes);
     await expect(page.getByTestId('capture-assurance-card')).toHaveCount(0);
   });
+});
+
+realTest.describe('S-05 Dashboard — session — real', () => {
+  realTest(
+    'real: record-consumer death degrades and recovers assurance without touching meeting/live',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(60_000);
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 4101 },
+      });
+      await realExpect(page.locator('[data-screen="S-05"]')).toBeVisible();
+
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.exited', data: { consumerId: 'record:00000001', code: 'crashed' },
+      });
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'degraded', bound: true, fps: 0, rms: null, lastError: 'record_consumer_exited' },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'online', bound: true, fps: null, rms: 0.1, lastError: null },
+        },
+        consumers: [],
+      } });
+      const verdict = page.getByTestId('capture-verdict');
+      await realExpect(verdict).not.toHaveAttribute('data-tier', '1', { timeout: 10_000 });
+
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'offline', bound: true, fps: 0, rms: null, lastError: 'record_consumer_exited' },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'online', bound: true, fps: null, rms: 0.1, lastError: null },
+        }, consumers: [],
+      } });
+      await realExpect(verdict).toContainText('Your lecture is still recording', { timeout: 10_000 });
+
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 4102 },
+      });
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'online', bound: true, fps: null, rms: 0.1, lastError: null },
+        }, consumers: [{ id: 'record:00000001', state: 'running', pgid: 4102 }],
+      } });
+      await realExpect(verdict).toHaveAttribute('data-tier', '1', { timeout: 10_000 });
+      const audit = await realStack.processAudit();
+      realExpect(audit).toMatchObject({ recordStarts: 1, liveStarts: 0, meetingStarts: 0 });
+      realExpect(audit.processEvents).toEqual([
+        { consumerId: 'record:00000001', pgid: 4101, state: 'running' },
+        { consumerId: 'record:00000001', pgid: null, state: 'exited' },
+        { consumerId: 'record:00000001', pgid: 4102, state: 'running' },
+      ]);
+    },
+  );
 });
