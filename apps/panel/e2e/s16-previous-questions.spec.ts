@@ -1,4 +1,60 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest, type RealStack } from './fixtures/real-stack.js';
+
+function sourcesOnline(consumers: ReadonlyArray<{ id: string; state: string; pgid: number }>) {
+  return {
+    publishers: {
+      usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+    },
+    consumers,
+  };
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); });
+
+async function getJson(url: string, token: string): Promise<unknown> {
+  return (await fetch(url, { headers: { authorization: `Bearer ${token}` } })).json();
+}
+
+/** Generates a real question set and sends one draft to the projector, returning the open publication id. */
+async function publishOneQuestion(realStack: RealStack, coreBaseUrl: string, token: string, sessionId: string): Promise<string> {
+  await realStack.control('core.ai-generate', { count: 3 });
+  await fetch(`${coreBaseUrl}/ai/generate-now`, { method: 'POST', headers: { authorization: `Bearer ${token}` } });
+  let draftId: string | undefined;
+  for (let i = 0; i < 30 && !draftId; i += 1) {
+    const rows = await getJson(`${coreBaseUrl}/ai/questions?sessionId=${sessionId}`, token) as { items?: Array<{ id: string; state: string }> } | Array<{ id: string; state: string }>;
+    draftId = ('items' in rows ? rows.items! : rows).find((q) => q.state === 'draft')?.id;
+    if (!draftId) await wait(500);
+  }
+  if (!draftId) throw new Error('publishOneQuestion: no draft generated');
+  await fetch(`${coreBaseUrl}/ai/questions/${draftId}/send-to-projector`, { method: 'POST', headers: { authorization: `Bearer ${token}` } });
+  let pubId: string | undefined;
+  for (let i = 0; i < 30 && !pubId; i += 1) {
+    const rows = await getJson(`${coreBaseUrl}/ai/publications?sessionId=${sessionId}`, token) as { items?: Array<{ id: string; state: string }> } | Array<{ id: string; state: string }>;
+    pubId = ('items' in rows ? rows.items! : rows).find((p) => p.state === 'open')?.id;
+    if (!pubId) await wait(500);
+  }
+  if (!pubId) throw new Error('publishOneQuestion: no open publication');
+  return pubId;
+}
+
+async function startRealRecording(page: Page, realStack: RealStack): Promise<{ token: string; sessionId: string }> {
+  await realStack.control('core.pm.status', { status: sourcesOnline([]) });
+  await page.goto('/login');
+  await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+  await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+  await page.getByRole('button', { name: 'Log In' }).click();
+  await realExpect(page).toHaveURL('/');
+  await page.getByRole('button', { name: 'Start Recording' }).click();
+  await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+  await realStack.control('core.pm.publish', { event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 4101 } });
+  const { accessToken } = await realStack.login('lecturer');
+  const state = await getJson(`${realStack.coreBaseUrl}/recording/state`, accessToken) as { sessionId: string };
+  return { token: accessToken, sessionId: state.sessionId };
+}
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -97,4 +153,60 @@ test.describe('S-16 Previous Questions', () => {
     await expect(page.getByTestId('previous-questions-stale')).toHaveCount(0);
     await expect(page.locator('[data-recording-state]')).toHaveAttribute('data-recording-state', 'recording');
   });
+});
+
+// eduscope:needs-real-d — exercises the real B<->D answer-sync + replay path.
+realTest.describe('S-16 Previous questions — real', () => {
+  realTest(
+    'real: a B<->D sync cut marks responses explicitly stale; restoring sync replays D answers into B once, converging exactly',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      const { token, sessionId } = await startRealRecording(page, realStack);
+
+      // Wait until B has minted the open quiz session against real D.
+      await realExpect.poll(
+        async () => (await getJson(`${realStack.coreBaseUrl}/quiz/session`, token) as { state: string }).state,
+        { timeout: 20_000 },
+      ).toBe('open');
+
+      const publicationId = await publishOneQuestion(realStack, realStack.coreBaseUrl, token, sessionId);
+      await realExpect(page.getByTestId('insights-column')).toBeVisible();
+      await realExpect(page.getByTestId(`publication-card-${publicationId}`)).toBeVisible({ timeout: 15_000 });
+
+      // Cut B's device-sync link while keeping D up for phones: block reconnect,
+      // then bounce D to drop B's live socket. D's rows persist in Postgres.
+      await realStack.control('quiz.device-sync', { available: false });
+      await realStack.control('quiz.restart');
+
+      // Phones answer D during the cut (2 correct, 1 wrong). B does not see them yet.
+      const { submitted } = await realStack.control<{ submitted: Array<{ studentIdNumber: string; isCorrect: boolean }> }>(
+        'quiz.submit-answers', { count: 3, correctCount: 2 },
+      );
+
+      // After T-QUIZ-SYNC-STALE (15 s) with no inbound frames, B marks the
+      // publication's responses explicitly stale.
+      await realExpect(page.getByTestId('previous-questions-stale')).toBeVisible({ timeout: 30_000 });
+
+      // Restore the link: B reconnects, sends sync.hello with its watermark, and
+      // D replays exactly the answers submitted during the cut.
+      await realStack.control('quiz.device-sync', { available: true });
+      await realExpect(page.getByTestId('previous-questions-stale')).toHaveCount(0, { timeout: 30_000 });
+
+      // B's replayed projection converges to D's answers exactly once — three
+      // responses, two correct, no duplicated student row.
+      await realExpect.poll(async () => {
+        const responses = await getJson(`${realStack.coreBaseUrl}/quiz/publications/${publicationId}/responses`, token) as { items: Array<{ studentIdNumber: string; isCorrect: boolean }> };
+        return responses.items.length;
+      }, { timeout: 20_000 }).toBe(3);
+
+      const responses = await getJson(`${realStack.coreBaseUrl}/quiz/publications/${publicationId}/responses`, token) as { items: Array<{ studentIdNumber: string; isCorrect: boolean }>; stale: boolean };
+      realExpect(responses.stale, 'no longer stale after replay').toBe(false);
+      realExpect(new Set(responses.items.map((r) => r.studentIdNumber)).size, 'no duplicate student rows').toBe(3);
+      realExpect(responses.items.filter((r) => r.isCorrect).length).toBe(2);
+      // B's projection matches D's authoritative submission set exactly.
+      realExpect(new Set(responses.items.map((r) => r.studentIdNumber)))
+        .toEqual(new Set(submitted.map((s) => s.studentIdNumber)));
+    },
+  );
 });

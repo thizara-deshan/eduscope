@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   const control = await listenControl(async (action, input) => {
     switch (action) {
       case 'quiz.capabilities':
-        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit'] };
+        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers'] };
       case 'quiz.start':
         await start();
         return { running: true };
@@ -165,6 +165,48 @@ async function main(): Promise<void> {
         return { available: deviceUpgradeAllowed };
       case 'quiz.capture-student-snapshot':
         return captureStudentSnapshot();
+      case 'quiz.submit-answers': {
+        // Registers `count` phone participants and submits one answer each to
+        // the current open publication (the first `correctCount` pick the
+        // correct option, the rest a wrong one), exactly as students' phones
+        // would. Returns what was stored so a witness can compare B's replayed
+        // projection against D's authoritative answers. Reads options straight
+        // from D's own publication row.
+        const running = app;
+        if (!running) throw new Error('quiz.submit-answers requires the quiz service running');
+        const count = Number((input as { count?: unknown } | undefined)?.count ?? 3);
+        const correctCount = Number((input as { correctCount?: unknown } | undefined)?.correctCount ?? count);
+        const rows = await running.sql`
+          SELECT id, quiz_session_id, options, correct_option_id
+          FROM publications WHERE state = 'open' ORDER BY published_at DESC LIMIT 1`;
+        const pub = rows[0] as {
+          id: string; quiz_session_id: string;
+          options: Array<{ id: string; label: string; text: string }>; correct_option_id: string;
+        } | undefined;
+        if (!pub) throw new Error('quiz.submit-answers: no open publication');
+        const wrongOption = pub.options.find((option) => option.id !== pub.correct_option_id) ?? pub.options[0]!;
+        const submitted: Array<{ studentIdNumber: string; selectedOptionId: string; isCorrect: boolean }> = [];
+        for (let i = 0; i < count; i += 1) {
+          const studentIdNumber = `IT${String(20000000 + i)}`;
+          const registration = await fetch(`${baseUrl}/api/student/v1/quiz-sessions/${pub.quiz_session_id}/participants`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ fullName: `Phone Student ${String(i + 1)}`, studentIdNumber }),
+          });
+          if (!registration.ok) throw new Error(`participant registration failed: ${String(registration.status)}`);
+          const setCookie = registration.headers.getSetCookie().find((value) => value.startsWith('eduscope_participant='));
+          if (!setCookie) throw new Error('registration returned no participant cookie');
+          const cookie = setCookie.split(';', 1)[0]!;
+          const isCorrect = i < correctCount;
+          const selectedOptionId = isCorrect ? pub.correct_option_id : wrongOption.id;
+          const answer = await fetch(`${baseUrl}/api/student/v1/publications/${pub.id}/answers`, {
+            method: 'POST', headers: { 'content-type': 'application/json', cookie },
+            body: JSON.stringify({ selectedOptionId }),
+          });
+          if (!answer.ok) throw new Error(`answer submission failed: ${String(answer.status)}`);
+          submitted.push({ studentIdNumber, selectedOptionId, isCorrect });
+        }
+        return { publicationId: pub.id, submitted };
+      }
       case 'quiz.publication-audit': {
         // Counts the durable publication rows D has actually stored (optionally
         // scoped to a state), so a screen witness can prove publish-before-project
