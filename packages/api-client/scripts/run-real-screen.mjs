@@ -25,7 +25,10 @@ async function main() {
   let failure;
   try {
     await run(pnpm, [
-      '--filter', `@eduscope/${app}`, 'e2e', '--', `e2e/${stem}.spec.ts`,
+      // No `--` before the spec path: this pnpm version forwards it literally
+      // to Playwright's CLI, which then treats it as a filter reset and runs
+      // the entire suite instead of just this spec.
+      '--filter', `@eduscope/${app}`, 'e2e', `e2e/${stem}.spec.ts`,
     ], {
       env: {
         EDUSCOPE_E2E_ADAPTER: 'real',

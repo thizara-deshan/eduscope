@@ -148,6 +148,20 @@ async function main(): Promise<void> {
         },
       },
     });
+    // Test-only CORS: the real Playwright fixture serves the panel bundle
+    // and this peer on two different loopback ports, which a browser (unlike
+    // Node's own fetch, used by this package's own real-stack tests) refuses
+    // to bridge without an explicit allow-origin response. Production panel
+    // deployments are same-origin behind a reverse proxy (E-01's committed
+    // `apiBaseUrl: "/api/v1"`) and carry no such header.
+    next.addHook('onRequest', async (request, reply) => {
+      const origin = request.headers.origin;
+      if (origin) reply.header('access-control-allow-origin', origin);
+      reply.header('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      reply.header('access-control-allow-headers', 'content-type, authorization, range');
+      reply.header('access-control-expose-headers', 'content-range, content-length');
+      if (request.method === 'OPTIONS') await reply.code(204).send();
+    });
     await next.lifecycle.start();
     if (!seeded) {
       const now = new Date().toISOString();

@@ -25,7 +25,7 @@ describe('E-06 real-screen witness guard', () => {
     const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
     const result = spawnSync(
       process.execPath,
-      ['packages/api-client/scripts/run-real-screen.mjs', 'panel', 's01-login'],
+      ['packages/api-client/scripts/run-real-screen.mjs', 'panel', 'zz-witness-guard-fixture'],
       { cwd: repositoryRoot, encoding: 'utf8' },
     );
     expect(result.status).toBe(1);

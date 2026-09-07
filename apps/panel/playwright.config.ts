@@ -18,6 +18,11 @@ export default defineConfig({
     // The kiosk viewport is not a preference; it is the spec.
     viewport: { width: 1280, height: 800 },
     trace: 'retain-on-failure',
+    // Air-gapped/firewalled dev hosts can't reach Playwright's browser CDN;
+    // point at a locally installed Chromium instead. No effect unless set.
+    ...(process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH } }
+      : {}),
   },
   webServer: {
     command: 'pnpm build && pnpm preview',
