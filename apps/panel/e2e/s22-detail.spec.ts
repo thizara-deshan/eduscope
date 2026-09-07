@@ -90,9 +90,12 @@ interface SeededDetail {
   readonly readyRecordingId: string;
   readonly readyFileId: string;
   readonly failedRecordingId: string;
+  readonly inFlightRecordingId: string;
 }
 
-// A B-only screen — the real stack needs no Docker/real-D here.
+// A B-only screen — the real stack needs no Docker/real-D here. Serial: the
+// tests share one real stack and each re-seeds the same detail fixtures.
+realTest.describe.configure({ mode: 'serial' });
 realTest.describe('S-22 Recording detail & player — real', () => {
   realTest(
     'real: authenticated Range media delivers real bytes, an admin merge retry recovers to ready over real events, and a non-failed retry is a server conflict',
@@ -146,6 +149,37 @@ realTest.describe('S-22 Recording detail & player — real', () => {
       // Recovery: the merge-failed section is gone and the ready file list renders.
       await realExpect(page.getByText(/couldn't combine/)).toHaveCount(0, { timeout: 30_000 });
       await realExpect(page.getByRole('button', { name: 'Retry preparing' })).toHaveCount(0);
+    },
+  );
+
+  // S-24 fold on the detail screen: an in-flight upload gets the differentiated
+  // cancel-upload warning, and the delete is audited to the admin (KEEP B-33).
+  realTest(
+    'real: an admin deletes an in-flight-upload recording from detail with the cancel-upload warning, and the durable audit actor is the admin',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      const seed = await realStack.control<SeededDetail>('core.seed-detail');
+
+      await realSignIn(page, 'admin');
+      await goToLibraryReal(page);
+
+      await page.locator('.us-reclist__item', { hasText: 'Uploading In Flight Lecture' })
+        .getByRole('button', { name: /^Play/ }).click();
+      await realExpect(page.locator('[data-screen="S-22"]')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Delete' }).click();
+      const dialog = page.getByRole('alertdialog', { name: 'Delete this recording?' });
+      await realExpect(dialog).toBeVisible();
+      // Differentiated in-flight warning (distinct from the never-uploaded body).
+      await realExpect(dialog.getByText('An upload in progress will be cancelled.')).toBeVisible();
+      await dialog.getByRole('button', { name: 'Delete' }).click();
+
+      // Resolves on the real deletion event: the detail returns to the library.
+      await realExpect(page.locator('[data-screen="S-21"]')).toBeVisible({ timeout: 20_000 });
+
+      const audit = await realStack.control('core.delete-audit', { recordingId: seed.inFlightRecordingId });
+      realExpect(audit).toMatchObject({ found: true, actorKind: 'user', actorUsername: 'e06-admin' });
     },
   );
 });

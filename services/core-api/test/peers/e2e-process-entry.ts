@@ -7,8 +7,8 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { eq, inArray } from 'drizzle-orm';
-import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordingFiles, recordings, recordingSegments, storageVolumes, uploadJobs, users } from '../../src/db/schema.js';
+import { and, eq, inArray } from 'drizzle-orm';
+import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordingFiles, recordings, recordingSegments, storageVolumes, uploadFileParts, uploadJobs, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -318,6 +318,12 @@ async function main(): Promise<void> {
     if (!lecturer) throw new Error('core.seed-detail: seeded lecturer is missing');
 
     if (seededDetail.recordingIds.length > 0) {
+      // The real merge worker (from a prior test's retry) may have created an
+      // upload job + parts for a seeded recording; clear parts before the jobs
+      // and files they reference so the reset never trips a foreign key.
+      const priorJobs = db.select({ id: uploadJobs.id }).from(uploadJobs).where(inArray(uploadJobs.recordingId, seededDetail.recordingIds)).all().map((row) => row.id);
+      if (priorJobs.length > 0) db.delete(uploadFileParts).where(inArray(uploadFileParts.uploadJobId, priorJobs)).run();
+      db.delete(uploadJobs).where(inArray(uploadJobs.recordingId, seededDetail.recordingIds)).run();
       db.delete(recordingFiles).where(inArray(recordingFiles.recordingId, seededDetail.recordingIds)).run();
       db.delete(recordingSegments).where(inArray(recordingSegments.recordingId, seededDetail.recordingIds)).run();
       db.delete(recordings).where(inArray(recordings.id, seededDetail.recordingIds)).run();
@@ -383,7 +389,33 @@ async function main(): Promise<void> {
       container: 'mpegts', sizeBytes: 8_192, durationMs: 8_000, checksum: null, state: 'finalized', hasAudio: true, isUploadable: true,
     }).run();
 
-    return { readyRecordingId: recA, readyFileId: fileA, failedRecordingId: recB };
+    // Ready recording with an in-flight upload — the S-24 delete confirm shows
+    // the differentiated "an upload in progress will be cancelled" warning.
+    const sesC = ids.next(new Date(startedAt));
+    const recC = ids.next(new Date(startedAt));
+    const fileC = ids.next(new Date(startedAt));
+    const jobC = ids.next(new Date(startedAt));
+    insertSession(sesC, 'Uploading In Flight Lecture');
+    const mediaPathC = join(recordingsRoot, `${recC}-main.mp4`);
+    writeFileSync(mediaPathC, Buffer.alloc(4_096, 5));
+    db.insert(recordings).values({
+      id: recC, sessionId: sesC, ownerUserId: lecturer.id, state: 'ready', layoutPresetId: 'pc-only',
+      durationMs: 4_000, totalBytes: 4_096, segmentCount: 1, mergeState: 'done',
+      retentionDeleteAfter, playbackAuthRequired: true,
+    }).run();
+    seededDetail.recordingIds.push(recC);
+    db.insert(recordingFiles).values({
+      id: fileC, recordingId: recC, segmentId: null, kind: 'derived', streamKey: 'main', path: mediaPathC,
+      container: 'mp4', sizeBytes: 4_096, durationMs: 4_000, checksum: null, state: 'finalized', hasAudio: true, isUploadable: true,
+    }).run();
+    db.insert(uploadJobs).values({
+      id: jobC, recordingId: recC, adapterId: 'placeholder', state: 'uploading', attempt: 1,
+      nextAttemptAt: null, lastError: null, lastErrorAt: null, failureClass: null, blockedBy: null, remoteLectureId: null,
+      metadata: { title: 'Uploading In Flight Lecture' }, enqueuedAt: startedAt, startedAt, completedAt: null,
+      requeuedBy: null, requeuedAt: null, remoteCleanupState: 'not-needed',
+    }).run();
+
+    return { readyRecordingId: recA, readyFileId: fileA, failedRecordingId: recB, inFlightRecordingId: recC };
   };
 
   const control = await listenControl(async (action, input) => {
@@ -394,8 +426,21 @@ async function main(): Promise<void> {
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
           'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
           'core.seed-recordings', 'core.publish-upload-job', 'core.seed-detail',
-          'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows',
+          'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
         ] };
+      case 'core.delete-audit': {
+        // The durable delete-audit row for a recording, resolved to the actor's
+        // username — proves KEEP B-33's "audit actor equals the admin", never a
+        // system actor, for a manual deletion.
+        if (!app) throw new Error('core.delete-audit requires the core service running');
+        const recordingId = String(value?.recordingId ?? '');
+        const entry = app.db.select().from(auditLogEntries)
+          .where(and(eq(auditLogEntries.entityType, 'recording'), eq(auditLogEntries.entityId, recordingId), eq(auditLogEntries.action, 'delete')))
+          .get();
+        if (!entry) return { found: false };
+        const actor = entry.actorUserId ? app.db.select().from(users).where(eq(users.id, entry.actorUserId)).get() : null;
+        return { found: true, actorKind: entry.actorKind, actorUserId: entry.actorUserId, actorUsername: actor?.username ?? null, reason: entry.reason };
+      }
       case 'core.usb.fill':
         usb.setVolumes([{ ...usbVolume, freeBytes: Number(value?.freeBytes ?? 0) }]);
         return { freeBytes: Number(value?.freeBytes ?? 0) };

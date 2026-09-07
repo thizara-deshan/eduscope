@@ -182,4 +182,44 @@ realTest.describe('S-21 Recordings library — real', () => {
       await realExpect(page.getByText(seed.filterTitle, { exact: true })).toBeVisible();
     },
   );
+
+  // S-24 fold: real recording deletion (KEEP B-33).
+  realTest(
+    'real: a lecturer DELETE is refused, an admin deletes a never-uploaded recording with the escalated warning, the row leaves on the deletion event, and the durable audit actor is the admin',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      await realStack.control('core.start');
+      const seed = await realStack.control<{ readyRecordingId: string }>('core.seed-detail');
+
+      // A lecturer's direct DELETE is a hard server refusal (admin-only, RA-06).
+      const lecturer = await realStack.login('lecturer');
+      const refused = await fetch(`${realStack.coreBaseUrl}/recordings/${seed.readyRecordingId}`, {
+        method: 'DELETE', headers: { authorization: `Bearer ${lecturer.accessToken}` },
+      });
+      realExpect(refused.status).toBe(403);
+
+      await realSignIn(page, 'admin');
+      await goToLibraryReal(page);
+
+      const row = page.locator('.us-reclist__item', { hasText: 'Ready Playback Lecture' });
+      await realExpect(row).toBeVisible({ timeout: 15_000 });
+      await row.getByRole('button', { name: /More actions/ }).click();
+      await row.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const dialog = page.getByRole('alertdialog', { name: 'Delete this recording?' });
+      await realExpect(dialog).toBeVisible();
+      // Never-uploaded → the escalated "only copy" warning (not the calm body).
+      await realExpect(dialog.getByText(/never uploaded, so this device holds the only copy/)).toBeVisible();
+      await dialog.getByRole('button', { name: 'Delete' }).click();
+
+      // The row leaves only on the real recording.artifact{deleted} event, never
+      // optimistically on the 202.
+      await realExpect(page.getByText('Ready Playback Lecture')).toHaveCount(0, { timeout: 15_000 });
+
+      // Durable audit: the actor is the admin user, not a system actor.
+      const audit = await realStack.control('core.delete-audit', { recordingId: seed.readyRecordingId });
+      realExpect(audit).toMatchObject({ found: true, actorKind: 'user', actorUsername: 'e06-admin' });
+    },
+  );
 });
