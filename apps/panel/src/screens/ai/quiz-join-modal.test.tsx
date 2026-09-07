@@ -48,6 +48,26 @@ describe('QuizJoinModal', () => {
     expect(screen.getByTestId('quiz-join-freshness')).toHaveTextContent(/last synced/i);
   });
 
+  it('requesting: a starting status with no QR, code, or URL yet', () => {
+    renderModal();
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', {
+      state: 'requesting', quizSessionId: null, lectureSessionId: '01J00000000000000000000001', joinUrl: null, joinCode: null, joinedCount: 0, syncState: null,
+    }, 0)));
+    const modal = screen.getByTestId('quiz-join-modal');
+    expect(within(modal).getByTestId('quiz-join-starting')).toBeInTheDocument();
+    expect(within(modal).queryByTestId('quiz-join-code')).toBeNull();
+    expect(within(modal).queryByRole('img')).toBeNull();
+  });
+
+  it('QR encodes only the server join URL — no fabricated or pre-publication value (QO-1)', async () => {
+    renderModal();
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', session(), 0)));
+    await screen.findByTestId('quiz-join-code');
+    // The QR's accessible value is exactly the server join URL, nothing else.
+    expect(screen.getByRole('img', { name: /join qr/i }))
+      .toHaveAttribute('aria-label', 'Join QR. Or go to https://quiz.eduscope.local/j/482913.');
+  });
+
   it('failed: no QR, no Retry — exactly one interactive role (close)', () => {
     renderModal();
     act(() => useWsStore.getState().ingest(envelope('quiz.session', {

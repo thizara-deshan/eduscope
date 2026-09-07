@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+import { getJson, startRealRecording } from './fixtures/real-ai.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -73,4 +75,53 @@ test.describe('S-20 Quiz join', () => {
     await expect(page.getByTestId('quiz-join-code')).not.toBeEmpty();
     expect(await modal.getByRole('button', { name: /retry|reconnect/i }).count()).toBe(0);
   });
+});
+
+// eduscope:needs-real-d — exercises real B<->D session mint/heartbeat states.
+realTest.describe('S-20 Quiz join/QR — real', () => {
+  realTest(
+    'real: minting fails bounded when D is down, recovers to one open session/URL/code, and an honest stale count when the heartbeat is lost',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+
+      // D is DOWN before recording starts — the mint must fail, bounded.
+      await realStack.control('quiz.stop');
+      const { token } = await startRealRecording(page, realStack);
+
+      // requesting → failed (Z-03: 3 bounded attempts), never stuck requesting.
+      await realExpect.poll(
+        async () => (await getJson(`${realStack.coreBaseUrl}/quiz/session`, token) as { state: string }).state,
+        { timeout: 30_000 },
+      ).toBe('failed');
+      await realExpect(page.getByTestId('quiz-join-chip')).toHaveAttribute('data-state', 'failed', { timeout: 10_000 });
+
+      // Restore D: the 30 s probe retries and one open session is minted.
+      await realStack.control('quiz.start');
+      await realExpect.poll(
+        async () => (await getJson(`${realStack.coreBaseUrl}/quiz/session`, token) as { state: string }).state,
+        { timeout: 45_000 },
+      ).toBe('open');
+      const session = await getJson(`${realStack.coreBaseUrl}/quiz/session`, token) as { joinUrl: string; joinCode: string; state: string };
+      realExpect(session.joinUrl).toBeTruthy();
+      realExpect(session.joinCode).toBeTruthy();
+
+      await realExpect(page.getByTestId('quiz-join-chip')).toHaveAttribute('data-state', 'open', { timeout: 15_000 });
+      await page.getByTestId('quiz-join-chip').click();
+      const modal = page.getByTestId('quiz-join-modal');
+      await realExpect(modal).toBeVisible();
+      await realExpect(modal.getByTestId('quiz-join-code')).toHaveText(session.joinCode);
+      await realExpect(modal.getByTestId('quiz-join-url')).toHaveText(session.joinUrl);
+      // The QR encodes only the server join URL (QO-1: no pre-publication QR).
+      await realExpect(modal.getByRole('img', { name: /Join QR/ })).toHaveAttribute('aria-label', `Join QR. Or go to ${session.joinUrl}.`);
+
+      // Lose the heartbeat: after T-QUIZ-SYNC-STALE the joined count is marked
+      // out of date — never silently presented as live.
+      await realStack.control('quiz.device-sync', { available: false });
+      await realStack.control('quiz.restart');
+      await realExpect(modal.getByTestId('quiz-join-count')).toContainText('may be out of date', { timeout: 30_000 });
+      // The session itself stays open (only its sync freshness degraded).
+      realExpect((await getJson(`${realStack.coreBaseUrl}/quiz/session`, token) as { state: string; syncState: string }).syncState).not.toBe('synced');
+    },
+  );
 });
