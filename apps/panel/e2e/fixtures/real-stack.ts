@@ -27,7 +27,7 @@ export interface RealStack extends RealStackDescriptor {
   }>;
   ledger(): Promise<{
     helper: Array<{ verb: string }>;
-    pm: Array<{ method: string; path: string }>;
+    pm: Array<{ method: string; path: string; body?: Record<string, unknown> }>;
     relay: unknown[];
   }>;
 }

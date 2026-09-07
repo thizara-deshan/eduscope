@@ -1,4 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+
+const SOURCES_ONLINE = {
+  publishers: {
+    usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+  },
+  consumers: [],
+} as const;
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -122,4 +133,90 @@ test.describe('S-26 Local Capture Layout', () => {
     });
     expect(panelOverflow).toBeLessThanOrEqual(1);
   });
+});
+
+async function realSignIn(page: Page, account: keyof typeof REAL_STACK_ACCOUNTS) {
+  await page.goto('/login');
+  await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS[account].username);
+  await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS[account].password);
+  await page.getByRole('button', { name: 'Log In' }).click();
+  await realExpect(page).toHaveURL('/');
+}
+
+async function routeRealConfig(page: Page, realStack: { coreBaseUrl: string; quizTlsBaseUrl?: string; quizBaseUrl: string }) {
+  await page.route('**/config.json', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        apiBaseUrl: realStack.coreBaseUrl,
+        quizBaseUrl: realStack.quizTlsBaseUrl ?? realStack.quizBaseUrl,
+        environment: 'integration',
+        adapters: { default: 'real', overrides: {} },
+      }),
+    });
+  });
+}
+
+realTest.describe('S-26 Local Capture Layout — real', () => {
+  realTest(
+    'real: a meeting-only preset is refused with no DB change, and a valid save flows into the next record pipeline',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(90_000);
+      await routeRealConfig(page, realStack);
+      await realStack.control('core.pm.status', { status: SOURCES_ONLINE });
+
+      const login = await fetch(`${realStack.coreBaseUrl}/auth/login`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...REAL_STACK_ACCOUNTS.admin, client: 'panel' }),
+      });
+      const { tokens } = await login.json() as { tokens: { accessToken: string } };
+      const auth = { authorization: `Bearer ${tokens.accessToken}` };
+      const localConfig = async () => {
+        const res = await fetch(`${realStack.coreBaseUrl}/channels`, { headers: auth });
+        const { items } = await res.json() as {
+          items: Array<{ status: { channelId: string }; config: { presetId: string; ratioA: number | null; ratioB: number | null } }>;
+        };
+        return items.find((item) => item.status.channelId === 'local')!.config;
+      };
+
+      // 1. A meeting-only preset (cams-fifty-fifty) is contract-refused on the
+      //    local channel and leaves the persisted config untouched.
+      const before = await localConfig();
+      const refused = await fetch(`${realStack.coreBaseUrl}/channels/local`, {
+        method: 'PUT', headers: { 'content-type': 'application/json', ...auth },
+        body: JSON.stringify({ presetId: 'cams-fifty-fifty' }),
+      });
+      realExpect(refused.status).toBe(422);
+      realExpect((await refused.json() as { code: string }).code).toBe('config.invalid');
+      realExpect((await localConfig()).presetId, 'refusal must not change the DB').toBe(before.presetId);
+
+      // 2. A valid PC/camera preset saved through the screen persists.
+      await realSignIn(page, 'admin');
+      await goLocalCapture(page);
+      const picker = page.getByTestId('layout-preset-picker');
+      const sideBySide = picker.getByRole('button', { name: /Slides \+ students, side by side/i });
+      await sideBySide.click();
+      await realExpect(sideBySide).toHaveAttribute('aria-pressed', 'true');
+
+      const saved = await localConfig();
+      realExpect(saved.presetId).toBe('side-by-side');
+
+      // 3. [KEEP B-60] the next recording's PM request carries the exact saved
+      //    preset and ratios — configuration flows to the next pipeline.
+      const startRes = await fetch(`${realStack.coreBaseUrl}/recording/start`, { method: 'POST', headers: auth });
+      realExpect(startRes.status).toBe(202);
+      let recordBody: Record<string, unknown> | undefined;
+      await realExpect
+        .poll(async () => {
+          const { pm } = await realStack.ledger();
+          recordBody = pm.find((call) => call.method === 'POST' && call.path === '/consumers/record')?.body;
+          return recordBody?.preset ?? null;
+        }, { timeout: 15_000 })
+        .toBe('side-by-side');
+      realExpect(recordBody!.ratioA).toBe(saved.ratioA);
+      realExpect(recordBody!.ratioB).toBe(saved.ratioB);
+    },
+  );
 });
