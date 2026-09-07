@@ -394,7 +394,26 @@ async function main(): Promise<void> {
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
           'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
           'core.seed-recordings', 'core.publish-upload-job', 'core.seed-detail',
+          'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows',
         ] };
+      case 'core.usb.fill':
+        usb.setVolumes([{ ...usbVolume, freeBytes: Number(value?.freeBytes ?? 0) }]);
+        return { freeBytes: Number(value?.freeBytes ?? 0) };
+      case 'core.usb.remove':
+        usb.setVolumes([]);
+        return { removed: true };
+      case 'core.usb.restore':
+        usb.setVolumes([usbVolume]);
+        return { restored: true };
+      case 'core.scoped-allows': {
+        // Reads the real scoped-subscription registry the panel hub gates
+        // export.job/usb.volumes delivery on — an authoritative proof that one
+        // auth session's export events never reach another (KEEP B-32).
+        if (!app) throw new Error('core.scoped-allows requires the core service running');
+        const stream = String(value?.stream ?? '') as 'usb.volumes' | 'export.job' | 'log.entry';
+        const scope = value?.scope === undefined ? undefined : String(value.scope);
+        return { allows: app.scopedSubscriptions.allows(String(value?.authSessionId ?? ''), stream, scope) };
+      }
       case 'core.seed-recordings':
         return seedRecordings();
       case 'core.seed-detail':
