@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -112,4 +113,67 @@ test.describe('S-09 Sources and audio bar', () => {
     expect(box).not.toBeNull();
     expect(box!.height).toBeLessThanOrEqual(154);
   });
+});
+
+realTest.describe('S-09 Sources and audio bar — real', () => {
+  realTest(
+    'real: mic unplug suppresses meters and failed mixer readback remains authoritative',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(75_000);
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 7101 },
+      });
+      await realExpect(page.locator('[data-screen="S-05"]')).toBeVisible();
+      await page.getByRole('button', { name: 'Show sources' }).click();
+      const meter = page.getByRole('meter', { name: 'Lecturer microphone level' });
+      await realExpect(meter).toHaveAttribute('aria-valuenow', /\d+/);
+
+      await realStack.control('core.pm.response', {
+        target: 'audio', status: 200, body: {
+          roleId: 'mic-lecturer', appliedGain: 0, appliedMuted: false,
+          appliedState: 'failed', lastError: 'Mixer apply failed on the real peer.',
+        },
+      });
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'offline', bound: true, fps: null, rms: null, lastError: 'unplugged' },
+        }, consumers: [{ id: 'record:00000001', state: 'running', pgid: 7101 }],
+      } });
+      const mic = page.getByTestId('mic-row');
+      await realExpect(mic).toHaveAttribute('data-state', 'offline', { timeout: 15_000 });
+      await realExpect(meter).toHaveCSS('--level', '0');
+      await realExpect(page.getByTestId('mic-state')).toHaveText('No microphone signal.');
+
+      await realStack.control('core.pm.status', { status: {
+        publishers: {
+          usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+          audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+        }, consumers: [{ id: 'record:00000001', state: 'running', pgid: 7101 }],
+      } });
+      await realExpect(mic).toHaveAttribute('data-state', 'live', { timeout: 10_000 });
+      await realExpect(meter).toHaveCSS('--level', '0.4');
+      await page.getByRole('switch', { name: 'Lecturer Mic' }).click();
+      await realExpect(mic).toHaveAttribute('data-state', 'apply-failed');
+      await realExpect(page.getByTestId('mic-state')).toHaveText("Still live — the mute didn't apply.");
+      await realExpect(mic).toContainText('Mixer apply failed on the real peer.');
+      const audit = await realStack.processAudit();
+      realExpect(audit.recordStarts).toBe(1);
+      realExpect(audit.processEvents).toEqual([
+        { consumerId: 'record:00000001', pgid: 7101, state: 'running' },
+      ]);
+    },
+  );
 });

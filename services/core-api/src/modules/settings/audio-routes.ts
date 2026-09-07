@@ -31,6 +31,11 @@ function toPayload(row: typeof audioControls.$inferSelect): AudioControl {
   };
 }
 
+export function getAudioControlSnapshot(db: DrizzleDb): AudioControl {
+  const row = db.select().from(audioControls).where(eq(audioControls.roleId, MUTABLE_ROLE_ID)).get();
+  return row ? toPayload(row) : defaultRow();
+}
+
 /** CG-15: guarded only while a session is non-terminal — no session, no owner to protect (openapi.yaml updateAudioControl description). */
 function assertOwnerOrAdminWhileActive(db: DrizzleDb, actor: AuthContext): void {
   const session = db.select({ ownerUserId: lectureSessions.ownerUserId }).from(lectureSessions).where(inArray(lectureSessions.state, NON_TERMINAL_STATES)).get();
@@ -109,8 +114,7 @@ export function registerAudioSettingsRoutes(app: FastifyInstance, authService: A
     '/api/v1/audio/controls',
     { config: { operationId: 'listAudioControls' }, preHandler: requireAuth(authService, 'listAudioControls') },
     async (_request, reply) => {
-      const row = deps.db.select().from(audioControls).where(eq(audioControls.roleId, MUTABLE_ROLE_ID)).get();
-      reply.code(200).send({ items: [row ? toPayload(row) : defaultRow()] });
+      reply.code(200).send({ items: [getAudioControlSnapshot(deps.db)] });
     },
   );
 

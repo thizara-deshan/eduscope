@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { lectureSessions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
+import { audioControls, lectureSessions, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -193,6 +193,10 @@ async function main(): Promise<void> {
         id: ids.next(new Date()), uuid: 'e06-recordings', devicePath: '/dev/e06-recordings', mountPath: recordingsRoot,
         filesystem: 'ext4', capacityBytes: storage.totalBytes, freeBytes: storage.freeBytes,
         smartStatus: 'good', role: 'recordings', state: 'mounted', registeredAt: now,
+      }).run();
+      await next.db.insert(audioControls).values({
+        roleId: 'mic-lecturer', gain: 50, muted: false, appliedState: 'applied',
+        lastAppliedAt: now, lastError: null, updatedBy: null,
       }).run();
       seeded = true;
     }

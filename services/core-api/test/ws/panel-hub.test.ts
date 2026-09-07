@@ -155,10 +155,10 @@ describe('panel WS hub (events.md §1/§2)', () => {
       const ws = await connect(testApp.app, testApp.lecturerToken);
       const frames = collectFrames(ws);
 
-      // recording.state(1) + channel.state x3 + sources.status x5 (seeded roles) + storage.status(1) + device.health(1) + ai.countdown(1) + quiz.session(1) = 13
-      await waitFor(() => frames.length >= 13);
+      // recording.state(1) + channel.state x3 + sources.status x5 + audio.control(1) + storage/health/countdown/quiz = 14
+      await waitFor(() => frames.length >= 14);
       await delay(30);
-      expect(frames.length).toBe(13);
+      expect(frames.length).toBe(14);
 
       expect(frames[0]!.event).toBe('recording.state');
       expect(frames[0]!.payload).toMatchObject({ state: 'idle', sessionId: null });
@@ -171,10 +171,11 @@ describe('panel WS hub (events.md §1/§2)', () => {
       expect(sourceFrames.every((f) => f.event === 'sources.status')).toBe(true);
       expect(sourceFrames.length).toBe(5);
 
-      expect(frames[9]!.event).toBe('storage.status');
-      expect(frames[10]!.event).toBe('device.health');
-      expect(frames[11]!.event).toBe('ai.countdown');
-      expect(frames[12]!.event).toBe('quiz.session');
+      expect(frames[9]!.event).toBe('audio.control');
+      expect(frames[10]!.event).toBe('storage.status');
+      expect(frames[11]!.event).toBe('device.health');
+      expect(frames[12]!.event).toBe('ai.countdown');
+      expect(frames[13]!.event).toBe('quiz.session');
 
       // No current ai.set / open quiz.publication (no session yet) and no alert on a fresh device.
       expect(frames.some((f) => f.event === 'ai.set')).toBe(false);
@@ -222,14 +223,14 @@ describe('panel WS hub (events.md §1/§2)', () => {
       const wsAdmin = await connect(testApp.app, testApp.adminToken);
       const framesLecturer = collectFrames(wsLecturer);
       const framesAdmin = collectFrames(wsAdmin);
-      await waitFor(() => framesLecturer.length >= 13 && framesAdmin.length >= 13);
+      await waitFor(() => framesLecturer.length >= 14 && framesAdmin.length >= 14);
 
       testApp.app.bus.publish('storage.status', { pressure: 'ok', freeBytes: 1, totalBytes: 2, policy: { maxAgeDays: 14, warningThresholdPct: 80, criticalThresholdPct: 90, earlyDeleteOrder: 'uploaded-oldest-first', neverDeleteUnuploaded: true, refuseStartWhenCritical: true } });
 
-      await waitFor(() => framesLecturer.length >= 14 && framesAdmin.length >= 14);
+      await waitFor(() => framesLecturer.length >= 15 && framesAdmin.length >= 15);
       await delay(30);
-      expect(framesLecturer.length).toBe(14);
-      expect(framesAdmin.length).toBe(14);
+      expect(framesLecturer.length).toBe(15);
+      expect(framesAdmin.length).toBe(15);
       expect(framesLecturer.at(-1)!.event).toBe('storage.status');
       expect(framesAdmin.at(-1)!.event).toBe('storage.status');
 

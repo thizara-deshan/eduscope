@@ -79,4 +79,17 @@ describe('useAudioControl', () => {
     expect(result.current.disabledReason).toMatch(/recording owner or an administrator/i);
     expect(updateAudioControl).not.toHaveBeenCalled();
   });
+
+  it('keeps requested changes pending until audio.control readback is authoritative', () => {
+    const { result, updateAudioControl } = renderAudio({ audio: control({ appliedState: 'pending' }) });
+    act(() => result.current.setMuted(true));
+    expect(updateAudioControl).not.toHaveBeenCalled();
+    expect(result.current.control).toMatchObject({ muted: false, appliedState: 'pending' });
+  });
+
+  it('uses failed applied readback rather than the requested mute', () => {
+    const { result } = renderAudio({ audio: control({ muted: false, appliedState: 'failed', lastError: 'mixer failed' }) });
+    expect(result.current.state).toBe('apply-failed');
+    expect(result.current.control).toMatchObject({ muted: false, lastError: 'mixer failed' });
+  });
 });

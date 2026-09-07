@@ -26,7 +26,7 @@ import { AuthService } from './modules/auth/service.js';
 import type { AccessTokenClaims } from './modules/auth/tokens.js';
 import { ChannelExecutor, type RelayTargetActivator } from './modules/channels/machine.js';
 import { registerChannelRuntimeRoutes } from './modules/channels/runtime-routes.js';
-import { registerAudioSettingsRoutes } from './modules/settings/audio-routes.js';
+import { getAudioControlSnapshot, registerAudioSettingsRoutes } from './modules/settings/audio-routes.js';
 import { registerChannelSettingsRoutes } from './modules/settings/channel-routes.js';
 import { registerEncoderSettingsRoutes } from './modules/settings/encoder-routes.js';
 import { registerNetworkSettingsRoutes } from './modules/settings/network-routes.js';
@@ -759,6 +759,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     recording: recordingExecutor,
     channels: channelExecutor,
     sources: sourceExecutor,
+    audio: { snapshot: () => getAudioControlSnapshot(app.db) },
     storage: storageProbe,
     health: healthAggregator,
     countdown: aiCountdown,

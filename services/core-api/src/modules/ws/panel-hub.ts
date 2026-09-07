@@ -56,6 +56,7 @@ export interface PanelHubDeps {
   recording: { getState(): RecordingStatePayload };
   channels: { listStatuses(): ChannelStatePayload[] };
   sources: { getStatus(): PayloadFor<'sources.status'>[] };
+  audio?: { snapshot(): PayloadFor<'audio.control'> };
   storage: { snapshot(): PayloadFor<'storage.status'> };
   health: { snapshot(): PayloadFor<'device.health'> };
   countdown: { snapshot(): PayloadFor<'ai.countdown'> };
@@ -206,6 +207,7 @@ export class PanelHub implements LifecycleComponent {
     for (const status of this.#deps.sources.getStatus()) {
       this.#deliverTo(conn, 'sources.status', status);
     }
+    if (this.#deps.audio) this.#deliverTo(conn, 'audio.control', this.#deps.audio.snapshot());
 
     this.#deliverTo(conn, 'storage.status', this.#deps.storage.snapshot());
     this.#deliverTo(conn, 'device.health', this.#deps.health.snapshot());

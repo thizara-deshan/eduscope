@@ -29,7 +29,7 @@ export function MicRow(): JSX.Element {
           <span className="us-srcmic__error">{control.lastError}</span>
         ) : null}
       </div>
-      <LevelMeter roleId={ROLE_ID} />
+      <LevelMeter roleId={ROLE_ID} active={state !== 'offline'} />
       <div className="us-srcmic__gain" aria-label="Lecturer Mic gain">
         <button
           type="button"
