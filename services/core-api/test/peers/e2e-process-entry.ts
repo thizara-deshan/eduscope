@@ -480,6 +480,71 @@ async function main(): Promise<void> {
     return { recordingId: recId, sessionId: sesId, fileId, jobId };
   };
 
+  // Seeds an S-30 retention fixture directly against the real DB: an
+  // age-expired uploaded recording (deleted by the scheduled/age sweep), an
+  // unuploaded recording past the same age deadline (protected forever —
+  // `neverDeleteUnuploaded`), two not-yet-age-expired uploaded recordings with
+  // distinct session start times (the pressure sweep's uploaded-oldest-first
+  // candidates), and one file on disk with no DB row at all (a "foreign" file
+  // the sweep never scans for, by construction). Idempotent per-call reset.
+  const seededRetention = { recordingIds: [] as string[], sessionIds: [] as string[], jobIds: [] as string[] };
+  const seedRetention = (): unknown => {
+    const current = app;
+    if (!current) throw new Error('core.seed-retention requires the core service running');
+    const db = current.db;
+    const lecturer = db.select().from(users).where(eq(users.username, 'e06-lecturer')).get();
+    if (!lecturer) throw new Error('core.seed-retention: seeded lecturer is missing');
+
+    if (seededRetention.jobIds.length > 0) db.delete(uploadJobs).where(inArray(uploadJobs.id, seededRetention.jobIds)).run();
+    if (seededRetention.recordingIds.length > 0) db.delete(recordings).where(inArray(recordings.id, seededRetention.recordingIds)).run();
+    if (seededRetention.sessionIds.length > 0) db.delete(lectureSessions).where(inArray(lectureSessions.id, seededRetention.sessionIds)).run();
+    seededRetention.recordingIds = [];
+    seededRetention.sessionIds = [];
+    seededRetention.jobIds = [];
+
+    const ids = new UlidGenerator();
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    const farFuture = new Date(Date.now() + 365 * 86_400_000).toISOString();
+
+    const makeRow = (title: string, startedAt: string, retentionDeleteAfter: string, uploaded: boolean): string => {
+      const sesId = ids.next(new Date(startedAt));
+      const recId = ids.next(new Date(startedAt));
+      db.insert(lectureSessions).values({
+        id: sesId, title, hallCode: 'E06-HALL', hallDisplayName: 'E-06 Hall', deviceId: 'e37-device',
+        ownerUserId: lecturer.id, startedByActor: 'user', state: 'completed', startedAt, endedAt: startedAt,
+        recordedDurationMs: 4_000, pauseCount: 0, channelActivations: [], sourceSnapshot: {}, aiEnabledAtStart: false,
+      }).run();
+      db.insert(recordings).values({
+        id: recId, sessionId: sesId, ownerUserId: lecturer.id, state: 'ready', layoutPresetId: 'pc-only',
+        durationMs: 4_000, totalBytes: 4_096, segmentCount: 1, mergeState: 'done',
+        retentionDeleteAfter, playbackAuthRequired: true,
+      }).run();
+      seededRetention.sessionIds.push(sesId);
+      seededRetention.recordingIds.push(recId);
+      if (uploaded) {
+        const jobId = ids.next(new Date(startedAt));
+        db.insert(uploadJobs).values({
+          id: jobId, recordingId: recId, adapterId: 'placeholder', state: 'done', attempt: 1,
+          nextAttemptAt: null, lastError: null, lastErrorAt: null, failureClass: null, blockedBy: null, remoteLectureId: null,
+          metadata: { title }, enqueuedAt: startedAt, startedAt, completedAt: startedAt,
+          requeuedBy: null, requeuedAt: null, remoteCleanupState: 'not-needed',
+        }).run();
+        seededRetention.jobIds.push(jobId);
+      }
+      return recId;
+    };
+
+    const ageEligibleId = makeRow('E37 Age Eligible', new Date(Date.now() - 5 * 86_400_000).toISOString(), past, true);
+    const unuploadedId = makeRow('E37 Unuploaded', new Date(Date.now() - 10 * 86_400_000).toISOString(), past, false);
+    const pressureOlderId = makeRow('E37 Pressure Older', new Date(Date.now() - 3 * 86_400_000).toISOString(), farFuture, true);
+    const pressureNewerId = makeRow('E37 Pressure Newer', new Date(Date.now() - 1 * 86_400_000).toISOString(), farFuture, true);
+
+    const foreignPath = join(recordingsRoot, 'e37-foreign.bin');
+    writeFileSync(foreignPath, Buffer.alloc(2_048, 1));
+
+    return { ageEligibleId, unuploadedId, pressureOlderId, pressureNewerId, foreignPath };
+  };
+
   const control = await listenControl(async (action, input) => {
     const value = input as Record<string, unknown> | undefined;
     switch (action) {
@@ -490,7 +555,48 @@ async function main(): Promise<void> {
           'core.seed-recordings', 'core.publish-upload-job', 'core.seed-detail',
           'core.usb.fill', 'core.usb.remove', 'core.usb.restore', 'core.scoped-allows', 'core.delete-audit',
           'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
+          'core.seed-retention', 'core.retention-sweep', 'core.storage-pressure-step', 'core.mount-scratch-device',
         ] };
+      case 'core.seed-retention':
+        return seedRetention();
+      case 'core.retention-sweep': {
+        if (!app) throw new Error('core.retention-sweep requires the core service running');
+        const trigger = String(value?.trigger ?? 'scheduled') as 'scheduled' | 'upload' | 'pressure';
+        await app.retentionSweep.run(trigger);
+        return { ran: trigger };
+      }
+      case 'core.storage-pressure-step': {
+        if (!app) throw new Error('core.storage-pressure-step requires the core service running');
+        const criticalStats = value?.critical as { totalBytes: number; freeBytes: number } | undefined;
+        const okStats = value?.ok as { totalBytes: number; freeBytes: number } | undefined;
+        if (!criticalStats || !okStats) throw new Error('core.storage-pressure-step requires critical and ok stats');
+        const relieveAfterCalls = Number(value?.relieveAfterCalls ?? 1);
+        let calls = 0;
+        app.storageProbe.setStatfs(async () => {
+          calls += 1;
+          return calls > relieveAfterCalls ? okStats : criticalStats;
+        });
+        await app.storageProbe.probe();
+        return { primed: true };
+      }
+      case 'core.mount-scratch-device': {
+        // Storage volumes have exactly one 'recordings'-role row (schema
+        // uniqueness), seeded at boot as uuid `e06-recordings`/devicePath
+        // `/dev/e06-recordings` with no matching fake block device — so a
+        // real format 422s on device mismatch until a device resolving to
+        // that same uuid/devNode is present. This adds exactly that device
+        // (distinct from the unrelated `usbVolume` export/USB fixture) so
+        // the seeded volume becomes the real, formattable scratch target.
+        const uuid = 'e06-recordings';
+        const mountPath = join(dir, uuid);
+        mkdirSync(mountPath, { recursive: true });
+        const scratch: FakeBlockDevice = {
+          devicePath: '/dev/e06-recordings', mountPath, label: null,
+          capacityBytes: Number(value?.capacityBytes ?? 1_000_000_000), freeBytes: Number(value?.freeBytes ?? 800_000_000), usage: 'recordings',
+        };
+        usb.setVolumes([usbVolume, scratch]);
+        return { uuid, devicePath: scratch.devicePath };
+      }
       case 'core.upload-retry-now':
         // Brings a failed job's retry due now (the real connectivity backoff is
         // minutes) and wakes the scheduler — the device coming back online.
