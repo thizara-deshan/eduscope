@@ -7,7 +7,8 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordingSegments, storageVolumes, users } from '../../src/db/schema.js';
+import { eq, inArray } from 'drizzle-orm';
+import { answerProjections, auditLogEntries, audioControls, lectureSessions, questions, quizSessionProjections, recordings, recordingSegments, storageVolumes, uploadJobs, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -225,6 +226,84 @@ async function main(): Promise<void> {
   };
   await start();
 
+  // Directly seeds a paged, two-owner recordings fixture through the real DB —
+  // the same rows `listRecordings` scopes/filters server-side — so the S-21
+  // witness can prove real ownership scoping, keyset paging across an HTTP
+  // drop, and a title/owner filter applied by the server. Idempotent: it
+  // resets its own `e30-` rows first so both real tests in the spec are
+  // independent of ordering.
+  const seededRecordings = { recordingIds: [] as string[], sessionIds: [] as string[], jobIds: [] as string[] };
+  const seedRecordings = (): unknown => {
+    const current = app;
+    if (!current) throw new Error('core.seed-recordings requires the core service running');
+    const db = current.db;
+    const lecturer = db.select().from(users).where(eq(users.username, 'e06-lecturer')).get();
+    const other = db.select().from(users).where(eq(users.username, 'e06-other')).get();
+    if (!lecturer || !other) throw new Error('core.seed-recordings: seeded users are missing');
+
+    // Idempotent reset of exactly the rows a prior seed produced (ids are real
+    // ULIDs — the panel's zRecording validates `id`/`sessionId` as ULIDs, so a
+    // synthetic prefix would be rejected client-side).
+    if (seededRecordings.jobIds.length > 0) db.delete(uploadJobs).where(inArray(uploadJobs.id, seededRecordings.jobIds)).run();
+    if (seededRecordings.recordingIds.length > 0) db.delete(recordings).where(inArray(recordings.id, seededRecordings.recordingIds)).run();
+    if (seededRecordings.sessionIds.length > 0) db.delete(lectureSessions).where(inArray(lectureSessions.id, seededRecordings.sessionIds)).run();
+    seededRecordings.recordingIds = [];
+    seededRecordings.sessionIds = [];
+    seededRecordings.jobIds = [];
+
+    const ids = new UlidGenerator();
+    const base = Date.parse('2026-08-01T09:00:00.000Z');
+    // Well in the future so the real retention sweep never removes a seeded row
+    // (in particular the one flipped to `done`, which would otherwise become
+    // retention-eligible mid-test).
+    const retentionDeleteAfter = new Date(Date.now() + 365 * 86_400_000).toISOString();
+    const pageSize = 50;
+    const lecturerTotal = 55;
+    const filterTitle = 'Quantum Cryptography Seminar';
+    const otherTitles = ['Other Owner Alpha', 'Other Owner Beta', 'Other Owner Gamma'];
+
+    const insertRecording = (ownerId: string, title: string, startedAt: string): string => {
+      const sesId = ids.next(new Date(startedAt));
+      const recId = ids.next(new Date(startedAt));
+      db.insert(lectureSessions).values({
+        id: sesId, title, hallCode: 'E06-HALL', hallDisplayName: 'E-06 Hall', deviceId: 'e30-device',
+        ownerUserId: ownerId, startedByActor: 'user', state: 'completed', startedAt, endedAt: startedAt,
+        recordedDurationMs: 600_000, pauseCount: 0, channelActivations: [], sourceSnapshot: {}, aiEnabledAtStart: false,
+      }).run();
+      db.insert(recordings).values({
+        id: recId, sessionId: sesId, ownerUserId: ownerId, state: 'ready', layoutPresetId: 'pc-only',
+        durationMs: 600_000, totalBytes: 1_000_000, segmentCount: 1, mergeState: 'done',
+        retentionDeleteAfter, playbackAuthRequired: true,
+      }).run();
+      seededRecordings.sessionIds.push(sesId);
+      seededRecordings.recordingIds.push(recId);
+      return recId;
+    };
+
+    let uploadingRecordingId = '';
+    for (let i = 0; i < lecturerTotal; i += 1) {
+      const startedAt = new Date(base - i * 60_000).toISOString();
+      const title = i === 0 ? 'Uploading Lecture' : i === 1 ? filterTitle : `Lecturer Lecture ${String(i)}`;
+      const recId = insertRecording(lecturer.id, title, startedAt);
+      if (i === 0) uploadingRecordingId = recId;
+    }
+    otherTitles.forEach((title, j) => {
+      insertRecording(other.id, title, new Date(base - (200 + j) * 60_000).toISOString());
+    });
+
+    const now = new Date().toISOString();
+    const uploadJobId = ids.next(new Date());
+    db.insert(uploadJobs).values({
+      id: uploadJobId, recordingId: uploadingRecordingId, adapterId: 'placeholder', state: 'uploading', attempt: 1,
+      nextAttemptAt: null, lastError: null, lastErrorAt: null, failureClass: null, blockedBy: null, remoteLectureId: null,
+      metadata: { title: 'Uploading Lecture' }, enqueuedAt: now, startedAt: now, completedAt: null,
+      requeuedBy: null, requeuedAt: null, remoteCleanupState: 'not-needed',
+    }).run();
+    seededRecordings.jobIds.push(uploadJobId);
+
+    return { lecturerId: lecturer.id, otherId: other.id, pageSize, lecturerTotal, uploadingRecordingId, uploadJobId, otherTitles, filterTitle };
+  };
+
   const control = await listenControl(async (action, input) => {
     const value = input as Record<string, unknown> | undefined;
     switch (action) {
@@ -232,7 +311,26 @@ async function main(): Promise<void> {
         return { actions: [
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
           'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger', 'core.question-audit', 'core.reset-answer-projections',
+          'core.seed-recordings', 'core.publish-upload-job',
         ] };
+      case 'core.seed-recordings':
+        return seedRecordings();
+      case 'core.publish-upload-job': {
+        // Re-publishes a seeded upload job at a new state on the SAME real
+        // domain bus the upload machine uses, so the panel WS delivers a
+        // genuine `upload.job` frame that advances the S-21 badge live.
+        if (!app) throw new Error('core.publish-upload-job requires the core service running');
+        const jobId = String(value?.jobId ?? '');
+        const state = String(value?.state ?? 'done') as 'queued' | 'uploading' | 'completing' | 'done' | 'failed' | 'dead-letter' | 'cancelled';
+        const row = app.db.select().from(uploadJobs).where(eq(uploadJobs.id, jobId)).get();
+        if (!row) throw new Error(`core.publish-upload-job: unknown job ${jobId}`);
+        app.db.update(uploadJobs).set({ state, completedAt: state === 'done' ? new Date().toISOString() : row.completedAt }).where(eq(uploadJobs.id, jobId)).run();
+        app.bus.publish('upload.job', {
+          jobId: row.id, recordingId: row.recordingId, state, attempt: row.attempt,
+          failureClass: null, nextAttemptAt: null, progressPct: state === 'done' ? 100 : 0, lastError: null, blockedBy: null,
+        });
+        return { published: true, state };
+      }
       case 'core.start':
         await start();
         return { running: true };
