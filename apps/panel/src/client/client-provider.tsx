@@ -22,6 +22,7 @@ import type {
 } from '@eduscope/api-client';
 import { useWsStore } from '../store/ws-store.js';
 import { useOptionalRuntimeConfig } from '../config/runtime-config.js';
+import { panelTokenStore } from '../auth/token-store.js';
 
 /**
  * Exported ONLY for tests that need a synchronous stub client (`use-login`,
@@ -88,7 +89,7 @@ export function ClientProvider({
      * client is a lightweight constructor and is always built once.
      */
     const build = async (): Promise<{ routed: RoutedClient; mock: MockClient | null }> => {
-      const real = createRealClient(config.apiBaseUrl);
+      const real = createRealClient(config.apiBaseUrl, { tokenStore: panelTokenStore });
       const mock = anyMock
         ? (await import('@eduscope/api-client/mock')).createMockClient(scenario)
         : null;

@@ -82,10 +82,17 @@ export function createAuthCoordinator(options: {
     return refreshInFlight;
   };
 
-  const authorized: AuthorizedSend = async (build, _operation) => {
+  const authorized: AuthorizedSend = async (build, operation) => {
     const bearer = store.getTokens()?.accessToken ?? null;
     const first = await build(bearer);
     if (first.status !== 401) return first;
+    // `changePassword` is the one authenticated route whose contract reuses
+    // 401 `auth.invalid-credentials` for a body-validation failure (a wrong
+    // *current* password) rather than an invalid bearer — the two are
+    // indistinguishable by status/code alone. Refreshing and retrying cannot
+    // fix a wrong password, and clearing tokens after the identical retry
+    // 401s again would silently sign a still-valid session out over a typo.
+    if (operation === 'changePassword') return first;
 
     const refreshed = await refreshOnce();
     if (!refreshed) return first; // tokens cleared; parseResponse rejects the 401

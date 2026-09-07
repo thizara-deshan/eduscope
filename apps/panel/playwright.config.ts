@@ -4,6 +4,10 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   fullyParallel: true,
+  // The same locally-installed-Chromium host (see `launchOptions` below) is
+  // typically resource-constrained; four parallel workers sharing one old
+  // browser process there produces spurious real-backend timeouts.
+  ...(process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH ? { workers: 1 } : {}),
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',

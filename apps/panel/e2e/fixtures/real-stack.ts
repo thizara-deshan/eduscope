@@ -38,9 +38,30 @@ async function control<T>(stack: RealStackDescriptor, action: string, input?: un
   return raw.length === 0 ? (undefined as T) : (JSON.parse(raw) as T);
 }
 
+/**
+ * Polyfills the `URL.parse` static method (spec'd/shipped in Chromium 126+,
+ * absent from older browsers such as this environment's system Chromium
+ * 114). Playwright's own page-context instrumentation (playwright-core's
+ * bundle, not this app) calls it unconditionally; without this, the browser
+ * throws `TypeError: URL.parse is not a function` deep inside Playwright's
+ * own tracking, which breaks its URL/navigation bookkeeping — the app itself
+ * navigates fine, but `page.waitForURL`/`toHaveURL` never observe it.
+ */
+function installUrlParsePolyfill(): void {
+  if (typeof URL.parse === 'function') return;
+  URL.parse = (input: string | URL, base?: string | URL): URL | null => {
+    try {
+      return new URL(input, base);
+    } catch {
+      return null;
+    }
+  };
+}
+
 export const test = base.extend<{ realStack: RealStack }>({
   realStack: async ({ page }, use) => {
     const stack = descriptor();
+    await page.addInitScript(installUrlParsePolyfill);
     await page.route('**/config.json', async (route) => {
       await route.fulfill({
         status: 200,
