@@ -1,4 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+
+const SOURCES_ONLINE = {
+  publishers: {
+    usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+    audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+  },
+  consumers: [{ id: 'record:00000001', state: 'running', pgid: 7101 }],
+} as const;
 
 async function signInAs(page: Page, username: string, password: string) {
   await page.goto('/login');
@@ -223,4 +234,126 @@ test.describe('S-27 Streaming Configuration', () => {
     });
     expect(panelOverflow).toBeLessThanOrEqual(1);
   });
+});
+
+async function routeRealConfig(page: Page, realStack: { coreBaseUrl: string; quizTlsBaseUrl?: string; quizBaseUrl: string }) {
+  await page.route('**/config.json', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        apiBaseUrl: realStack.coreBaseUrl,
+        quizBaseUrl: realStack.quizTlsBaseUrl ?? realStack.quizBaseUrl,
+        environment: 'integration',
+        adapters: { default: 'real', overrides: {} },
+      }),
+    });
+  });
+}
+
+realTest.describe('S-27 Streaming Configuration — real', () => {
+  realTest(
+    'real: write-only keys never leak, and a failing relay activates exactly the enabled targets while local recording stays live',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(90_000);
+      await routeRealConfig(page, realStack);
+      await realStack.control('core.pm.status', { status: SOURCES_ONLINE });
+
+      const base = realStack.coreBaseUrl;
+      const login = await fetch(`${base}/auth/login`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...REAL_STACK_ACCOUNTS.admin, client: 'panel' }),
+      });
+      const { tokens } = await login.json() as { tokens: { accessToken: string } };
+      const auth = { authorization: `Bearer ${tokens.accessToken}` };
+      const jsonAuth = { 'content-type': 'application/json', ...auth };
+
+      // --- Create YouTube / Facebook / custom targets with distinct secrets ---
+      const SECRETS = {
+        youtube: 'yt-secret-KEY-1111',
+        facebook: 'fb-secret-KEY-2222',
+        'custom-rtmp': 'custom-secret-KEY-3333',
+      } as const;
+      const created: Record<string, string> = {};
+      for (const [platform, streamKey] of Object.entries(SECRETS)) {
+        const ingestUrl = platform === 'custom-rtmp'
+          ? 'rtmp://ingest.example.edu/live'
+          : platform === 'youtube'
+            ? 'rtmps://a.rtmp.youtube.com/live2'
+            : 'rtmps://live-api-s.facebook.com:443/rtmp';
+        const res = await fetch(`${base}/settings/stream-targets`, {
+          method: 'POST', headers: jsonAuth,
+          body: JSON.stringify({ platform, displayName: `E20 ${platform}`, ingestUrl, streamKey }),
+        });
+        realExpect(res.status, `create ${platform}`).toBe(201);
+        const bodyText = await res.text();
+        // Write-only: the create response never echoes the secret back.
+        realExpect(bodyText, `${platform} secret in create response`).not.toContain(streamKey);
+        created[platform] = (JSON.parse(bodyText) as { id: string }).id;
+      }
+
+      // The list endpoint never returns any secret either.
+      const listText = await (await fetch(`${base}/settings/stream-targets`, { headers: auth })).text();
+      for (const secret of Object.values(SECRETS)) realExpect(listText).not.toContain(secret);
+
+      // --- The real screen renders the targets without exposing any key ---
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.admin.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.admin.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Show controls' }).click();
+      await page.getByRole('button', { name: 'Advanced' }).click();
+      await page.getByRole('button', { name: 'Streaming Configuration' }).click();
+      await realExpect(page.getByTestId('screen')).toHaveAttribute('data-screen', 'S-27');
+      await realExpect(page.getByText('E20 youtube')).toBeVisible();
+      const dom = await page.locator('body').innerText();
+      for (const secret of Object.values(SECRETS)) realExpect(dom, 'secret in DOM').not.toContain(secret);
+
+      // --- Enable an exact subset (YouTube + Facebook, not custom) ---
+      const enabled = [created.youtube, created.facebook];
+      const setStreaming = await fetch(`${base}/channels/streaming`, {
+        method: 'PUT', headers: jsonAuth, body: JSON.stringify({ streamTargetIds: enabled }),
+      });
+      realExpect(setStreaming.status).toBe(200);
+
+      // --- Start a real local recording, then fail the relay reload ---
+      const start = await fetch(`${base}/recording/start`, { method: 'POST', headers: auth });
+      realExpect(start.status).toBe(202);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 7101 },
+      });
+      await realExpect.poll(async () => {
+        const state = await (await fetch(`${base}/recording/state`, { headers: auth })).json() as { state: string };
+        return state.state;
+      }).toBe('recording');
+
+      await realStack.control('core.relay', { fail: true });
+      const enableStream = await fetch(`${base}/channels/streaming/enable`, { method: 'POST', headers: auth });
+      realExpect(enableStream.status).toBe(202);
+
+      // Streaming fails on the relay activation...
+      await realExpect.poll(async () => {
+        const { items } = await (await fetch(`${base}/channels`, { headers: auth })).json() as {
+          items: Array<{ status: { channelId: string; state: string } }>;
+        };
+        return items.find((item) => item.status.channelId === 'streaming')!.status.state;
+      }, { timeout: 15_000 }).toBe('failed');
+
+      // ...while the local recording is completely undisturbed.
+      const recording = await (await fetch(`${base}/recording/state`, { headers: auth })).json() as { state: string };
+      realExpect(recording.state, 'local recording stays live through the streaming failure').toBe('recording');
+
+      // The relay peer received an activation for EXACTLY the enabled set, and
+      // no secret ever reached the ledger/log.
+      const ledger = await realStack.ledger();
+      const activations = (ledger.relay as Array<{ action: string; streamTargetIds?: string[] }>)
+        .filter((call) => call.action === 'activate');
+      realExpect(activations.length).toBeGreaterThanOrEqual(1);
+      realExpect([...activations.at(-1)!.streamTargetIds!].sort()).toEqual([...enabled].sort());
+      const ledgerText = JSON.stringify(ledger);
+      for (const secret of Object.values(SECRETS)) realExpect(ledgerText, 'secret in ledger/log').not.toContain(secret);
+    },
+  );
 });
