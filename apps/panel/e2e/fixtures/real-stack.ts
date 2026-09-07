@@ -1,4 +1,5 @@
-import { test as base, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { test as base, expect, type APIRequestContext } from '@playwright/test';
 
 interface RealStackDescriptor {
   readonly coreBaseUrl: string;
@@ -106,5 +107,22 @@ export const test = base.extend<{ realStack: RealStack }>({
 });
 
 test.use({ ignoreHTTPSErrors: true });
+
+/**
+ * Hashes every built JS bundle the served `index.html` references. Used to
+ * prove a settings change never triggers a client rebuild — it only ever
+ * changes rows through REST/WS, so the served bundle is byte-identical
+ * before and after.
+ */
+export async function hashBuiltBundle(request: APIRequestContext): Promise<string> {
+  const html = await (await request.get('/index.html')).text();
+  const scriptSrcs = [...html.matchAll(/<script[^>]+\ssrc="([^"]+)"/g)].map((match) => match[1]!);
+  if (scriptSrcs.length === 0) throw new Error('hashBuiltBundle: no <script src> found in index.html');
+  const hash = createHash('sha256');
+  for (const src of [...scriptSrcs].sort()) {
+    hash.update(Buffer.from(await (await request.get(src)).body()));
+  }
+  return hash.digest('hex');
+}
 
 export { expect };
