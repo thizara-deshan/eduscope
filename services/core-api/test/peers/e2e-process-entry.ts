@@ -83,7 +83,14 @@ async function main(): Promise<void> {
     expectedStorageVolumeUuid: 'e06-recordings',
     featureFlags: { recordingEnabled: true, aiQuizEnabled: true, streamingEnabled: true },
     quizServerBaseUrl: quizBaseUrl,
-    llmEndpoint: null,
+    // A non-null endpoint so the real question-generation loop actually issues
+    // its request (with a null endpoint it short-circuits to `unreachable`
+    // without ever calling the question service). The value itself is only
+    // forwarded to the fake question service, which ignores it; toggling the
+    // fake offline via `core.ai` is what drives the real unreachable/degraded
+    // path in the S-13 witness, and `core.ai-generate` queues the drafts that
+    // prove recovery.
+    llmEndpoint: 'http://127.0.0.1:9/e06-llm',
     provisionedAt: '2026-09-07T00:00:00.000Z',
     provisionedBy: 'e06-real-stack',
   }));
@@ -224,7 +231,7 @@ async function main(): Promise<void> {
       case 'core.capabilities':
         return { actions: [
           'core.start', 'core.stop', 'core.restart', 'core.ws.drop', 'core.pm.offline', 'core.pm.publish',
-          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.upload', 'core.helper', 'core.relay', 'core.ledger',
+          'core.pm.response', 'core.storage-pressure', 'core.ai', 'core.ai-generate', 'core.upload', 'core.helper', 'core.relay', 'core.ledger',
         ] };
       case 'core.start':
         await start();
@@ -281,6 +288,26 @@ async function main(): Promise<void> {
         else if (service === 'question') ai.setQuestionOffline(offline);
         else throw new Error(`unknown AI service: ${service}`);
         return { service, offline };
+      }
+      case 'core.ai-generate': {
+        // Queues one successful `POST /generate` response (A-14's 3–5 valid
+        // MCQ survivors) for the real question-generation loop to consume on
+        // the next generate-now, so the S-13 witness can prove genuine
+        // recovery to ready drafts after an LLM outage.
+        const count = Math.min(5, Math.max(3, Number(value?.count ?? 4)));
+        const questions = Array.from({ length: count }, (_, index) => ({
+          prompt: `Real generated question ${String(index + 1)}?`,
+          options: [
+            { text: 'Correct answer', isCorrect: true },
+            { text: 'Distractor A', isCorrect: false },
+            { text: 'Distractor B', isCorrect: false },
+          ],
+        }));
+        ai.queueGenerateBehaviors([{ kind: 'response', body: {
+          questionSetId: 'e06-real-set', promptVersion: 'mcq/v1', modelId: 'e06-llm',
+          requested: count, returned: count, droppedInvalid: 0, questions,
+        } }]);
+        return { queued: count };
       }
       case 'core.upload':
         if (value?.cutAtPatch !== undefined) upload.cutOnPatch(Number(value.cutAtPatch));
