@@ -58,7 +58,7 @@ export function run(command, args, options = {}) {
   });
 }
 
-export function startStack() {
+export function startStack(options = {}) {
   const child = spawn(
     process.execPath,
     [
@@ -68,7 +68,7 @@ export function startStack() {
     {
       cwd: coreCwd,
       detached: useProcessGroups,
-      env: process.env,
+      env: { ...process.env, ...(options.env ?? {}) },
       shell: false,
       stdio: ['ignore', 'pipe', 'inherit'],
     },

@@ -18,6 +18,8 @@ export const REAL_STACK_ACCOUNTS = {
 
 export interface RealStack extends RealStackDescriptor {
   control<T = unknown>(action: string, input?: unknown): Promise<T>;
+  login(account?: keyof typeof REAL_STACK_ACCOUNTS): Promise<{ accessToken: string }>;
+  recordingAudit(): Promise<{ lectureSessions: number; recordStarts: number }>;
 }
 
 function descriptor(): RealStackDescriptor {
@@ -74,7 +76,20 @@ export const test = base.extend<{ realStack: RealStack }>({
         }),
       });
     });
-    await use({ ...stack, control: (action, input) => control(stack, action, input) });
+    await use({
+      ...stack,
+      control: (action, input) => control(stack, action, input),
+      async login(account = 'lecturer') {
+        const response = await fetch(`${stack.coreBaseUrl}/auth/login`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...REAL_STACK_ACCOUNTS[account], client: 'panel' }),
+        });
+        if (!response.ok) throw new Error(`real-stack login returned ${String(response.status)}`);
+        const body = await response.json() as { tokens: { accessToken: string } };
+        return { accessToken: body.tokens.accessToken };
+      },
+      recordingAudit: () => control(stack, 'core.recording-audit'),
+    });
   },
 });
 

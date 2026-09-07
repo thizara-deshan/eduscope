@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TIMERS } from '@eduscope/shared';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -130,4 +131,46 @@ test.describe('S-04 Dashboard — idle', () => {
     }));
     expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.viewportHeight);
   });
+});
+
+realTest.describe('S-04 Dashboard — idle — real', () => {
+  realTest(
+    'real: named source and storage refusals create no lecture session or PM consumer',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(60_000);
+      const tokens = await realStack.login('admin');
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${tokens.accessToken}` };
+
+      // Make the required presentation source unavailable through the real typed API.
+      const bindingsResponse = await fetch(`${realStack.coreBaseUrl}/sources/bindings`, { headers });
+      const { items: bindings } = await bindingsResponse.json() as { items: Array<{ roleId: string; physicalInputId: string | null }> };
+      const presentation = bindings.find((binding) => binding.roleId === 'presentation');
+      if (!presentation) throw new Error('real stack has no presentation binding');
+      await fetch(`${realStack.coreBaseUrl}/sources/bindings/presentation`, {
+        method: 'PUT', headers,
+        body: JSON.stringify({ physicalInputId: presentation.physicalInputId, enabled: false }),
+      });
+
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect(page.getByRole('alert')).toContainText('A required source role is unbound');
+      realExpect(await realStack.recordingAudit()).toEqual({ lectureSessions: 0, recordStarts: 0 });
+
+      await fetch(`${realStack.coreBaseUrl}/sources/bindings/presentation`, {
+        method: 'PUT', headers,
+        body: JSON.stringify({ physicalInputId: presentation.physicalInputId, enabled: true }),
+      });
+      await page.getByRole('button', { name: 'Dismiss' }).click();
+      await realExpect(page.getByRole('button', { name: 'Start Recording' })).toBeEnabled();
+      await realStack.control('core.storage-pressure', { totalBytes: 1_000_000_000, freeBytes: 1 });
+      await realExpect(page.getByRole('alert')).toContainText("95% critical threshold");
+      await realExpect(page.getByRole('button', { name: 'Start Recording' })).toBeDisabled();
+      realExpect(await realStack.recordingAudit()).toEqual({ lectureSessions: 0, recordStarts: 0 });
+    },
+  );
 });

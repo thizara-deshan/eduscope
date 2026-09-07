@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { storageVolumes, users } from '../../src/db/schema.js';
+import { lectureSessions, storageVolumes, users } from '../../src/db/schema.js';
 import { SystemClock } from '../../src/lib/clock.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
@@ -274,6 +274,11 @@ async function main(): Promise<void> {
         return { pm: pm.calls, helper: helper.ledger, relay: relayCalls, ai: {
           stt: ai.sttCalls, slide: ai.slideCalls, question: ai.questionCalls,
         } };
+      case 'core.recording-audit':
+        return {
+          lectureSessions: app?.db.select().from(lectureSessions).all().length ?? 0,
+          recordStarts: pm.calls.filter((call) => call.method === 'POST' && call.path === '/consumers/record').length,
+        };
       default:
         throw new Error(`unknown core control action: ${action}`);
     }

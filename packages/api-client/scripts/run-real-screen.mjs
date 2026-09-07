@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { run, startStack, stopStack } from './gate-dual-adapter.mjs';
 
@@ -21,19 +22,24 @@ async function main() {
     throw new Error(`${specRelative} does not declare a real adapter witness`);
   }
 
-  const stack = await startStack();
+  const stack = await startStack({ env: app === 'panel' ? { EDUSCOPE_PANEL_ONLY: '1' } : {} });
   let failure;
   try {
     await run(pnpm, [
       // No `--` before the spec path: this pnpm version forwards it literally
       // to Playwright's CLI, which then treats it as a filter reset and runs
       // the entire suite instead of just this spec.
-      '--filter', `@eduscope/${app}`, 'e2e', `e2e/${stem}.spec.ts`,
+      '--filter', `@eduscope/${app}`, 'e2e', `e2e/${stem}.spec.ts`, '--grep', 'real:',
     ], {
       env: {
         EDUSCOPE_E2E_ADAPTER: 'real',
         EDUSCOPE_REAL_STACK_DESCRIPTOR: JSON.stringify(stack.descriptor),
         NODE_TLS_REJECT_UNAUTHORIZED: '0',
+        ...(process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH
+          ? {}
+          : existsSync('/usr/bin/chromium-browser')
+            ? { EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH: '/usr/bin/chromium-browser' }
+            : {}),
       },
     });
   } catch (error) {

@@ -134,6 +134,37 @@ export async function startRealStack(): Promise<RealStackHandle> {
   }
 }
 
+/** Panel screen witnesses do not exercise D and must remain runnable on boards without Docker. */
+export async function startPanelRealStack(): Promise<RealStackHandle> {
+  const nonce = randomUUID();
+  const deviceId = '01K4A8E0600000000000000001';
+  const core = await startCorePeer({
+    E06_QUIZ_BASE_URL: 'http://127.0.0.1:9',
+    E06_QUIZ_DEVICE_ID: deviceId,
+    E06_QUIZ_DEVICE_BEARER: `e06-device-${nonce}`,
+    E06_INTERNAL_BEARER: `e06-internal-${nonce}`,
+    E06_JWT_SECRET: `e06-jwt-${nonce}`,
+    E06_SECRETBOX_KEY: `e06-secretbox-${nonce}`,
+    E06_LECTURER_PASSWORD: REAL_STACK_ACCOUNTS.lecturer.password,
+    E06_ADMIN_PASSWORD: REAL_STACK_ACCOUNTS.admin.password,
+    E06_RESET_PASSWORD: REAL_STACK_ACCOUNTS.reset.password,
+    E06_DISABLED_PASSWORD: REAL_STACK_ACCOUNTS.disabled.password,
+  });
+  const descriptor: RealStackDescriptor = {
+    coreBaseUrl: `${core.ready.baseUrl}/api/v1`,
+    quizBaseUrl: 'http://127.0.0.1:9',
+    quizTlsBaseUrl: 'https://127.0.0.1:9',
+    controls: { core: core.ready.controlUrl, quiz: core.ready.controlUrl },
+    fixtureIds: {
+      ...core.ready.fixtureIds,
+      deviceId,
+      quizSessionId: '01K4A8E0600000000000000002',
+      joinCode: 'E06001',
+    },
+  };
+  return createHandle(descriptor, () => core.close());
+}
+
 export async function acquireRealStack(): Promise<RealStackHandle> {
   const encoded = process.env.EDUSCOPE_REAL_STACK_DESCRIPTOR;
   if (!encoded) return startRealStack();
@@ -165,7 +196,9 @@ export function normalizeParityValue(value: unknown): unknown {
 }
 
 async function main(): Promise<void> {
-  const stack = await startRealStack();
+  const stack = process.env.EDUSCOPE_PANEL_ONLY === '1'
+    ? await startPanelRealStack()
+    : await startRealStack();
   process.stdout.write(`${JSON.stringify({ type: 'ready', descriptor: stack.descriptor })}\n`);
   let closing: Promise<void> | null = null;
   const close = (): Promise<void> => closing ??= stack.close();
