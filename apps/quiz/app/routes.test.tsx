@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { QuizAppProviders } from '../src/app/quiz-app-providers.js';
 import JoinPage from './j/[joinCode]/page.js';
@@ -18,13 +18,15 @@ describe('quiz route skeletons (screen-inventory §6)', () => {
     ['S-37', () => <JoinPage params={{ joinCode: 'ABC123' }} />],
     ['S-38', () => <RegisterPage params={{ joinCode: 'ABC123' }} />],
     ['S-39', () => <PlayPage />],
-  ])('renders %s', (id, Component) => {
+  ])('renders %s', async (id, Component) => {
     render(
       <QuizAppProviders>
         <Component />
       </QuizAppProviders>,
     );
-    expect(screen.getByTestId('screen').dataset.screen).toBe(id);
+    await waitFor(() => {
+      expect(screen.getByTestId('screen').dataset.screen).toBe(id);
+    });
   });
 
   it('sets a >= 16px root size so iOS does not zoom on focus', () => {

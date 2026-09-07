@@ -1,28 +1,39 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { resolveSelection } from '@eduscope/api-client';
 import { QuizClientProvider } from '../client/quiz-client-provider.js';
 import { createQuizQueryClient } from '../client/query-client.js';
-import { QuizScenarioOverlay } from '../devtools/quiz-scenario-overlay.js';
+import { RuntimeConfigProvider, useRuntimeConfig } from '../config/runtime-config.js';
 
 /**
- * The overlay only ever does anything against a mock client (W7-D-5: no real
- * adapter exists yet), so it ships exactly when the mock does — this is the
- * same adapter-selection gate apps/panel uses, kept ready for the day a real
- * adapter lands here too.
+ * The overlay only ever does anything against a mock client, so runtime
+ * `studentQuiz` selection gates both its render and its lazy-loaded chunk.
  */
-const MOCK_ADAPTER = process.env.NEXT_PUBLIC_EDUSCOPE_REAL_API !== '1';
+const QuizScenarioOverlay = lazy(() =>
+  import('../devtools/quiz-scenario-overlay.js').then((module) => ({
+    default: module.QuizScenarioOverlay,
+  })),
+);
+
+function DevOverlaySlot() {
+  const selection = resolveSelection(useRuntimeConfig());
+  if (selection.studentQuiz !== 'mock') return null;
+  return <Suspense fallback={null}><QuizScenarioOverlay /></Suspense>;
+}
 
 export function QuizAppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQuizQueryClient);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <QuizClientProvider>
-        {children}
-        {MOCK_ADAPTER && <QuizScenarioOverlay />}
-      </QuizClientProvider>
+      <RuntimeConfigProvider>
+        <QuizClientProvider>
+          {children}
+          <DevOverlaySlot />
+        </QuizClientProvider>
+      </RuntimeConfigProvider>
     </QueryClientProvider>
   );
 }

@@ -15,7 +15,7 @@ const SNAPSHOT: readonly StudentServerEvent[] = [
 function makeClient(connect: QuizAppClient['connect']) {
   const emitter = createEmitter<StudentServerEvent>();
   const client: QuizAppClient = {
-    scenario: 'student-quiz-happy',
+    scenario: null,
     resolveJoinCode: vi.fn(),
     registerParticipant: vi.fn(),
     submitAnswer: vi.fn(),

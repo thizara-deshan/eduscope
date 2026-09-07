@@ -20,7 +20,8 @@ import type { ScenarioName, StudentQuizScenario, StudentQuizTransitionId } from 
 import { createEmitter, type EventStream } from '../stream.js';
 
 export interface QuizAppClient {
-  readonly scenario: ScenarioName;
+  /** Present only for the development mock; real clients expose `null`. */
+  readonly scenario: ScenarioName | null;
   resolveJoinCode(joinCode: string): Promise<ResolveJoinCodeResponse>;
   registerParticipant(
     quizSessionId: string,
