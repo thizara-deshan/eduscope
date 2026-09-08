@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   const control = await listenControl(async (action, input) => {
     switch (action) {
       case 'quiz.capabilities':
-        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers', 'quiz.foreign-room', 'quiz.close-session', 'quiz.participant-audit'] };
+        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers', 'quiz.foreign-room', 'quiz.close-session', 'quiz.participant-audit', 'quiz.publish-question', 'quiz.close-publication', 'quiz.answer-audit'] };
       case 'quiz.start':
         await start();
         return { running: true };
@@ -246,6 +246,64 @@ async function main(): Promise<void> {
           body: JSON.stringify({ lectureSessionId: ourLectureSessionId, deviceId: foreignDeviceId, hallDisplayName: 'Foreign Hall' }),
         });
         return { foreignName, foreignStudentIdNumber, crossDeviceStatus: attempt.status };
+      }
+      case 'quiz.publish-question': {
+        // Publishes a real question through D's own device-facing
+        // `quizSyncPublish` endpoint (the same one B calls after
+        // send-to-projector) — a quiz-app-only screen witness needs a real
+        // open publication without spinning up a real B lecture to mint one.
+        // Publishing a second question closes whatever was still open,
+        // exactly as production does.
+        const running = app;
+        if (!running) throw new Error('quiz.publish-question requires the quiz service running');
+        const now = new Date();
+        const publicationId = running.ids.next(now);
+        const questionId = running.ids.next(now);
+        const options = [
+          { id: running.ids.next(now), label: 'A' as const, text: 'Mercury' },
+          { id: running.ids.next(now), label: 'B' as const, text: 'Venus' },
+          { id: running.ids.next(now), label: 'C' as const, text: 'Earth' },
+          { id: running.ids.next(now), label: 'D' as const, text: 'Mars' },
+        ];
+        const correctOptionId = options[3]!.id;
+        const response = await fetch(`${baseUrl}/device/v1/publications`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${deviceBearer}` },
+          body: JSON.stringify({
+            publicationId, quizSessionId: QUIZ_SESSION_ID, questionId,
+            prompt: 'Which planet is known as the Red Planet?', options, correctOptionId,
+            publishedAt: now.toISOString(),
+          }),
+        });
+        if (response.status !== 201) throw new Error(`quiz.publish-question: publish returned ${String(response.status)}`);
+        return { publicationId, questionId, options, correctOptionId };
+      }
+      case 'quiz.close-publication': {
+        const { publicationId, closeReason } = (input as { publicationId?: unknown; closeReason?: unknown } | undefined) ?? {};
+        if (typeof publicationId !== 'string') throw new Error('quiz.close-publication requires publicationId');
+        const response = await fetch(`${baseUrl}/device/v1/publications/${publicationId}/close`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${deviceBearer}` },
+          body: JSON.stringify({
+            publicationId,
+            closedAt: new Date().toISOString(),
+            closeReason: typeof closeReason === 'string' ? closeReason : 'lecturer-closed',
+          }),
+        });
+        if (response.status !== 204) throw new Error(`quiz.close-publication: close returned ${String(response.status)}`);
+        return { closed: true };
+      }
+      case 'quiz.answer-audit': {
+        // Counts durable answer rows D has actually stored, optionally scoped
+        // to one publication, so a screen witness can prove a race/retry
+        // never produces more than one row per participant.
+        const publicationId = (input as { publicationId?: unknown } | undefined)?.publicationId;
+        const running = app;
+        if (!running) throw new Error('quiz.answer-audit requires the quiz service running');
+        const rows = typeof publicationId === 'string'
+          ? await running.sql`SELECT count(*)::int AS count FROM answers WHERE publication_id = ${publicationId}`
+          : await running.sql`SELECT count(*)::int AS count FROM answers`;
+        return { count: Number((rows[0] as { count: number } | undefined)?.count ?? 0) };
       }
       case 'quiz.close-session': {
         // Closes an already-open session through D's own real device-facing

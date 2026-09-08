@@ -62,7 +62,7 @@ export function startTlsProxy(targetPort: number, targetHost = '127.0.0.1'): Pro
         headers: {
           ...req.headers,
           'x-forwarded-proto': 'https',
-          'x-forwarded-for': clientSocket.remoteAddress ?? '127.0.0.1',
+          'x-forwarded-for': '127.0.0.1',
         },
       });
       proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
