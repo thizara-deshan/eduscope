@@ -1,0 +1,20 @@
+{
+  "result": "PASS with deferred physical HDMI capture",
+  "task": "E-49",
+  "at": "2026-09-08T05:38:16.444Z",
+  "pipelineManager": "real FastAPI process; GStreamer worker faked (no HDMI/X)",
+  "checks": {
+    "noCardBeforePublication": true,
+    "payloadParity202": true,
+    "cardRendered": true,
+    "optionsRendered": 3,
+    "qrDecodesToJoinUrl": true,
+    "joinCode": "E49BENCH",
+    "privacyRejected": 4,
+    "projectorRestarted": true,
+    "passthrough202": true
+  },
+  "physicalHdmiCapture": "DEFERRED to Workstream F device bring-up (no HDMI receiver here)",
+  "integrationWitness": "services/core-api/test/integration/projector-real-stack.test.ts",
+  "joinUrl": "https://quiz.example.edu/j/E49BENCH"
+}

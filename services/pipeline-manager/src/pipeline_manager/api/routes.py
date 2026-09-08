@@ -418,7 +418,10 @@ async def get_jpeg_thumbnail(role_id: str, request: Request) -> FileResponse:
         raise DomainProblem("consumer_not_found", "Unknown preview role", 404, {"roleId": role_id}) from None
     if role not in (SourceRole.PRESENTATION, SourceRole.LECTURER_CAM, SourceRole.STUDENTS_CAM):
         raise DomainProblem("consumer_not_found", "Role has no JPEG preview", 404, {"roleId": role_id})
-    path = request.app.state.jpeg_previews.output_dir / f"{role.value}.jpg"
+    previews = request.app.state.jpeg_previews
+    if previews.process is None or previews.state.value != "running":
+        raise DomainProblem("consumer_not_found", "JPEG preview is not running", 404, {"roleId": role_id})
+    path = previews.output_dir / f"{role.value}.jpg"
     if not path.is_file():
         raise DomainProblem("consumer_not_found", "JPEG preview is not ready", 404, {"roleId": role_id})
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})

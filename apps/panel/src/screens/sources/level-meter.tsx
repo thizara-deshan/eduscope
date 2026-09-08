@@ -8,16 +8,18 @@ const DEFAULT_SEGMENTS = 20;
 export function LevelMeter({
   roleId,
   segments = DEFAULT_SEGMENTS,
+  active = true,
 }: {
   readonly roleId: SourceRoleId;
   readonly segments?: number;
+  readonly active?: boolean;
 }): JSX.Element {
   const meterRef = useRef<HTMLDivElement>(null);
   const initial = useTelemetryStore.getState().audioLevels[roleId] ?? 0;
 
   useEffect(() => {
     const paint = (rms: number | undefined) => {
-      const level = rms ?? 0;
+      const level = active ? rms ?? 0 : 0;
       meterRef.current?.style.setProperty('--level', String(level));
       meterRef.current?.setAttribute('aria-valuenow', String(Math.round(level * 100)));
     };
@@ -26,7 +28,7 @@ export function LevelMeter({
       (state) => state.audioLevels[roleId],
       paint,
     );
-  }, [roleId]);
+  }, [active, roleId]);
 
   return (
     <div

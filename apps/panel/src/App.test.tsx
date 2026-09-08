@@ -1,18 +1,17 @@
-import { act, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { App } from './App.js';
 
 /**
- * `ClientProvider` builds the mock through a dynamic `import()` (so the
- * simulation stays out of the entry chunk), and renders nothing until it
- * resolves. `render()` is synchronous, so the tree is empty for the first
- * microtask turn — flush the pending module load before asserting.
+ * The panel now resolves deploy-owned `/config.json` (served by test-setup),
+ * then `ClientProvider` builds the mock through a dynamic `import()` (so the
+ * simulation stays out of the entry chunk) and renders nothing until it
+ * resolves. Both are async, so wait for the mounted stage rather than flushing
+ * a single import turn.
  */
 async function renderApp(): Promise<void> {
   render(<App />);
-  await act(async () => {
-    await vi.dynamicImportSettled();
-  });
+  await waitFor(() => screen.getByTestId('us-panel'));
 }
 
 describe('panel shell', () => {

@@ -47,18 +47,18 @@ function parseOperations(source: string): ContractOperation[] {
   let path = '';
   let method = '';
   for (const line of source.split(/\r?\n/)) {
-    const pathMatch = /^  (\/[^:]+):\s*$/.exec(line);
+    const pathMatch = /^ {2}(\/[^:]+):\s*$/.exec(line);
     if (pathMatch) {
       path = pathMatch[1]!;
       method = '';
       continue;
     }
-    const methodMatch = /^    (get|post|put|patch|delete):\s*$/.exec(line);
+    const methodMatch = /^ {4}(get|post|put|patch|delete):\s*$/.exec(line);
     if (methodMatch) {
       method = methodMatch[1]!.toUpperCase();
       continue;
     }
-    const operationMatch = /^      operationId:\s*(\w+)\s*$/.exec(line);
+    const operationMatch = /^ {6}operationId:\s*(\w+)\s*$/.exec(line);
     if (operationMatch && path && method) operations.push({ id: operationMatch[1]!, method, path });
   }
   return operations;

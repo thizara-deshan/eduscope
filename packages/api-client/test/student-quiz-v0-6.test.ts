@@ -175,6 +175,20 @@ describe('contract v0.6 student quiz mock', () => {
     await expect(client.connect()).resolves.toBeDefined();
   });
 
+  it('restore also emits the compensating online event directly, without requiring a fresh connect()', async () => {
+    // Screens that never hold a live connection pre-identity (S-37/S-38) only
+    // ever observe `events$` — they must see the reconnect UI clear without
+    // depending on the retry ladder eventually re-calling connect().
+    const client = createMockQuizClient('student-quiz-happy');
+    const events: string[] = [];
+    client.events$.subscribe((event) => {
+      if (event.event === 'quiz.participant') events.push(event.payload.connectionState);
+    });
+    client.forceStudentTransition('student.connection.offline');
+    client.forceStudentTransition('student.connection.restore');
+    expect(events).toEqual(['offline', 'online']);
+  });
+
   it('forced question transitions emit valid 2/3/4/none-option events and clear the prior result', async () => {
     const client = createMockQuizClient('student-quiz-happy');
     await client.connect();

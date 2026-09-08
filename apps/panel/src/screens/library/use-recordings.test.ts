@@ -104,6 +104,38 @@ describe('useRecordings (S-21 paged list + live merge)', () => {
     expect(result.current.rows.some((r) => r.id === 'R1')).toBe(false);
   });
 
+  it('an admin owner filter is sent as a server ownerUserId param, not applied in React', async () => {
+    const listRecordings = vi.fn<EduscopeClient['listRecordings']>(() =>
+      Promise.resolve({ items: [rec({ id: 'R2', ownerUserId: 'U2' })], nextCursor: null }));
+    const wrapper = build(listRecordings);
+
+    const { result } = renderHook(() => useRecordings({ ownerUserId: 'U2' }), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(listRecordings.mock.calls[0]![0]).toMatchObject({ ownerUserId: 'U2' });
+    expect(result.current.rows.map((r) => r.id)).toEqual(['R2']);
+  });
+
+  it('a failed page-two fetch keeps page one, and retrying appends page two', async () => {
+    const listRecordings = vi.fn()
+      .mockResolvedValueOnce({ items: [rec({ id: 'R1' })], nextCursor: 'p2' })
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: [rec({ id: 'R2' })], nextCursor: null });
+    const wrapper = build(listRecordings as unknown as EduscopeClient['listRecordings']);
+    const { result } = renderHook(() => useRecordings({}), { wrapper });
+    await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(['R1']));
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loadingMore).toBe(false));
+    // The failed page-two fetch must not blow away page one.
+    expect(result.current.rows.map((r) => r.id)).toEqual(['R1']);
+    expect(result.current.hasMore).toBe(true);
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(['R1', 'R2']));
+    expect(result.current.hasMore).toBe(false);
+  });
+
   it('Load-more appends page 2 and existing rows keep their identity (no skeleton flash)', async () => {
     const listRecordings = vi.fn()
       .mockResolvedValueOnce({ items: [rec({ id: 'R1' })], nextCursor: 'p2' })

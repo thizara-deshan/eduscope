@@ -11,6 +11,8 @@ export class InMemoryHelperTransport implements HelperTransport {
   readonly ledger: HelperLedgerEntry[] = [];
   failureVerb: string | null = null;
   hang = false;
+  /** Per-verb success `detail` override (e.g. firmware.check/apply's JSON outcome payloads) — unset verbs keep the plain 'ok' default. */
+  readonly nextDetail: Record<string, string> = {};
 
   async request(line: string, signal: AbortSignal): Promise<string> {
     if (this.hang) {
@@ -20,7 +22,7 @@ export class InMemoryHelperTransport implements HelperTransport {
     this.ledger.push(request);
     return JSON.stringify(this.failureVerb === request.verb
       ? { ok: false, detail: `${request.verb} failed` }
-      : { ok: true, detail: 'ok' });
+      : { ok: true, detail: this.nextDetail[request.verb] ?? 'ok' });
   }
 }
 

@@ -19,7 +19,7 @@ function renderSources() {
     'students-cam': source('students-cam', 'unknown'),
   } as never });
   const channel: PreviewChannel = {
-    send: vi.fn(), close: vi.fn(), messages$: { subscribe: () => () => undefined },
+    close: vi.fn(), updates$: { subscribe: () => () => undefined },
   };
   const openPreview = vi.fn(() => channel);
   const client = { openPreview } as unknown as EduscopeClient;

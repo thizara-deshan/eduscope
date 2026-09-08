@@ -6,7 +6,7 @@ import type {
   ExportJob, FirmwareUpdate, FormatVolumeRequest, Leaderboard, LayoutPreset,
   LogCategory, LogEntry, LoginRequest, LoginResponse, LogLevel,
   NetworkConfig, NetworkConfigUpdate, Page, PhysicalInput, PhysicalInputUpdate,
-  PreviewClientMessage, PreviewServerMessage, ProjectorRequest, Question,
+  ProjectorRequest, Question,
   QuestionCreate, QuestionSet, QuestionSetDetail, QuestionState, QuestionUpdate,
   Recording, RecordingDetail, RecordingState, RecordingStateSnapshot,
   RefreshResponse, RegisterVolumeRequest, PublicationWithQuestion,
@@ -24,11 +24,17 @@ export interface ChannelSnapshot {
   readonly status: ChannelStatus;
 }
 
-/** events.md §3 — its own socket, and the one place the client sends WS messages. */
+export type PreviewErrorCode = 'source-offline' | 'source-unbound' | 'internal';
+
+/** Receive-only snapshots from an adapter-owned JPEG poller. */
+export type PreviewUpdate =
+  | { readonly kind: 'frame'; readonly blob: Blob; readonly receivedAt: number; readonly stale: false }
+  | { readonly kind: 'stale'; readonly since: number }
+  | { readonly kind: 'error'; readonly code: PreviewErrorCode; readonly message: string };
+
+/** One role-bound JPEG poller. Network and timer ownership stay in the adapter. */
 export interface PreviewChannel {
-  send(message: PreviewClientMessage): void;
-  /** Mock adapter note: frames are delivered as sentinel-tagged `ice` messages — see `mock/events/preview.ts`'s `isMockPreviewFrame`. */
-  readonly messages$: EventStream<PreviewServerMessage>;
+  readonly updates$: EventStream<PreviewUpdate>;
   close(): void;
 }
 
@@ -195,8 +201,8 @@ export interface EduscopeClient {
   /** Server->client only. On subscribe the current snapshot is replayed first. */
   readonly events$: EventStream<EventEnvelope>;
   readonly connection$: EventStream<ConnectionStatus>;
-  /** <= 1 active negotiation per connection; a new offer closes the previous. */
-  openPreview(): PreviewChannel;
+  /** <= 1 active JPEG poller per client; opening another role closes the previous. */
+  openPreview(roleId: SourceRoleId): PreviewChannel;
   /** Force the full-snapshot re-request a `seq` gap demands. */
   resync(): Promise<void>;
   dispose(): void;

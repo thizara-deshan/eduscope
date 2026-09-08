@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:contract": "vitest run test/contract",
     "gate": "pnpm typecheck && pnpm test",
-    "gate:core-api": "node scripts/gate-core-api.mjs"
+    "gate:core-api": "node scripts/gate-core-api.mjs",
+    "e2e:peer": "tsx test/peers/e2e-process-entry.ts"
   },
   "dependencies": {
     "@eduscope/shared": "workspace:*",

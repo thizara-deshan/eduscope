@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "/api/v1",
+  "quizBaseUrl": "https://quiz.example.edu",
+  "environment": "development",
+  "adapters": { "default": "mock", "overrides": {} }
+}

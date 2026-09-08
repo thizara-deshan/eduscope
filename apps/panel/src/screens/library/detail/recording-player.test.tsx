@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError } from '@eduscope/api-client';
 import type { RecordingFile, User } from '@eduscope/shared';
@@ -35,10 +35,45 @@ function renderPlayer(getRecordingMedia: EduscopeClient['getRecordingMedia'], vi
 }
 
 describe('<RecordingPlayer/> (S-22)', () => {
+  let urlSeq = 0;
+  beforeEach(() => {
+    urlSeq = 0;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:media-${String(++urlSeq)}`);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('builds src via the client (the media method is called)', async () => {
     const getRecordingMedia = vi.fn(() => Promise.resolve(new Blob(['x'], { type: 'video/mp4' })));
     renderPlayer(getRecordingMedia);
     await waitFor(() => expect(getRecordingMedia).toHaveBeenCalledWith('R1', 'F1'));
+  });
+
+  it('turns the fetched Blob into a <video src> and revokes that object URL on unmount (no leak)', async () => {
+    const getRecordingMedia = vi.fn(() => Promise.resolve(new Blob(['bytes'], { type: 'video/mp4' })));
+    const { unmount } = renderPlayer(getRecordingMedia);
+    const video = await waitFor(() => screen.getByLabelText('Recording video'));
+    expect(video).toHaveAttribute('src', 'blob:media-1');
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:media-1');
+  });
+
+  it('a decode error after real bytes arrive shows Playback stopped, and Try again restores the player with the fetched src (interrupted-then-recovered playback)', async () => {
+    const getRecordingMedia = vi.fn(() => Promise.resolve(new Blob(['bytes'], { type: 'video/mp4' })));
+    renderPlayer(getRecordingMedia);
+    const video = await waitFor(() => screen.getByLabelText('Recording video'));
+
+    // The Range bytes arrived but the container fails to decode mid-playback.
+    fireEvent.error(video);
+    expect(screen.getByText('Playback stopped.')).toBeInTheDocument();
+
+    await screen.getByRole('button', { name: 'Try again' }).click();
+    // Recovery: the player is restored against the bytes already fetched — the
+    // error banner is gone and the video is mounted again with its src.
+    expect(screen.queryByText('Playback stopped.')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Recording video')).toHaveAttribute('src', 'blob:media-1');
   });
 
   it('a 403 from the client surfaces forbidden, not a frozen frame', async () => {

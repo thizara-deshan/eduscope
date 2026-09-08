@@ -8,7 +8,8 @@ import type {
   SourceRoleId, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UploadJobPayload,
   UploadPartPayload, UsbVolumesPayload,
 } from '@eduscope/shared';
-import { hasSeqGap, isStale } from './connection.js';
+import type { AdapterDomain } from '@eduscope/api-client';
+import { DOMAIN_SLICE_KEYS, hasSeqGap, isStale } from './connection.js';
 import { useTelemetryStore } from './telemetry-store.js';
 
 export { useTelemetryStore };
@@ -58,11 +59,27 @@ export interface WsState {
   needsResync: boolean;
   /** U-2: disconnected longer than T-WS-STALE — dim live regions. */
   stale: boolean;
+  /**
+   * E-09: one connection status per domain the panel currently owns (mock
+   * domains report their own, trivially-open, status). Selected-domain
+   * regions can read their own status instead of the shared/global one —
+   * an unaffected mock region must never render offline because an
+   * unrelated real domain's shared socket dropped.
+   */
+  connectionByDomain: Partial<Record<AdapterDomain, ConnectionStatus>>;
 
   ingest(envelope: EventEnvelope): void;
   setConnection(status: ConnectionStatus): void;
+  setDomainConnection(domain: AdapterDomain, status: ConnectionStatus): void;
   setExpectedShutdown(value: boolean): void;
   clearResync(): void;
+  /**
+   * E-03: a `seq` gap on the real socket resets ONLY the given domains' slices,
+   * in ONE update, and resets the sequence tracker before the replacement
+   * snapshot arrives. The recording chrome is retained (marked stale), never a
+   * command replayed, and mock-domain state is untouched.
+   */
+  resetDomains(domains: readonly AdapterDomain[]): void;
   reset(): void;
 }
 
@@ -72,10 +89,16 @@ const EMPTY = {
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
   firmware: null, logTail: [], deviceHealthAt: null,
-  connection: null, needsResync: false, stale: false,
+  connection: null, needsResync: false, stale: false, connectionByDomain: {},
 } satisfies Omit<
   WsState,
-  'ingest' | 'setConnection' | 'setExpectedShutdown' | 'clearResync' | 'reset'
+  | 'ingest'
+  | 'setConnection'
+  | 'setDomainConnection'
+  | 'setExpectedShutdown'
+  | 'clearResync'
+  | 'resetDomains'
+  | 'reset'
 >;
 
 /**
@@ -187,12 +210,33 @@ export const useWsStore = create<WsState>((set, get) => ({
     set({ connection: status, stale: isStale(status, get().expectedShutdown) });
   },
 
+  setDomainConnection(domain, status) {
+    set({ connectionByDomain: { ...get().connectionByDomain, [domain]: status } });
+  },
+
   setExpectedShutdown(value) {
     set({ expectedShutdown: value, stale: value ? false : get().stale });
   },
 
   clearResync() {
     set({ needsResync: false });
+    useTelemetryStore.getState().setLastSeq(-1);
+  },
+
+  resetDomains(domains) {
+    const patch: Partial<WsState> = {};
+    for (const domain of domains) {
+      for (const key of DOMAIN_SLICE_KEYS[domain]) {
+        (patch as Record<string, unknown>)[key] = (EMPTY as Record<string, unknown>)[key];
+      }
+    }
+    // The recording chrome is retained but marked stale; the device keeps
+    // recording whether or not the panel can see it (see store/connection.ts).
+    if (domains.includes('recording')) patch.stale = true;
+    // The gap is being handled here, not by a partial patch on the next frame.
+    patch.needsResync = false;
+    set(patch);
+    // Reset the sequence tracker before the fresh subscribe snapshot streams in.
     useTelemetryStore.getState().setLastSeq(-1);
   },
 

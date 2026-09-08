@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { TransportError } from '@eduscope/api-client';
 import { QuizAppProblemError } from '@eduscope/api-client/quiz';
 import { useQuizClient } from '../../client/quiz-client-provider.js';
+import { useQuizStore } from '../../store/quiz-store.js';
 
 export type JoinStatus = 'idle' | 'resolving' | 'not-found' | 'unavailable' | 'unreachable';
 
@@ -28,6 +29,14 @@ export function useJoinResolution(initialCode: string, autoSubmit: boolean) {
   const [submittedCode, setSubmittedCode] = useState<string | null>(
     autoSubmit && initialCode.length > 0 ? normalize(initialCode) : null,
   );
+
+  // The real student WS requires a participant cookie that doesn't exist
+  // until registration — attempting it here would only ever fail and would
+  // permanently disable this screen's own Join button (see quiz-store.ts).
+  useEffect(() => {
+    useQuizStore.getState().disableConnect();
+    return () => useQuizStore.getState().enableConnect();
+  }, []);
 
   const query = useQuery({
     queryKey: ['join-code', submittedCode],

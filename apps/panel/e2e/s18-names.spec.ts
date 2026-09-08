@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+import { getJson, publishOneQuestion, startRealRecording, waitForOpenQuizSession } from './fixtures/real-ai.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -86,4 +88,61 @@ test.describe('S-18 Response names', () => {
     await expect(dialog.getByTestId('names-dialog-stale')).toBeVisible({ timeout: 10_000 });
     await expect(dialog.getByTestId('names-dialog-stale')).toContainText(/synced/i);
   });
+});
+
+// eduscope:needs-real-d — exercises real cross-device/cross-session isolation.
+realTest.describe('S-18 Response names — real', () => {
+  realTest(
+    'real: a foreign device cannot seize the lecture nor bleed its names in; the room keeps its own list, stale-marked not emptied',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      const { token, sessionId } = await startRealRecording(page, realStack);
+      await waitForOpenQuizSession(realStack, token);
+      const publicationId = await publishOneQuestion(realStack, token, sessionId);
+
+      // Our room's phones answer over live sync.
+      const { submitted } = await realStack.control<{ submitted: Array<{ studentIdNumber: string }> }>(
+        'quiz.submit-answers', { count: 3, correctCount: 2 },
+      );
+      const ourIds = submitted.map((s) => s.studentIdNumber);
+
+      // Plant a foreign device's room and have it try to hijack our lecture.
+      const foreign = await realStack.control<{ foreignName: string; foreignStudentIdNumber: string; crossDeviceStatus: number }>(
+        'quiz.foreign-room', { ourLectureSessionId: sessionId },
+      );
+      realExpect(foreign.crossDeviceStatus, 'D denies the cross-device session seizure').toBe(409);
+
+      // Open our room's names for this publication.
+      await realExpect(page.getByTestId('insights-column')).toBeVisible();
+      const card = page.getByTestId(`publication-card-${publicationId}`);
+      await realExpect(card).toBeVisible({ timeout: 15_000 });
+      await realExpect.poll(async () => {
+        const responses = await getJson(`${realStack.coreBaseUrl}/quiz/publications/${publicationId}/responses`, token) as { items: unknown[] };
+        return responses.items.length;
+      }, { timeout: 25_000 }).toBe(3);
+      await card.getByRole('button', { name: /responses — view names/ }).click();
+      const dialog = page.getByTestId('names-dialog');
+      await realExpect(dialog).toBeVisible();
+      await realExpect(dialog.getByTestId('names-dialog-list').locator('li')).toHaveCount(3, { timeout: 15_000 });
+
+      // The foreign identity never appears anywhere in our room.
+      realExpect(await page.getByText(foreign.foreignName).count(), 'no foreign name leaks in').toBe(0);
+      realExpect(await page.getByText(foreign.foreignStudentIdNumber).count()).toBe(0);
+      const html = await page.content();
+      realExpect(html.includes(foreign.foreignName), 'foreign identity absent from DOM').toBe(false);
+
+      // Cut B<->D: the last known list is stale-marked, not replaced with empty.
+      await realStack.control('quiz.device-sync', { available: false });
+      await realStack.control('quiz.restart');
+      await realExpect(dialog.getByTestId('names-dialog-stale')).toBeVisible({ timeout: 30_000 });
+      await realExpect(dialog.getByTestId('names-dialog-list').locator('li')).toHaveCount(3);
+      await realExpect(dialog.getByTestId('names-dialog-empty')).toHaveCount(0);
+      realExpect(await page.getByText(foreign.foreignName).count(), 'still no foreign leak while stale').toBe(0);
+
+      // B's own projection: exactly our three students, none foreign.
+      const responses = await getJson(`${realStack.coreBaseUrl}/quiz/publications/${publicationId}/responses`, token) as { items: Array<{ studentIdNumber: string }> };
+      realExpect(new Set(responses.items.map((r) => r.studentIdNumber))).toEqual(new Set(ourIds));
+    },
+  );
 });

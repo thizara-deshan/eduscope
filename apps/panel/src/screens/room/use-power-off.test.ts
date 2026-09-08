@@ -28,6 +28,7 @@ function renderPowerOff(powerOffDevice: EduscopeClient['powerOffDevice'], strict
 const accepted = { commandId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10 };
 const open = { phase: 'open', attempt: 0, since: '2026-08-05T10:00:00Z' } as const;
 const closed = { phase: 'closed', attempt: 0, since: '2026-08-05T10:00:01Z' } as const;
+const reconnecting = { phase: 'reconnecting', attempt: 1, since: '2026-08-05T10:00:01Z' } as const;
 
 describe('usePowerOff', () => {
   beforeEach(() => {
@@ -72,6 +73,27 @@ describe('usePowerOff', () => {
     expect(useWsStore.getState().stale).toBe(false);
     render(createElement(OfflineMarker));
     expect(screen.queryByTestId('offline-marker')).toBeNull();
+  });
+
+  it('treats a real shutdown drop (reconnecting, never a clean close) after the 202 as accepted', async () => {
+    // A genuine device power-off tears the socket away: the real connection
+    // machine reports `reconnecting`/`stale`, never a clean `closed`. The
+    // transport drop itself is the success signal — there is no `power.state`
+    // event to wait for.
+    const { result } = renderPowerOff(vi.fn(() => Promise.resolve(accepted)));
+    act(() => result.current.confirm());
+    await act(async () => Promise.resolve());
+    act(() => useWsStore.getState().setConnection(reconnecting));
+    expect(result.current.state).toEqual({ kind: 'accepted' });
+  });
+
+  it('does not fall through to accepted-not-halted once the transport has dropped', async () => {
+    const { result } = renderPowerOff(vi.fn(() => Promise.resolve({ ...accepted, resolveBySec: 3 })));
+    act(() => result.current.confirm());
+    await act(async () => Promise.resolve());
+    act(() => useWsStore.getState().setConnection(reconnecting));
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(result.current.state).toEqual({ kind: 'accepted' });
   });
 
   it('renders U-2 normally when the same socket close has no preceding 202', () => {

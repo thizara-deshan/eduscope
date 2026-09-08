@@ -147,3 +147,71 @@ describe('ws store', () => {
     expect(useWsStore.getState().deviceHealthAt).not.toBeNull();
   });
 });
+
+describe('ws store — domain-scoped resync reset (E-03)', () => {
+  beforeEach(() => {
+    useWsStore.getState().reset();
+  });
+
+  it('clears ONLY the given domains, leaving other domains untouched', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('system.alert', { id: 'A1', code: 'x', severity: 'warning' }, 0));
+    s.ingest(envelope('channel.state', { channelId: 'meeting', state: 'idle' }, 1));
+    s.ingest(envelope('storage.status', { pressure: 'nominal' }, 2));
+
+    useWsStore.getState().resetDomains(['alerts']);
+    const after = useWsStore.getState();
+    expect(after.alerts).toEqual({}); // alerts domain reset
+    expect(Object.keys(after.channels)).toEqual(['meeting']); // channels untouched
+    expect(after.storage).not.toBeNull(); // storage untouched
+  });
+
+  it('retains the recording chrome but marks it stale', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('recording.state', { state: 'recording' }, 0));
+    s.ingest(envelope('recording.segment', { state: 'closed', path: '/x.ts' }, 1));
+
+    useWsStore.getState().resetDomains(['recording']);
+    const after = useWsStore.getState();
+    // The device is still recording — the chrome stays, flagged stale.
+    expect(after.recording?.state).toBe('recording');
+    expect(after.stale).toBe(true);
+    // The closed-segment marker is cleared for the fresh snapshot.
+    expect(after.lastSegment).toBeNull();
+  });
+
+  it('resets the sequence tracker so the fresh snapshot is not seen as a gap', () => {
+    const s = useWsStore.getState();
+    s.ingest(envelope('system.alert', { id: 'A1', code: 'x', severity: 'warning' }, 40));
+    useWsStore.getState().resetDomains(['alerts']);
+    expect(useTelemetryStore.getState().lastSeq).toBe(-1);
+    // A snapshot restarting at any seq is contiguous again (no false gap).
+    useWsStore.getState().ingest(envelope('system.alert', { id: 'A2', code: 'y', severity: 'info' }, 0));
+    expect(useWsStore.getState().needsResync).toBe(false);
+  });
+
+  it('never introduces an outbound command queue', () => {
+    useWsStore.getState().resetDomains(['recording', 'alerts']);
+    expect(Object.keys(useWsStore.getState())).not.toContain('pendingCommands');
+  });
+
+  it('E-09: setDomainConnection keys per-domain status without touching the global connection/stale flags', () => {
+    const s = useWsStore.getState();
+    s.setConnection({ phase: 'open', attempt: 0, since: '2026-07-30T09:00:00+00:00' });
+    s.setDomainConnection('alerts', { phase: 'stale', attempt: 3, since: '2026-07-30T09:00:10+00:00' });
+    const after = useWsStore.getState();
+    expect(after.connectionByDomain.alerts?.phase).toBe('stale');
+    expect(after.connectionByDomain.recording).toBeUndefined();
+    // A degraded real domain must never flip the (still-open) global flag.
+    expect(after.stale).toBe(false);
+  });
+
+  it('E-09: setDomainConnection tracks each domain independently', () => {
+    const s = useWsStore.getState();
+    s.setDomainConnection('alerts', { phase: 'stale', attempt: 3, since: '2026-07-30T09:00:10+00:00' });
+    s.setDomainConnection('provisioningHealth', { phase: 'open', attempt: 0, since: '2026-07-30T09:00:10+00:00' });
+    const after = useWsStore.getState();
+    expect(after.connectionByDomain.alerts?.phase).toBe('stale');
+    expect(after.connectionByDomain.provisioningHealth?.phase).toBe('open');
+  });
+});

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, test as realTest } from './fixtures/real-stack.js';
 
 const COMPLIANT = 'Lecture-hall-7';
 
@@ -109,4 +110,88 @@ test.describe('S-02 Forced/voluntary password reset', () => {
     });
     await expect(page).toHaveURL(/\/login\/reset$/);
   });
+});
+
+realTest.describe('S-02 Forced/voluntary password reset — real', () => {
+  realTest(
+    'real: reset-locked user is server-refused off the allowlist, wrong current password rejects, and the new password persists',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      const NEW_PASSWORD = 'Lecture-hall-7';
+
+      // The server correctly refuses the panel WS with 403 while
+      // mustResetPassword is true (guard.ts INV-U-3), which the shell attempts
+      // regardless of route the moment a token exists. Driving a rejected WS
+      // handshake through this CDP-automated older Chromium build hangs the
+      // renderer entirely, and `routeWebSocket`'s own CDP-level interception
+      // is not reliable enough on this browser to prevent that — so the real
+      // `WebSocket` constructor is stubbed out in-page instead. S-02 is not
+      // exercising panel realtime behavior.
+      await page.addInitScript(() => {
+        class NoConnectWebSocket extends EventTarget {
+          readyState = 3;
+          close(): void {}
+          send(): void {}
+        }
+        // @ts-expect-error -- test-only stub, not the full WebSocket surface
+        window.WebSocket = NoConnectWebSocket;
+      });
+
+      const loginResponse = await fetch(`${realStack.coreBaseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: REAL_STACK_ACCOUNTS.reset.username,
+          password: REAL_STACK_ACCOUNTS.reset.password,
+          client: 'panel',
+        }),
+      });
+      expect(loginResponse.status).toBe(200);
+      const { tokens } = await loginResponse.json() as { tokens: { accessToken: string } };
+
+      // Prove the refusal is server-side, not merely client routing: a
+      // directly-issued bearer token cannot reach a non-allowlisted route.
+      const dashboardResponse = await fetch(`${realStack.coreBaseUrl}/recording/state`, {
+        headers: { authorization: `Bearer ${tokens.accessToken}` },
+      });
+      expect(dashboardResponse.status).toBe(403);
+      const problem = await dashboardResponse.json() as { code: string };
+      expect(problem.code).toBe('auth.password-reset-required');
+
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.reset.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.reset.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page.getByLabel('Current password')).toBeVisible();
+
+      await page.getByLabel('Current password').fill('wrong-current');
+      await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+      await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
+      await page.getByRole('button', { name: 'Set password' }).click();
+      await expect(page.getByTestId('auth-message')).toHaveText(
+        'Your current password is not correct.',
+      );
+      await expect(page).toHaveURL(/\/login\/reset$/);
+      // The rejected-current effect clears this field asynchronously after
+      // the message commits; wait for that clear before refilling it, or the
+      // refill races the effect and gets wiped out.
+      await expect(page.getByLabel('Current password')).toHaveValue('');
+
+      // Sign out remains callable while locked.
+      await expect(page.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+
+      await page.getByLabel('Current password').fill(REAL_STACK_ACCOUNTS.reset.password);
+      await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+      await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
+      await page.getByRole('button', { name: 'Set password' }).click();
+      await expect(page).toHaveURL('/');
+
+      // Re-login with the new password proves it persisted server-side.
+      await page.evaluate(() => window.location.assign('/login'));
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.reset.username);
+      await page.getByLabel('Password').fill(NEW_PASSWORD);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page).toHaveURL('/');
+    },
+  );
 });

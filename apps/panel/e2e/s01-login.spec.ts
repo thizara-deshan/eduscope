@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, test as realTest } from './fixtures/real-stack.js';
 
 /** The y of the on-screen keyboard's top edge — the submit button must clear it. */
 function oskTop(page: Page): Promise<number> {
@@ -71,4 +72,57 @@ test.describe('S-01 Login', () => {
     await page.goto('/login');
     await expect(page.locator('.us-header')).toHaveCount(0);
   });
+});
+
+realTest.describe('S-01 Login — real', () => {
+  realTest(
+    'real: unreachable, rejected, disabled, and success are distinct real outcomes',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      const loginRequests: string[] = [];
+      page.on('request', (request) => {
+        if (request.url().includes('/auth/login')) loginRequests.push(request.url());
+      });
+
+      await realStack.control('core.stop');
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page.getByTestId('auth-message')).toHaveText(
+        'The recording panel is starting up. Trying again…',
+      );
+      await expect(page.getByLabel('Username')).toHaveValue(REAL_STACK_ACCOUNTS.lecturer.username);
+
+      await realStack.control('core.start');
+      // Remount fresh — the previous instance's automatic unreachable retry
+      // loop must not race the deterministic steps below.
+      await page.reload();
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill('wrong-password');
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page.getByTestId('auth-message')).toHaveText(
+        'That username and password do not match. Try again.',
+      );
+      await expect(page.getByLabel('Password')).toHaveValue('');
+
+      await page.getByLabel('Username').fill('');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.disabled.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.disabled.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page.getByTestId('auth-message')).toHaveText(
+        'This account is not active — ask your administrator.',
+      );
+
+      await page.getByLabel('Username').fill('');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await expect(page).toHaveURL('/');
+      await expect(page.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
+
+      expect(loginRequests.length).toBeGreaterThanOrEqual(4);
+      for (const url of loginRequests) expect(url).toContain(new URL(realStack.coreBaseUrl).host);
+    },
+  );
 });

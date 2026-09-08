@@ -62,6 +62,36 @@ describe('NamesDialog', () => {
     expect(await screen.findByTestId('names-dialog-stale')).toHaveTextContent('2026-08-05T09:58:00Z');
   });
 
+  it('zero cross-session merge: a quiz.responses batch for another publication never adds a name here', async () => {
+    const { container } = renderDialog({
+      listPublicationResponses: vi.fn(() => Promise.resolve({
+        items: [answer({ studentIdNumber: 's1', studentDisplayName: 'K. Fernando' })],
+        syncedAt: '2026-08-05T10:00:00Z', stale: false,
+      })),
+    });
+    await waitFor(() => expect(screen.getByTestId('names-dialog-list')).toBeInTheDocument());
+    act(() => useWsStore.getState().ingest(envelope('quiz.responses', {
+      publicationId: 'foreign-pub',
+      deltas: [{ studentIdNumber: 'sf', displayName: 'Zzz Foreign Intruder', selectedOptionId: 'x', isCorrect: true, responseTimeMs: 1000, submittedAt: '2026-08-05T10:01:00Z' }],
+      syncedAt: '2026-08-05T10:01:00Z', stale: false,
+    }, 0)));
+    expect(screen.getByTestId('names-dialog-list').querySelectorAll('li')).toHaveLength(1);
+    expect(container.textContent).not.toContain('Zzz Foreign Intruder');
+  });
+
+  it('stale keeps the last known list rather than emptying it', async () => {
+    renderDialog({
+      listPublicationResponses: vi.fn(() => Promise.resolve({
+        items: [answer({ studentIdNumber: 's1', studentDisplayName: 'K. Fernando' }), answer({ studentIdNumber: 's2', studentDisplayName: 'S. J' })],
+        syncedAt: '2026-08-05T09:58:00Z', stale: true,
+      })),
+    });
+    await waitFor(() => expect(screen.getByTestId('names-dialog-stale')).toBeInTheDocument());
+    // The names remain visible under the stale banner — never replaced by empty.
+    expect(screen.getByTestId('names-dialog-list').querySelectorAll('li')).toHaveLength(2);
+    expect(screen.queryByTestId('names-dialog-empty')).not.toBeInTheDocument();
+  });
+
   it('sync failed: an uncleared quiz.sync-stale alert flags the degraded state', () => {
     renderDialog();
     act(() => useWsStore.getState().ingest(envelope('system.alert', {

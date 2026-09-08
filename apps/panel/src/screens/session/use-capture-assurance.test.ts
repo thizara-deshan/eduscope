@@ -139,3 +139,11 @@ it('paused and saving states replace the verdict sentence', () => {
   expect(foldCaptureVerdict(build({ recording: 'finalizing' })).sentence)
     .toBe('Saving your lecture…');
 });
+
+it('real consumer recovery never leaves a stale green verdict', () => {
+  const order = ['unknown', 'degraded', 'offline', 'online'] as const;
+  const verdicts = order.map((role) => foldCaptureVerdict(build({ role, recording: 'recording' })));
+  expect(verdicts.map((verdict) => verdict.tier)).toEqual([2, 3, 4, 1]);
+  expect(verdicts[2]?.reassurance).toBe(STILL_RECORDING_SENTENCE);
+  expect(verdicts[0]?.sentence).toBe('Checking the room…');
+});

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
 import { ProblemError } from '@eduscope/api-client';
-import type { Question } from '@eduscope/shared';
+import { TIMERS, type Question } from '@eduscope/shared';
 import { ClientContext } from '../client/client-provider.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useQuestions } from './use-questions.js';
@@ -126,6 +126,41 @@ describe('useQuestions', () => {
     }, 0)));
     expect(hook.result.current.pendingId).toBeNull();
     expect(hook.result.current.questions[0]!.state).toBe('sent');
+  });
+
+  it('202 accept never marks sent: only the ai.question{sent} echo does (publish-before-project)', async () => {
+    const { hook } = build({ listQuestions: vi.fn(() => Promise.resolve([question()])) });
+    await waitFor(() => expect(hook.result.current.questions).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current.canSend).toBe(true));
+    act(() => hook.result.current.sendToProjector('q1'));
+    // The command resolved its 202, but the draft must stay pending/draft: the
+    // real backend only marks it sent once D has acked the publish.
+    await waitFor(() => expect(hook.result.current.pendingKind).toBe('sending'));
+    expect(hook.result.current.questions[0]!.state).toBe('draft');
+    act(() => useWsStore.getState().ingest(envelope('ai.question', {
+      questionId: 'q1', setId: 'set1', state: 'sent', provenance: 'generated', edited: false,
+    }, 0)));
+    expect(hook.result.current.questions[0]!.state).toBe('sent');
+    expect(hook.result.current.pendingId).toBeNull();
+  });
+
+  it('publish that never acks (B↔D cut): the draft stays un-sent and the ceiling surfaces a problem', async () => {
+    vi.useFakeTimers();
+    try {
+      const { hook } = build({ listQuestions: vi.fn(() => Promise.resolve([question()])) });
+      await vi.waitFor(() => expect(hook.result.current.questions).toHaveLength(1));
+      await vi.waitFor(() => expect(hook.result.current.canSend).toBe(true));
+      act(() => hook.result.current.sendToProjector('q1'));
+      expect(hook.result.current.pendingKind).toBe('sending');
+      // No ai.question{sent} echo ever arrives (D was unreachable). The row
+      // must never flip to sent; the T-CMD-RESOLVE ceiling reports the failure.
+      act(() => vi.advanceTimersByTime(TIMERS['T-CMD-RESOLVE']));
+      expect(hook.result.current.questions[0]!.state).toBe('draft');
+      expect(hook.result.current.pendingId).toBeNull();
+      expect(hook.result.current.problemByQuestionId.q1).toMatch(/did not resolve/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('send failed: shows the reason via problemByQuestionId', async () => {

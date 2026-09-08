@@ -371,6 +371,14 @@ export class PublicationOrchestrator implements LifecycleComponent {
     checkQuestionSetReviewed(db, this.#deps.bus, question.questionSetId);
 
     const freshQuizSession = db.select().from(quizSessionProjections).where(eq(quizSessionProjections.id, quizSession.id)).get()!;
+    // E-49: A's projector card requires non-null join values (it renders the
+    // join QR/code itself). If the fresh projection has not resolved them yet,
+    // leave the display in passthrough and raise the projector-failed alert
+    // rather than synthesizing a URL or loosening A's model.
+    if (freshQuizSession.joinUrl === null || freshQuizSession.joinCode === null) {
+      this.#raiseProjectorFailed('The quiz session has no join URL or code to project yet');
+      return;
+    }
     try {
       await this.#deps.pm.setProjectorConsumer({
         mode: 'question',
@@ -385,14 +393,18 @@ export class PublicationOrchestrator implements LifecycleComponent {
       this.#markShowing(publicationId, quizSession.id);
     } catch (error) {
       this.#deps.logger?.warn('quiz publication orchestrator: projector switch failed', { error: describeError(error) });
-      this.#deps.alerts.raise({
-        code: PROJECTOR_FAILED_ALERT_CODE,
-        severity: 'warning',
-        category: 'System',
-        title: 'Switching the projector to the question failed',
-        detail: describeError(error),
-      });
+      this.#raiseProjectorFailed(describeError(error), 'Switching the projector to the question failed');
     }
+  }
+
+  #raiseProjectorFailed(detail: string, title = 'Switching the projector failed'): void {
+    this.#deps.alerts.raise({
+      code: PROJECTOR_FAILED_ALERT_CODE,
+      severity: 'warning',
+      category: 'System',
+      title,
+      detail,
+    });
   }
 
   async #publishWithRetry(input: QuizPublishInput): Promise<boolean> {
@@ -475,6 +487,12 @@ export class PublicationOrchestrator implements LifecycleComponent {
     const quizSession = db.select().from(quizSessionProjections).where(eq(quizSessionProjections.id, publication.quizSessionId)).get();
     const reveal = publication.state === 'closed';
 
+    // E-49: require non-null join values before calling A (never nullable fields).
+    if (!quizSession || quizSession.joinUrl === null || quizSession.joinCode === null) {
+      this.#raiseProjectorFailed('The quiz session has no join URL or code to project yet');
+      return;
+    }
+
     try {
       await this.#deps.pm.setProjectorConsumer({
         mode: 'question',
@@ -482,21 +500,15 @@ export class PublicationOrchestrator implements LifecycleComponent {
           publicationId: publication.id,
           prompt: question.prompt,
           options: options.map((option) => ({ id: option.id, label: option.label, text: option.text })),
-          joinUrl: quizSession?.joinUrl ?? null,
-          joinCode: quizSession?.joinCode ?? null,
+          joinUrl: quizSession.joinUrl,
+          joinCode: quizSession.joinCode,
           ...(reveal && question.correctOptionId !== null ? { correctOptionId: question.correctOptionId } : {}),
         },
       });
       this.#markShowing(publication.id, publication.quizSessionId);
     } catch (error) {
       this.#deps.logger?.warn('quiz publication orchestrator: re-project failed', { error: describeError(error) });
-      this.#deps.alerts.raise({
-        code: PROJECTOR_FAILED_ALERT_CODE,
-        severity: 'warning',
-        category: 'System',
-        title: 'Switching the projector failed',
-        detail: describeError(error),
-      });
+      this.#raiseProjectorFailed(describeError(error));
     }
   }
 

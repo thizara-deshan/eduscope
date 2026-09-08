@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.12.3",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "eslint .",
@@ -12,7 +14,8 @@
     "e2e": "pnpm --filter @eduscope/panel e2e",
     "gate": "pnpm -r --sequential gate",
     "dev:panel": "pnpm --filter @eduscope/panel dev",
-    "dev:quiz": "pnpm --filter @eduscope/quiz dev"
+    "dev:quiz": "pnpm --filter @eduscope/quiz dev",
+    "gate:e": "node scripts/gate-workstream-e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",

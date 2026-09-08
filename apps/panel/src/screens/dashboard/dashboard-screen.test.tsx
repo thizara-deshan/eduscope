@@ -231,6 +231,12 @@ describe('DashboardScreen', () => {
     expect(screen.getByRole('button', { name: /Starting/ })).toBeDisabled();
   });
 
+  it('keeps the idle route while a 202 start awaits its recording event', () => {
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
+    expect(screen.getByTestId('screen')).toHaveAttribute('data-screen', 'S-04');
+  });
+
   it('keeps boot recovery on S-04 while the prior session is checked', () => {
     renderDashboard({
       recording: {

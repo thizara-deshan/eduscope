@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TIMERS } from '@eduscope/shared';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -143,4 +144,64 @@ test.describe('S-07 Session transport card', () => {
     await expect(page.getByTestId('recording-notch')).toContainText('RECORDING');
     await expect(page.getByRole('button', { name: 'Stop' })).toBeEnabled();
   });
+});
+
+realTest.describe('S-07 Session transport card — real', () => {
+  realTest(
+    'real: pause/stop EOS deadlines resolve from server events and paused reload retains duration',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(75_000);
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 6101 },
+      });
+      await realExpect(page.getByTestId('timer-card')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Pause' }).click();
+      await realExpect(page.getByRole('button', { name: 'Pausing…' })).toBeDisabled();
+      await realExpect(page.getByText('Recording paused')).toBeVisible({ timeout: TIMERS['T-CMD-RESOLVE'] });
+      await realExpect(page.getByRole('alert')).toContainText('ended unexpectedly');
+      const pausedDuration = await page.getByLabel('Recording duration').textContent();
+      await page.reload();
+      await realExpect(page).toHaveURL(/\/login$/);
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page.getByText('Recording paused')).toBeVisible();
+      await realExpect(page.getByLabel('Recording duration')).toHaveText(pausedDuration ?? '');
+
+      await page.getByRole('button', { name: 'Resume' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(2);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000002', pgid: 6102 },
+      });
+      await realExpect(page.getByRole('button', { name: 'Pause' })).toBeEnabled();
+      await page.evaluate(() => {
+        (window as unknown as { __s07SawStopPending: boolean }).__s07SawStopPending = false;
+        new MutationObserver(() => {
+          if ([...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Stopping'))) {
+            (window as unknown as { __s07SawStopPending: boolean }).__s07SawStopPending = true;
+          }
+        }).observe(document.body, { childList: true, subtree: true, characterData: true });
+      });
+      await page.getByRole('button', { name: 'Stop' }).click();
+      await realExpect.poll(() => page.evaluate(
+        () => (window as unknown as { __s07SawStopPending: boolean }).__s07SawStopPending,
+      )).toBe(true);
+      await realExpect(page.locator('[data-screen="S-04"]')).toBeVisible({ timeout: TIMERS['T-CMD-RESOLVE'] });
+      const audit = await realStack.control<{ segments: Array<{ state: string; endReason: string }> }>('core.transport-audit');
+      realExpect(audit.segments).toHaveLength(2);
+      realExpect(audit.segments).toEqual(expect.arrayContaining([
+        expect.objectContaining({ state: 'truncated', endReason: 'pause' }),
+        expect.objectContaining({ state: 'truncated', endReason: 'stop' }),
+      ]));
+    },
+  );
 });

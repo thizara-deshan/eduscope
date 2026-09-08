@@ -16,7 +16,7 @@ export const bannedGlobals = [
   { name: 'WebSocket', message: REASON },
   { name: 'XMLHttpRequest', message: REASON },
   { name: 'EventSource', message: REASON },
-  { name: 'RTCPeerConnection', message: `${REASON} Preview signaling lives behind client.openPreview().` },
+  { name: 'RTCPeerConnection', message: `${REASON} Source previews are authenticated one-second JPEG polls behind client.openPreview() (2026-09-03 decision) — no WebRTC/SDP/ICE in the production client.` },
 ];
 
 export const bannedImports = [
@@ -33,4 +33,16 @@ export const bannedProperties = [
 
 /** Everything except the boundary package itself. */
 export const boundaryFiles = ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'];
-export const boundaryExempt = ['packages/api-client/src/**'];
+// The boundary applies to shipping application/library source only. Test and
+// end-to-end harnesses legitimately use `fetch`/`WebSocket` to drive and
+// inspect the real stack and never ship to production; the production guarantee
+// is separately enforced by the E-50 source-scan audit
+// (packages/api-client/test/mixed/production-config.test.ts), which scans app
+// `src` and excludes `.test`/`.spec` files.
+export const boundaryExempt = [
+  'packages/api-client/src/**',
+  'apps/**/e2e/**',
+  '**/*.test.{ts,tsx}',
+  '**/*.spec.{ts,tsx}',
+  '**/test-setup.{ts,tsx}',
+];

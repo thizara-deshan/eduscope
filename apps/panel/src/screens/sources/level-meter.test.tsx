@@ -33,4 +33,12 @@ describe('LevelMeter', () => {
     });
     expect(commits).toBe(1);
   });
+
+  it('suppresses stale meter values while its source is offline', () => {
+    useTelemetryStore.getState().setLevel('mic-lecturer', 0.8);
+    render(<LevelMeter roleId="mic-lecturer" active={false} />);
+    expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0');
+    act(() => useTelemetryStore.getState().setLevel('mic-lecturer', 0.9));
+    expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0');
+  });
 });

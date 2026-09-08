@@ -1,17 +1,34 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { createMockQuizClient, type MockQuizAppClient, type QuizAppClient } from '@eduscope/api-client/quiz';
-import type { ScenarioName, StudentQuizTransitionId } from '@eduscope/api-client';
+'use client';
+
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  resolveSelection,
+  type RuntimeConfig,
+  type ScenarioName,
+  type StudentQuizTransitionId,
+} from '@eduscope/api-client';
+import {
+  createMockQuizClient,
+  type MockQuizAppClient,
+  type QuizAppClient,
+} from '@eduscope/api-client/quiz';
+import { createRealQuizAppClient } from '@eduscope/api-client/quiz/real';
+import { useOptionalRuntimeConfig } from '../config/runtime-config.js';
 import { createSelfRegistrationProvider } from '../identity/self-registration.js';
 import type { QuizIdentityProvider } from '../identity/identity-provider.js';
-import { useQuizStore } from '../store/quiz-store.js';
 import { useStudentStream } from '../realtime/use-student-stream.js';
+import { useQuizStore } from '../store/quiz-store.js';
 
 const DEFAULT_SCENARIO: ScenarioName = 'student-quiz-happy';
+const defaultRealFactory = (baseUrl: string): QuizAppClient =>
+  createRealQuizAppClient({ baseUrl });
 
 interface QuizClientValue {
   readonly client: QuizAppClient;
   readonly identity: QuizIdentityProvider;
+  readonly mock: MockQuizAppClient | null;
   readonly scenario: ScenarioName;
   switchScenario(name: ScenarioName): void;
   forceStudentTransition(id: StudentQuizTransitionId): void;
@@ -20,51 +37,63 @@ interface QuizClientValue {
 const QuizClientContext = createContext<QuizClientValue | null>(null);
 
 interface Instance {
-  readonly client: MockQuizAppClient;
+  readonly client: QuizAppClient;
   readonly identity: QuizIdentityProvider;
+  readonly mock: MockQuizAppClient | null;
 }
 
-/**
- * Mirrors apps/panel's ClientProvider (Task 15): one client per selected
- * scenario, constructed inside the effect (not useMemo, for the same
- * StrictMode reason — a client built in a discarded double-render would
- * never reach an effect to get disposed). This is the ONLY file that
- * changes when SSO lands (A-16) — swap the provider call for
- * `createSsoProvider(client)`, nothing else moves.
- */
-export function QuizClientProvider({ children }: { children: ReactNode }) {
+export function QuizClientProvider({
+  children,
+  config: configProp,
+  createReal = defaultRealFactory,
+  createMock = createMockQuizClient,
+}: {
+  children: ReactNode;
+  config?: RuntimeConfig;
+  createReal?: (baseUrl: string) => QuizAppClient;
+  createMock?: (scenario: ScenarioName) => MockQuizAppClient;
+}) {
   const queryClient = useQueryClient();
+  const contextConfig = useOptionalRuntimeConfig();
+  const config = configProp ?? contextConfig ?? DEFAULT_RUNTIME_CONFIG;
+  const selection = useMemo(() => resolveSelection(config), [config]);
   const [scenario, setScenario] = useState<ScenarioName>(DEFAULT_SCENARIO);
   const [instance, setInstance] = useState<Instance | null>(null);
 
   useEffect(() => {
-    const client = createMockQuizClient(scenario);
-    const identity = createSelfRegistrationProvider(client);
-    setInstance({ client, identity });
+    const client = selection.studentQuiz === 'mock'
+      ? createMock(scenario)
+      : createReal(config.quizBaseUrl);
+    const built: Instance = {
+      client,
+      identity: createSelfRegistrationProvider(client),
+      mock: selection.studentQuiz === 'mock' ? client as MockQuizAppClient : null,
+    };
+    setInstance(built);
     return () => {
-      client.dispose();
+      useQuizStore.getState().reset();
+      built.client.dispose();
       setInstance(null);
     };
-  }, [scenario]);
+  }, [config.quizBaseUrl, createMock, createReal, scenario, selection.studentQuiz]);
 
   useStudentStream(instance?.client ?? null);
-
   if (!instance) return null;
 
   const value: QuizClientValue = {
     client: instance.client,
     identity: instance.identity,
+    mock: instance.mock,
     scenario,
     switchScenario(name) {
-      // Reset BEFORE switching: the store must not render the outgoing
-      // scenario's stale question/result while the new client's first
-      // connect() is still in flight.
+      if (!instance.mock) throw new Error('scenario controls require the mock quiz client');
       useQuizStore.getState().reset();
       void queryClient.invalidateQueries();
       setScenario(name);
     },
     forceStudentTransition(id) {
-      instance.client.forceStudentTransition(id);
+      if (!instance.mock) throw new Error('scenario controls require the mock quiz client');
+      instance.mock.forceStudentTransition(id);
     },
   };
 
@@ -85,7 +114,15 @@ export function useQuizIdentity(): QuizIdentityProvider {
   return useQuizClientValue().identity;
 }
 
-export function useQuizScenarioControls(): Pick<QuizClientValue, 'scenario' | 'switchScenario' | 'forceStudentTransition'> {
-  const { scenario, switchScenario, forceStudentTransition } = useQuizClientValue();
-  return { scenario, switchScenario, forceStudentTransition };
+export function useQuizScenarioControls(): Pick<
+  QuizClientValue,
+  'scenario' | 'switchScenario' | 'forceStudentTransition'
+> {
+  const value = useQuizClientValue();
+  if (!value.mock) throw new Error('scenario controls require the mock quiz client');
+  return {
+    scenario: value.scenario,
+    switchScenario: value.switchScenario,
+    forceStudentTransition: value.forceStudentTransition,
+  };
 }

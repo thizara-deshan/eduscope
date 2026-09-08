@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from pipeline_manager.overlays import render_question_card
 from pipeline_manager.pipelines.builder import ROLE_SOCKETS, PipelineSpec
 from pipeline_manager.pipelines.projector import (
     ProjectorMode,
@@ -101,14 +102,20 @@ async def test_mode_switch_over_stdin_changes_the_rendered_frame_same_pgid(tmp_p
 
         passthrough_frame = _write_frame(process, capture_path)
 
-        from PIL import Image
-
-        qr_path = tmp_path / "qr.png"
-        Image.new("RGB", (64, 64), color=(255, 255, 255)).save(qr_path)
         question = QuestionOverlay(
-            question_text="What is the capital of France?", options=["Paris", "Lyon"], join_qr_png_path=str(qr_path)
+            publicationId="pub-integ-b",
+            prompt="What is the capital of France?",
+            options=[
+                {"id": "o1", "label": "A", "text": "Paris"},
+                {"id": "o2", "label": "B", "text": "Lyon"},
+            ],
+            joinUrl="https://quiz.example.edu/j/INTEGB1",
+            joinCode="INTEGB1",
         )
-        message = encode_control_message(ProjectorMode.QUESTION, question)
+        # A renders the whole 1920×1080 card server-side; the worker overlays it
+        # via a single `gdkpixbufoverlay.location` swap carried in the frame.
+        card_path = render_question_card(question, tmp_path)
+        message = encode_control_message(ProjectorMode.QUESTION, card_png_path=card_path)
         writer_stdin = process.popen.stdin.buffer
         writer_stdin.write(message)
         writer_stdin.flush()

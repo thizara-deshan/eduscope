@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { scoreQuizParticipants } from '@eduscope/shared';
 import { useClient } from '../client/client-provider.js';
 import { useRecordingSession, useResponsesEvent } from '../store/selectors.js';
 import { AI_KEYS } from './query-keys.js';
@@ -108,24 +109,18 @@ export function useLeaderboard(): UseLeaderboard {
     });
   }
 
-  const computed = [...merged.entries()].map(([studentIdNumber, t]) => ({
-    studentIdNumber,
-    displayName: t.displayName,
-    answered: t.answered,
-    correct: t.correct,
-    points: t.correct * 10,
-    accuracy: t.answered === 0 ? 0 : t.correct / t.answered,
-    avgResponseMs: t.answered === 0 ? 0 : Math.round(t.totalResponseMs / t.answered),
-  }));
-  computed.sort((a, b) => b.points - a.points);
-
-  let rank = 0;
-  let prevPoints: number | null = null;
-  const entries: LeaderboardEntryView[] = computed.map((entry, index) => {
-    if (prevPoints === null || entry.points !== prevPoints) rank = index + 1;
-    prevPoints = entry.points;
-    return { ...entry, rank };
-  });
+  // DM-10: the panel scores and dense-ranks through the same shared helper B
+  // and D use, so all three agree on ties (INV-LB-2) — never a third local
+  // formula that could drift (e.g. standard vs dense ranking).
+  const entries: LeaderboardEntryView[] = scoreQuizParticipants(
+    [...merged.entries()].map(([studentIdNumber, t]) => ({
+      studentIdNumber,
+      displayName: t.displayName,
+      answered: t.answered,
+      correct: t.correct,
+      responseMsTotal: t.totalResponseMs,
+    })),
+  );
 
   return {
     loading: query.isPending && sessionId !== undefined,

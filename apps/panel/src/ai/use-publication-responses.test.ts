@@ -69,6 +69,38 @@ describe('usePublicationResponses', () => {
     expect(hook.result.current.items).toHaveLength(0);
   });
 
+  it('stale snapshot then replay delta: folds by studentIdNumber without duplicating, and clears stale', async () => {
+    // The real S-16 path: a stale REST snapshot already holds one answer; the
+    // post-reconnect replay re-delivers it plus new ones. Folding by
+    // studentIdNumber must converge (no duplicate rows) and drop the stale flag.
+    const { hook } = build('pub1', {
+      listPublicationResponses: vi.fn(() => Promise.resolve({
+        items: [{
+          id: 's1', publicationId: 'pub1', studentIdNumber: 's1', studentDisplayName: 'K. Fernando',
+          selectedOptionId: 'o1', isCorrect: true, responseTimeMs: 3000, submittedAt: '2026-08-05T10:00:00Z',
+          syncedAt: '2026-08-05T09:58:00Z',
+        }],
+        syncedAt: '2026-08-05T09:58:00Z', stale: true,
+      })),
+    });
+    await waitFor(() => expect(hook.result.current.stale).toBe(true));
+    expect(hook.result.current.items).toHaveLength(1);
+
+    act(() => useWsStore.getState().ingest(envelope('quiz.responses', {
+      publicationId: 'pub1',
+      deltas: [
+        // The same student re-delivered by the replay — must not duplicate.
+        { studentIdNumber: 's1', displayName: 'K. Fernando', selectedOptionId: 'o1', isCorrect: true, responseTimeMs: 3000, submittedAt: '2026-08-05T10:00:00Z' },
+        { studentIdNumber: 's2', displayName: 'S. Jayasuriya', selectedOptionId: 'o2', isCorrect: false, responseTimeMs: 4000, submittedAt: '2026-08-05T10:01:00Z' },
+      ],
+      syncedAt: '2026-08-05T10:01:30Z', stale: false,
+    }, 0)));
+
+    expect(hook.result.current.items).toHaveLength(2);
+    expect(new Set(hook.result.current.items.map((r) => r.studentIdNumber))).toEqual(new Set(['s1', 's2']));
+    expect(hook.result.current.stale).toBe(false);
+  });
+
   it('stale: carries syncedAt for the banner', async () => {
     const { hook } = build('pub1', {
       listPublicationResponses: vi.fn(() => Promise.resolve({ items: [], syncedAt: '2026-08-05T09:58:00Z', stale: true })),

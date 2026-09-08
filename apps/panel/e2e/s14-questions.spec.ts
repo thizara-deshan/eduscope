@@ -1,4 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
+import { REAL_STACK_ACCOUNTS, expect as realExpect, test as realTest } from './fixtures/real-stack.js';
+
+function sourcesOnline(consumers: ReadonlyArray<{ id: string; state: string; pgid: number }>) {
+  return {
+    publishers: {
+      usb: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      rtsp2: { state: 'online', bound: true, fps: 30, rms: null, lastError: null },
+      audio: { state: 'online', bound: true, fps: null, rms: 0.4, lastError: null },
+    },
+    consumers,
+  };
+}
 
 async function signIn(page: Page) {
   await page.goto('/login');
@@ -90,4 +103,74 @@ test.describe('S-14 Questions review', () => {
     await expect(sentCard.getByText(/only draft/i)).toBeVisible({ timeout: 5_000 });
     await expect(sentCard.locator('.us-qcard__prompt')).toHaveText(originalPrompt ?? '');
   });
+});
+
+async function projectorCalls(realStack: { ledger(): Promise<{ pm: Array<{ method: string; path: string }> }> }): Promise<number> {
+  const { pm } = await realStack.ledger();
+  return pm.filter((call) => call.method === 'POST' && call.path === '/consumers/projector').length;
+}
+
+// eduscope:needs-real-d — this witness exercises the real B→D publish path.
+realTest.describe('S-14 Questions review — real', () => {
+  realTest(
+    'real: publish-before-project — a B↔D cut keeps the projector dark and D empty; recovery stores exactly one publication, then the projector switches',
+    { annotation: { type: 'adapter', description: 'real' } },
+    async ({ page, realStack }) => {
+      realTest.setTimeout(120_000);
+      await realStack.control('core.pm.status', { status: sourcesOnline([]) });
+
+      await page.goto('/login');
+      await page.getByLabel('Username').fill(REAL_STACK_ACCOUNTS.lecturer.username);
+      await page.getByLabel('Password').fill(REAL_STACK_ACCOUNTS.lecturer.password);
+      await page.getByRole('button', { name: 'Log In' }).click();
+      await realExpect(page).toHaveURL('/');
+      await page.getByRole('button', { name: 'Start Recording' }).click();
+      await realExpect.poll(async () => (await realStack.processAudit()).recordStarts).toBe(1);
+      await realStack.control('core.pm.publish', {
+        event: 'evt.pm.consumer.running', data: { consumerId: 'record:00000001', pgid: 4101 },
+      });
+
+      // A real generated draft, reviewed in S-14. B has already minted an open
+      // quiz session against real D on record-start, so Send is enabled.
+      await realStack.control('core.ai-generate', { count: 3 });
+      await page.getByRole('button', { name: 'Generate Questions Now' }).click();
+      const modal = page.getByTestId('questions-modal');
+      await realExpect(modal).toBeVisible();
+      await realExpect(page.locator('.us-qcard[data-state="draft"]').last()).toBeVisible({ timeout: 30_000 });
+      const draftId = (await page.locator('.us-qcard[data-state="draft"]').last().getAttribute('data-testid'))!;
+      const draftCard = page.getByTestId(draftId);
+      await draftCard.locator('.us-qcard__head').click();
+      const sendButton = draftCard.getByRole('button', { name: 'Send to Projector' });
+      await realExpect(sendButton).toBeEnabled({ timeout: 20_000 });
+
+      // Cut B↔D, then Send: the publish to D fails, so publish-before-project
+      // (DM-9, INV-QPUB-3) must leave the draft un-sent and the projector dark.
+      await realStack.control('quiz.stop');
+      await sendButton.click();
+      await realExpect(draftCard.getByRole('button', { name: 'Sending…' })).toBeVisible();
+      await realExpect(page.getByTestId(`${draftId}-problem`)).toBeVisible({ timeout: 15_000 });
+      await realExpect(draftCard).toHaveAttribute('data-state', 'draft');
+      realExpect(await projectorCalls(realStack), 'no projector switch without a D ack').toBe(0);
+
+      // Restore the link. D persisted nothing from the failed publish.
+      await realStack.control('quiz.start');
+      realExpect((await realStack.control<{ count: number }>('quiz.publication-audit')).count).toBe(0);
+
+      // Retry once: D now stores exactly one publication, the draft becomes
+      // sent, and only then is the projector switched — one call, ack first.
+      await realExpect(sendButton).toBeEnabled({ timeout: 15_000 });
+      await sendButton.click();
+      // Recovery is asserted from backend truth (the plan's recovery clause):
+      // D now stores exactly one publication, and only then is PM asked to
+      // project — exactly once, ack-first. The failed first attempt persisted
+      // nothing in D, so a count of one proves the retry alone stored it.
+      await realExpect.poll(
+        async () => (await realStack.control<{ count: number }>('quiz.publication-audit')).count,
+        { timeout: 15_000 },
+      ).toBe(1);
+      await realExpect.poll(async () => projectorCalls(realStack), { timeout: 10_000 }).toBe(1);
+      // The one stored publication is the open (showing) one, not a leftover.
+      realExpect((await realStack.control<{ count: number }>('quiz.publication-audit', { state: 'open' })).count).toBe(1);
+    },
+  );
 });

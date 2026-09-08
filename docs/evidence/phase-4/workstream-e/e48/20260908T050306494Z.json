@@ -1,0 +1,179 @@
+{
+  "result": "PASS",
+  "task": "E-48",
+  "at": "2026-09-08T05:03:06.494Z",
+  "panelUrl": "http://127.0.0.1",
+  "measurements": [
+    {
+      "role": "presentation",
+      "firstImageMs": 82,
+      "dimensions": {
+        "width": 480,
+        "height": 270
+      },
+      "changing": false,
+      "digests": [
+        "dc987c31149c0a921b62d94a9d337c5c0c50410f5cf7be1385b1ab400e7cd29f",
+        "dc987c31149c0a921b62d94a9d337c5c0c50410f5cf7be1385b1ab400e7cd29f"
+      ]
+    },
+    {
+      "role": "lecturer-cam",
+      "firstImageMs": 93,
+      "dimensions": {
+        "width": 480,
+        "height": 270
+      },
+      "changing": true,
+      "digests": [
+        "32beb7bc624464524f5899ce736aab8f64a9cdb905af6a67d397797a959ebd90",
+        "15a6c2f9e3ce54b3de470a0861a9e4a995aac14ada3b6051e44e16d0da488271"
+      ]
+    },
+    {
+      "role": "students-cam",
+      "firstImageMs": 92,
+      "dimensions": {
+        "width": 480,
+        "height": 270
+      },
+      "changing": true,
+      "digests": [
+        "493bf1ecdf3a2af9b80d65aadfd7547cf2fc91237e0f41f1b5565fc3bcf06be7",
+        "59c7056f36f095b3e04cc30bba43babd50116c3c81ae08b03d099eb14ef207ac"
+      ]
+    }
+  ],
+  "jpegRequestCount": 17,
+  "cadenceMs": [
+    994,
+    1645,
+    995,
+    1486,
+    999,
+    1636,
+    992,
+    1001,
+    1001,
+    998,
+    1002,
+    999,
+    1000,
+    1000,
+    1001,
+    999
+  ],
+  "forbiddenPreviewSignaling": 0,
+  "waiver": {
+    "source": "presentation",
+    "reason": "static HDMI content; operator-approved waiver"
+  },
+  "processes": {
+    "before": [
+      {
+        "id": "record:00000001",
+        "kind": "record",
+        "state": "exited",
+        "output": "/tmp/eduscope-e48-recordings/sessions/01M1ZP97R249MZC2RRAPG1CM11/seg-000.ts",
+        "pgid": 3118364,
+        "lastError": "ERROR: gst-resource-error-quark: Failed to read from shmsrc (9) ../sys/shm/gstshmsrc.c(356): gst_shm_src_create (): /GstPipeline:pipeline0/GstShmSrc:shmsrc0:"
+      },
+      {
+        "id": "jpeg-previews:main",
+        "kind": "jpeg-previews",
+        "state": "running",
+        "output": "/tmp/eduscope-e48-runtime/previews",
+        "pgid": 3118636,
+        "lastError": null
+      }
+    ],
+    "after": [
+      {
+        "id": "record:00000001",
+        "kind": "record",
+        "state": "exited",
+        "output": "/tmp/eduscope-e48-recordings/sessions/01M1ZP97R249MZC2RRAPG1CM11/seg-000.ts",
+        "pgid": 3118364,
+        "lastError": "ERROR: gst-resource-error-quark: Failed to read from shmsrc (9) ../sys/shm/gstshmsrc.c(356): gst_shm_src_create (): /GstPipeline:pipeline0/GstShmSrc:shmsrc0:"
+      },
+      {
+        "id": "jpeg-previews:main",
+        "kind": "jpeg-previews",
+        "state": "running",
+        "output": "/tmp/eduscope-e48-runtime/previews",
+        "pgid": 3118857,
+        "lastError": null
+      }
+    ]
+  },
+  "publishers": {
+    "before": {
+      "usb": {
+        "state": "online",
+        "bound": true,
+        "pid": 3118441,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "rtsp": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117921,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "rtsp2": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117925,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "audio": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117936,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      }
+    },
+    "after": {
+      "usb": {
+        "state": "online",
+        "bound": true,
+        "pid": 3118826,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "rtsp": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117921,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "rtsp2": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117925,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      },
+      "audio": {
+        "state": "online",
+        "bound": true,
+        "pid": 3117936,
+        "fps": null,
+        "rms": null,
+        "lastError": null
+      }
+    }
+  }
+}

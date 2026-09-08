@@ -53,15 +53,12 @@ export function PreviewLightbox({
         <div className="us-previewlightbox__body">
           {preview.state.kind === 'negotiating' ? (
             <div className="us-previewlightbox__frame us-previewlightbox__skeleton" data-testid="preview-skeleton" />
-          ) : preview.state.kind === 'live' ? (
+          ) : preview.state.kind === 'live' || preview.state.kind === 'stale' ? (
             <div className="us-previewlightbox__frame us-previewlightbox__live">
-              {preview.state.frame ? (
-                <img src={preview.state.frame} alt="" data-testid="preview-frame" />
-              ) : (
-                <div className="us-previewlightbox__framefill" data-testid="preview-frame-placeholder" />
-              )}
+              <img src={preview.state.frame} alt="" data-testid="preview-frame" />
               <span className="us-previewlightbox__chip">
-                <span className="us-previewlightbox__dot" aria-hidden="true" /> LIVE
+                <span className="us-previewlightbox__dot" aria-hidden="true" />
+                {preview.state.kind === 'stale' ? 'STALE' : 'LIVE'}
               </span>
             </div>
           ) : preview.state.kind === 'failed' ? (
@@ -70,7 +67,7 @@ export function PreviewLightbox({
             </div>
           ) : (
             <div className="us-previewlightbox__frame us-previewlightbox__message" role="status">
-              {preview.state.reason === 'disconnected' ? 'The preview disconnected.' : 'Preview closed.'}
+              Preview closed.
             </div>
           )}
         </div>

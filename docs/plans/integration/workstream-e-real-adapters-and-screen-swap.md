@@ -8,7 +8,9 @@
 
 > **Target decision — 2026-09-03:** use atomic 480×270 JPEG source previews refreshed once per second instead of WebRTC on RK3588. Cache-busting stays inside the real api-client adapter; components do not call `fetch` directly. A source is stale after 3 s without a successful image. Stop polling when the lightbox closes. This accepts the previously measured full-mix CPU-capacity risk without relabeling the failed 30% headroom target as PASS.
 
-**Tech Stack:** TypeScript 5.6, React 18, Vite 7, Next.js 14, Zustand 5, TanStack Query 5, Zod 3.23, browser Fetch/WebSocket/WebRTC, Vitest 3, Testing Library, Playwright, Fastify 5 core-api/quiz-service test peers, PostgreSQL 16 Testcontainers, Python 3.11/FastAPI pipeline-manager, Pillow and Python QR rendering for S-42.
+> **Plan amendment — 2026-09-04:** E-04 and E-48's stale WebRTC/SDP/ICE instructions are replaced by the decided authenticated JPEG polling path. This changes no public v1 operation or schema: `getSourcePreview` remains the production transport, while the five already-owned preview-signaling message schemas remain compatibility inventory and are not referenced by the production browser client. E-15 and E-50 wording is reconciled only where it verifies those two tasks.
+
+**Tech Stack:** TypeScript 5.6, React 18, Vite 7, Next.js 14, Zustand 5, TanStack Query 5, Zod 3.23, browser Fetch/WebSocket, Vitest 3, Testing Library, Playwright, Fastify 5 core-api/quiz-service test peers, PostgreSQL 16 Testcontainers, Python 3.11/FastAPI pipeline-manager, Pillow and Python QR rendering for S-42.
 
 ---
 
@@ -21,14 +23,14 @@
 3. **Inventory KEEP behaviors are non-negotiable.** A workstream cannot close while any KEEP item assigned to it lacks the concrete verification identified in the inventory-coverage ledger below. Implementation may change; the observable capability must survive.
 4. **The mock adapter stays.** `packages/api-client/src/mock` remains the demo/UI-development environment and contract-regression harness. Every real-adapter or backend contract change must keep mock responses/events and contract-honesty tests green.
 5. **Single writers and async commands stay binding.** Only the owning state machine writes its state. A `202 CommandAccepted` is acceptance, not completion; the resolving event must arrive by its contract deadline.
-6. **No direct frontend networking.** All panel and quiz REST/WS/WebRTC signaling goes through `packages/api-client`; no component calls `fetch`, `WebSocket`, or a media-signaling endpoint directly.
+6. **No direct frontend networking.** All panel and quiz REST/WS/JPEG preview requests go through `packages/api-client`; no component calls `fetch`, `WebSocket`, or a media endpoint directly.
 7. **No task may depend on an open decision.** Encountering one stops that workstream. Update this master plan and ask for review; do not choose an option in code.
 8. **Master-plan scope is fixed at workstream planning time.** A JIT workstream plan may expand a task but may not add/drop contract ownership or KEEP coverage. If reality conflicts, update this master plan and flag the gate.
 
 ### Workstream E fixed decisions and boundaries
 
 - Workstream E is exactly E-01 through E-50 in master order. E-48, E-49, and E-50 are the final expanded verification tasks and remain last.
-- E owns no v1 operation or event. It consumes the 79 panel-facing core operations, three student REST operations, 22 panel events, five preview messages, and four student events already owned by B/D.
+- E owns no v1 operation or event. It consumes the 79 panel-facing core operations (including `getSourcePreview`), three student REST operations, 22 panel events, and four student events already owned by B/D. The five preview-signaling messages remain in the v1 contract inventory for compatibility, but the production browser adapter does not consume them after the 2026-09-03 JPEG decision.
 - The `SERVER_SIDE_ONLY_OPERATION_IDS` quiz-sync operations never enter either browser client.
 - Runtime domains are exactly `auth`, `recording`, `channels`, `sourcesAudio`, `preview`, `libraryExport`, `uploads`, `provisioningHealth`, `alerts`, `devicePower`, `storage`, `network`, `encoder`, `streamTargets`, `firmware`, `users`, `aiQuiz`, `logs`, and `studentQuiz`.
 - Demo/UI development defaults to mock. Production is accepted only with `{default:"real",overrides:{}}`. Overrides are rejected in production and are never editable from a screen.
@@ -110,7 +112,7 @@ E-01 Step 1 remains the first executed step. Build the checker, run it, and cont
 | Runtime selection | `packages/api-client/src/mixed/{domains,runtime-config,create-routed-client}.ts`, `apps/panel/src/config/*`, `apps/quiz/src/config/*`, both providers | Validate deploy-owned config before construction; route every method/event exactly once. |
 | Real panel REST | `packages/api-client/src/real/{http,auth,problems,operation-specs,create-real-client}.ts` | URL/query/body/form/blob/204/202 handling, zod response validation, bearer/refresh single-flight. |
 | Real panel realtime | `packages/api-client/src/real/{panel-ws,connection}.ts`, mixed router, panel WS store | Subprotocol auth, backoff, gap/reset/resync, inactive-domain filtering, per-domain status. |
-| Preview | `packages/api-client/src/real/{preview,webrtc}.ts` | Five-message signaling, one peer, remote media stream, cleanup and terminal errors. |
+| Preview | `packages/api-client/src/real/preview.ts`, real client, panel preview hook | Authenticated one-second JPEG polling, cache busting, one active poller, stale recovery, and deterministic abort/timer/object-URL cleanup. |
 | Student client | `packages/api-client/src/quiz/{real-quiz-app-client,student-stream}.ts`, quiz provider/config | Credentialed REST, cookie WS, ordered atomic snapshot, reconnect without offline answer queue. |
 | Real stack | `packages/api-client/test/real/fixtures/*`, B/D test process entries, `packages/api-client/scripts/*`, Playwright fixtures | Reusable real B+D/TLS stack and test-only fault controls for focused screen witnesses. |
 | Screen swaps | Existing screen/hook tests and `apps/{panel,quiz}/e2e/s*.spec.ts` | Preserve mock coverage and add the master row's real failure witness one screen at a time. |
@@ -428,41 +430,53 @@ git commit -m "feat(api-client): reconnect and resync panel events"
 ### Task E-04: Real JPEG preview channel
 
 **Files:**
-- Create: `packages/api-client/src/real/webrtc.ts`
 - Create: `packages/api-client/src/real/preview.ts`
 - Create: `packages/api-client/test/real/preview.test.ts`
+- Modify: `packages/api-client/src/real/http.ts`
 - Modify: `packages/api-client/src/real/create-real-client.ts`
 - Modify: `packages/api-client/src/client.ts`
+- Modify: `packages/api-client/src/mixed/create-routed-client.ts`
+- Modify: `packages/api-client/test/mixed/create-routed-client.test.ts`
+- Modify: `packages/api-client/src/mock/create-mock-client.ts`
+- Modify: `packages/api-client/src/mock/events/preview.ts`
+- Modify: `packages/api-client/test/mock/preview.test.ts`
 - Modify: `apps/panel/src/screens/sources/use-preview.ts`
 - Modify: `apps/panel/src/screens/sources/use-preview.test.ts`
+- Modify: preview-channel fixtures in `apps/panel/src/screens/{sources,session}/**/*.test.tsx`
 
 **Produces:** one authenticated real JPEG preview poller, one-second refresh, three-second stale handling, supersession, and deterministic timer/object-URL cleanup. Screen selection remains `preview=mock` until E-48.
 
-- [ ] **Step 1: Add failing signaling/cleanup tests**
+- [ ] **Step 1: Add failing polling/state/cleanup tests**
 
-Inject WebSocket and `RTCPeerConnection` factories. Cover offer→setRemoteDescription→answer, local trickle ICE, remote ICE, end-of-candidates, `close`, `error`, one active peer, second open closing the first, track delivery, source-offline terminal error, socket/peer/track cleanup, and contract rejection of a sixth message.
+Inject the request boundary, clock, and timers. Cover an immediate authenticated JPEG request, a new cache-buster on every request, one-second refresh, at most one in-flight request per source, successful frame replacement, rejection of a non-JPEG/partial payload, transient request failure, stale transition after three seconds without a successful frame, recovery on the next valid JPEG, one active poller, opening a second source closing the first, idempotent `close()`, in-flight abort, and timer/subscription cleanup. Assert that the channel never opens `/ws/preview` and never constructs an `RTCPeerConnection`.
+
+Update the mock channel to the same role-in/channel-update shape while preserving its deterministic JPEG sentinel and scenario controls. The mock must not emulate SDP, ICE, tracks, or a signaling socket.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/real/preview.test.ts && pnpm --filter @eduscope/panel test -- src/screens/sources/use-preview.test.ts`
 
-Expected: FAIL because `openPreview()` is unimplemented.
+Expected: FAIL because the real `openPreview(roleId)` path is unimplemented and the current channel is still signaling-shaped.
 
-- [ ] **Step 2: Implement the peer boundary**
+- [ ] **Step 2: Implement the JPEG polling boundary**
 
-Open `${apiWsBase}/ws/preview` with the sole access-token subprotocol. Validate outbound client messages and all inbound messages against the shared preview schemas. On `offer`, create exactly one peer, set remote SDP, create/set local answer, and send `answer`; forward ICE both ways. Expose `stream$` (or an equivalent typed callback) on `PreviewChannel` so `usePreview` attaches the remote stream to the video element without calling WebRTC APIs itself.
+Change `PreviewChannel` to a role-bound, receive-only channel: `openPreview(roleId)` exposes typed frame/status updates and `close()`; it has no `send()` method and no signaling messages. Route the `roleId` through `createRoutedClient` so `preview` still selects exactly one adapter. The real implementation requests `GET /sources/{roleId}/preview.jpg` immediately, then on a fixed one-second cadence through the authenticated real HTTP boundary, skipping a tick rather than overlapping an in-flight request. Extend the HTTP request primitive only as needed to carry `cache:'no-store'` and an `AbortSignal`. Every request has an adapter-owned unique cache-buster; components never construct a URL or call `fetch`.
 
-`close()` is idempotent: unsubscribe handlers, close socket/peer, set every received track `enabled=false`, call `track.stop()`, clear the stream, and remove token-store subscriptions.
+Only a successful `image/jpeg` response with a complete JPEG payload replaces the current frame and advances `lastSuccessfulAt`. A failed/aborted/invalid response never replaces the last good frame. After three seconds without success, emit stale while retaining that frame and continue polling so recovery is automatic. Do not overlap requests. The real client owns at most one preview poller: opening another role closes and aborts the previous one before issuing the new request.
 
-- [ ] **Step 3: Verify contract and regression**
+`close()` is idempotent: clear the interval, abort the in-flight request, unsubscribe token/request handlers, clear channel state, and prevent late promise resolution from publishing another update. The channel publishes blobs/status only; it never creates DOM object URLs.
+
+- [ ] **Step 3: Bind the panel hook and verify regression**
+
+`usePreview` subscribes to channel updates, creates an object URL only for a validated successful blob, revokes the superseded URL immediately, and revokes the final URL on close/unmount. It renders loading before the first frame, live after success, stale with the last frame after the three-second deadline, and an error only when no usable frame has ever arrived. Switching tiles closes the old channel before opening the new one. No component imports or calls `fetch`, `WebSocket`, or `RTCPeerConnection`.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/real/preview.test.ts test/mock/preview.test.ts test/event-coverage.test.ts && pnpm --filter @eduscope/panel test -- src/screens/sources`
 
-Expected: PASS; five server message variants and all client variants validate, the mock JPEG sentinel remains green, and opening twice leaves one live peer.
+Expected: PASS; immediate plus one-second JPEG polling is deterministic, three-second stale/recovery behavior is green, the mock JPEG sentinel remains green, opening twice leaves one poller, and the production preview path contains no signaling or peer-connection use. The five retained preview-signaling schemas remain contract-valid but are not used by this adapter.
 
 - [ ] **Step 4: Commit E-04**
 
 ```bash
-git add packages/api-client/src/real packages/api-client/src/client.ts packages/api-client/test/real/preview.test.ts apps/panel/src/screens/sources/use-preview.ts apps/panel/src/screens/sources/use-preview.test.ts
-git commit -m "feat(api-client): negotiate real webrtc previews"
+git add packages/api-client/src/real/preview.ts packages/api-client/src/real/http.ts packages/api-client/src/real/create-real-client.ts packages/api-client/src/client.ts packages/api-client/src/mixed/create-routed-client.ts packages/api-client/test/mixed/create-routed-client.test.ts packages/api-client/src/mock/create-mock-client.ts packages/api-client/src/mock/events/preview.ts packages/api-client/test/real/preview.test.ts packages/api-client/test/mock/preview.test.ts apps/panel/src/screens/sources apps/panel/src/screens/session/capture-sources-row.test.tsx
+git commit -m "feat(api-client): poll authenticated jpeg previews"
 ```
 
 ---
@@ -855,7 +869,7 @@ git commit -m "test(panel): verify real sources and audio"
 
 - [ ] **Step 1: Add the mixed checkpoint**
 
-Run all surrounding source data real but serve `/config.json` with `preview:'mock'`. Open/close every tile, prove the mock JPEG sentinel still renders, and prove no real `/ws/preview` upgrade occurred. Label this test “checkpoint, not integration acceptance.”
+Run all surrounding source data real but serve `/config.json` with `preview:'mock'`. Open/close every tile, prove the mock JPEG sentinel still renders, and prove no real `/sources/{roleId}/preview.jpg` request or `/ws/preview` upgrade occurred. Label this test “checkpoint, not integration acceptance.”
 
 Run: `node packages/api-client/scripts/run-real-screen.mjs panel s10-preview`
 
@@ -1610,19 +1624,19 @@ The next three tasks are the master plan's final E verification sequence. They a
 - Create: `scripts/bench/e48-preview-acceptance.mjs`
 - Create: `docs/evidence/phase-4/workstream-e/e48/e48-template.md`
 
-**Prerequisites:** documented A-16 CPU exception and JPEG hardware result; target board running real A+B; at least presentation, camera 1, and camera 2 online; an active local recording and, where provisioned, a meeting consumer.
+**Prerequisites:** documented A-16 CPU exception and the 2026-09-03 JPEG target decision; target board running real A+B with the JPEG snapshot endpoint backed by the real thumbnail consumer; at least presentation, camera 1, and camera 2 online; an active local recording and, where provisioned, a meeting consumer.
 
-- [ ] **Step 1: Add red media—not merely signaling—assertions**
+- [ ] **Step 1: Add red real-frame—not merely endpoint—assertions**
 
-The real Playwright case must require `preview=real`, tap every online tile, and for each source record first-image time, two different successful image responses, one-second refresh cadence, rendered dimensions ≤480×270, and stale recovery. It fails if it sees the mock sentinel, a partial/non-JPEG image, no refresh within 2 s, or polling after close.
+The real Playwright case must require `preview=real`, tap every online tile, and for each source record first-image time, two different successful JPEG responses, one-second refresh cadence, rendered dimensions ≤480×270, and stale recovery. It fails if it sees the mock sentinel, a partial/non-JPEG image, no refresh within 2 s, any `/ws/preview`/WebRTC activity, or polling after close.
 
 Run locally against the typed test track: `node packages/api-client/scripts/run-real-screen.mjs panel s10-preview`
 
-Expected before completion: FAIL on the first missing real moving track or target-only assertion.
+Expected before completion: FAIL on the first missing changing JPEG frame or target-only assertion.
 
-- [ ] **Step 2: Complete peer/screen cleanup behavior**
+- [ ] **Step 2: Complete poller/screen cleanup behavior**
 
-Bind the latest authenticated JPEG to the existing image frame, show loading/stale/error/closed states, revoke superseded object URLs, and clear the timer and current URL on close. Opening a second tile stops the first poller before creating the next. Source-offline is shown as stale after 3 s while retaining the last successful frame.
+Bind the latest authenticated JPEG to the existing image frame, show loading/stale/error/closed states, revoke superseded object URLs, and clear the timer and current URL on close. Opening a second tile stops and aborts the first poller before creating the next. Source-offline is shown as stale after 3 s while retaining the last successful frame; a valid response after reconnection returns the same channel to live.
 
 - [ ] **Step 3: Run the target-board acceptance procedure**
 
@@ -1637,14 +1651,14 @@ node scripts/bench/e48-preview-acceptance.mjs
 The runner performs, in order:
 
 1. login and start/attach to a real recording;
-2. open every online source and collect the media measurements above;
-3. open source A then B and use browser stats/track ids to prove A is closed;
-4. unplug one source, assert terminal offline/error in <10 seconds, reconnect it, and obtain new motion;
-5. kill only the thumbnail consumer, assert terminal/restart/re-negotiate behavior;
+2. open every online source and collect the JPEG measurements above, including distinct payload digests without storing frame bytes;
+3. open source A then B and use request logs plus abort/timer instrumentation to prove A stops before B begins;
+4. unplug one source, assert stale with the retained last frame after 3 seconds, reconnect it, and obtain a new valid JPEG within two polling intervals;
+5. kill only the JPEG thumbnail consumer, assert failed polls, stale retention, consumer restart, and automatic recovery without a signaling reconnect;
 6. query A/B status before/after and prove recording, live, and meeting consumer ids/states were untouched;
-7. scan browser logs/network for JPEG polling and direct component networking (both zero).
+7. scan browser logs/network and prove JPEG requests use only the api-client endpoint at the expected cadence, with zero `/ws/preview`, SDP, ICE, `RTCPeerConnection`, or direct component-networking violations.
 
-Expected: prints `PASS E-48 real WebRTC acceptance`, exits 0, and writes a dated evidence JSON/Markdown containing measurements/process ids only—no token, stream key, camera credential, frame image, or participant data.
+Expected: prints `PASS E-48 real JPEG preview acceptance`, exits 0, and writes a dated evidence JSON/Markdown containing measurements, response digests, and process ids only—no token, stream key, camera credential, frame image, or participant data.
 
 - [ ] **Step 4: Run regressions and commit E-48**
 
@@ -1654,7 +1668,7 @@ Expected: PASS; real and mock preview suites are independently green and dated E
 
 ```bash
 git add packages/api-client/test/real/preview.test.ts apps/panel/src/screens/sources apps/panel/e2e/s10-preview.spec.ts scripts/bench/e48-preview-acceptance.mjs docs/evidence/phase-4/workstream-e/e48
-git commit -m "test(panel): accept real webrtc previews"
+git commit -m "test(panel): accept real jpeg previews"
 ```
 
 Stop if the target cannot meet visible motion <1 second; do not lower the threshold or substitute the E-15 mock checkpoint.
@@ -1830,7 +1844,7 @@ The config template must parse after deploy token substitution and equal:
 }
 ```
 
-Tests reject every production override, omitted domain, build-time adapter env reference, direct app `fetch|WebSocket|RTCPeerConnection`, real adapter `NotImplementedError`, and mock removal. Audit totals must be 86 REST operations overall (79 panel + four server-only + three student), 22 panel events, five preview messages, four sync messages, and four student events, with exactly one contract owner and exactly one client-domain mapping where applicable.
+Tests reject every production override, omitted domain, build-time adapter env reference, direct app `fetch|WebSocket|RTCPeerConnection`, real adapter `NotImplementedError`, and mock removal. Audit totals must be 86 REST operations overall (79 panel + four server-only + three student), 22 panel events, five retained preview-signaling messages, four sync messages, and four student events, with exactly one contract owner and exactly one client-domain mapping where applicable. The five retained preview-signaling messages have no production client-domain mapping; `getSourcePreview` is the sole production preview transport and maps to `preview`.
 
 Run: `pnpm --filter @eduscope/api-client test -- test/mixed/production-config.test.ts`
 
@@ -1838,7 +1852,7 @@ Expected: FAIL before the production template/project/gate exists.
 
 - [ ] **Step 2: Define independent Playwright projects**
 
-Panel and quiz configs each expose `mock` and `real` projects. `mock` runs the existing scenario suite with demo config and no backend. `real` requires the E real-stack/target URLs, intercepts only `/config.json`, asserts `{default:'real',overrides:{}}`, and fails if the scenario overlay/hotspot exists. E-48/E-49 target-only tests are included by evidence reference plus a lightweight gate check that the dated evidence hashes match committed files; they are not rerun against a simulator.
+Panel and quiz configs each expose `mock` and `real` projects. `mock` runs the existing scenario suite with demo config and no backend. `real` requires the E real-stack/target URLs, intercepts only `/config.json`, asserts `{default:'real',overrides:{}}`, and fails if the scenario overlay/hotspot exists. E-48/E-49 target-only tests are included by evidence reference plus a lightweight gate check that the dated evidence hashes match committed files; they are not rerun against a simulator. The contract audit still counts the five retained preview-signaling message schemas, but the source/direct-network audit requires zero production references to `/ws/preview`, SDP, ICE, or `RTCPeerConnection`.
 
 - [ ] **Step 3: Implement the gate runner with fixed phase order**
 
@@ -1879,7 +1893,7 @@ PASS panel unit and mock Playwright
 PASS quiz unit and mock Playwright
 PASS panel real Playwright S-01..S-41
 PASS quiz real Playwright S-37..S-41
-PASS E-48 WebRTC evidence
+PASS E-48 JPEG preview evidence
 PASS E-49 projector evidence
 PASS production config and no-direct-network audit
 PASS Workstream E all-real gate
@@ -1914,8 +1928,8 @@ Stop. Do not begin Workstream F, alter deployment/device files beyond the produc
 ## Scope and Coverage Audit
 
 - E-01..E-50 appear exactly once and in master order; no task, domain, contract owner, or KEEP assignment is added/dropped/reassigned.
-- E-01..E-06 are the six adapter-foundation tasks. E-07..E-47 are the ordered panel/student screen swaps. E-48 real WebRTC, E-49 projector overlay, and E-50 all-real gate are the final master verification sequence.
-- E owns zero public contract elements. The plan consumes 79 panel operations, three student operations, 22 panel events, five preview messages, and four student events; the four quiz-sync operations remain browser-excluded.
+- E-01..E-06 are the six adapter-foundation tasks. E-07..E-47 are the ordered panel/student screen swaps. E-48 real JPEG preview, E-49 projector overlay, and E-50 all-real gate are the final master verification sequence.
+- E owns zero public contract elements. The plan consumes 79 panel operations (including the JPEG preview operation), three student operations, 22 panel events, and four student events; the four quiz-sync operations remain browser-excluded. Five legacy preview-signaling messages remain in the contract ownership/count audit but are not consumed by the production browser client.
 - Mock regression is explicit in every task through the api-client suite and independently executable in E-06/E-50.
 - The master plan was updated in this planning run for upstream gate evidence, the stale E-44→E-49 QO-1 reference, and the real A/B projector payload mismatch. E-49 resolves the internal interface without changing public v1.
 - D-02b, QO-1 pre-publication QR, D-10 room hardware, DIO-1 editing, and retention-period decisions remain excluded exactly as the master requires.

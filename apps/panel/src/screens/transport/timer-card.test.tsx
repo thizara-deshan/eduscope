@@ -139,6 +139,12 @@ describe('TimerCard', () => {
     expect(screen.getByText(/continued after a brief interruption/i)).toBeInTheDocument();
   });
 
+  it('renders backend truncated segment truth as an error', () => {
+    renderTimer({ state: 'paused' });
+    act(() => useWsStore.setState({ lastSegment: { state: 'truncated', endReason: 'pause' } as never }));
+    expect(screen.getByRole('alert')).toHaveTextContent('ended unexpectedly');
+  });
+
   it('marks stale data and disables both transport commands (U-2)', () => {
     renderTimer();
     act(() => useWsStore.setState({ stale: true }));

@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
-import type { Leaderboard } from '@eduscope/shared';
+import { scoreQuizParticipants, type Leaderboard } from '@eduscope/shared';
 import { ClientContext } from '../client/client-provider.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useLeaderboard } from './use-leaderboard.js';
@@ -65,7 +65,11 @@ describe('useLeaderboard', () => {
     expect(hook.result.current.entries[0]!.rank).toBe(1);
   });
 
-  it('ties share a rank (INV-LB-2)', async () => {
+  it('ties share a rank via the shared DM-10 helper — dense, not a local formula (INV-LB-2)', async () => {
+    // Two correct, one half-correct: dense ranking is [1, 1, 2] (never the
+    // standard [1, 1, 3]). The panel must agree with the shared helper B/D use,
+    // so it is scored through `scoreQuizParticipants` here rather than a
+    // re-implemented, potentially-divergent local formula.
     const { hook } = build({
       getLeaderboard: vi.fn(() => Promise.resolve(leaderboard({
         entries: [
@@ -76,10 +80,14 @@ describe('useLeaderboard', () => {
       }))),
     });
     await waitFor(() => expect(hook.result.current.entries).toHaveLength(3));
+    const expected = scoreQuizParticipants([
+      { studentIdNumber: 's1', displayName: 'A', answered: 2, correct: 2, responseMsTotal: 2000 },
+      { studentIdNumber: 's2', displayName: 'B', answered: 2, correct: 2, responseMsTotal: 2400 },
+      { studentIdNumber: 's3', displayName: 'C', answered: 2, correct: 1, responseMsTotal: 1800 },
+    ]);
     const ranks = Object.fromEntries(hook.result.current.entries.map((e) => [e.studentIdNumber, e.rank]));
-    expect(ranks.s1).toBe(1);
-    expect(ranks.s2).toBe(1);
-    expect(ranks.s3).toBe(3);
+    expect(ranks).toEqual({ s1: 1, s2: 1, s3: 2 });
+    expect(hook.result.current.entries.map((e) => e.rank)).toEqual(expected.map((e) => e.rank));
   });
 
   it('live: a quiz.responses delta recomputes score/accuracy without a refetch', async () => {

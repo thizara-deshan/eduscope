@@ -48,6 +48,49 @@ export function startTlsProxy(targetPort: number, targetHost = '127.0.0.1'): Pro
       req.pipe(proxyReq);
     });
 
+    // Plain req/res forwarding never sees a WebSocket upgrade — the browser
+    // sends `Connection: Upgrade`, and without this handler the request just
+    // falls through the block above as an ordinary (never-completing) HTTP
+    // request. Tunnel the raw socket instead, mirroring the target's own
+    // 101 response and head bytes back to the client verbatim.
+    server.on('upgrade', (req, clientSocket, head) => {
+      const proxyReq = http.request({
+        host: targetHost,
+        port: targetPort,
+        method: req.method,
+        path: req.url,
+        headers: {
+          ...req.headers,
+          'x-forwarded-proto': 'https',
+          'x-forwarded-for': '127.0.0.1',
+        },
+      });
+      proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+        const statusLine = `HTTP/1.1 ${String(proxyRes.statusCode)} ${proxyRes.statusMessage ?? ''}`;
+        const headerLines = Object.entries(proxyRes.headers)
+          .flatMap(([name, value]) => (Array.isArray(value) ? value.map((v) => [name, v] as const) : [[name, value]] as const))
+          .map(([name, value]) => `${name}: ${String(value)}`);
+        clientSocket.write(`${statusLine}\r\n${headerLines.join('\r\n')}\r\n\r\n`);
+        if (proxyHead.length > 0) clientSocket.write(proxyHead);
+        if (head.length > 0) proxySocket.write(head);
+        proxySocket.pipe(clientSocket);
+        clientSocket.pipe(proxySocket);
+      });
+      proxyReq.on('response', (proxyRes) => {
+        // The target answered without upgrading (e.g. a 401) — relay that
+        // response instead of leaving the client hanging.
+        const statusLine = `HTTP/1.1 ${String(proxyRes.statusCode)} ${proxyRes.statusMessage ?? ''}`;
+        const headerLines = Object.entries(proxyRes.headers)
+          .flatMap(([name, value]) => (Array.isArray(value) ? value.map((v) => [name, v] as const) : [[name, value]] as const))
+          .map(([name, value]) => `${name}: ${String(value)}`);
+        clientSocket.write(`${statusLine}\r\n${headerLines.join('\r\n')}\r\n\r\n`);
+        proxyRes.pipe(clientSocket);
+      });
+      proxyReq.on('error', () => clientSocket.destroy());
+      clientSocket.on('error', () => proxyReq.destroy());
+      proxyReq.end();
+    });
+
     server.on('error', reject);
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();

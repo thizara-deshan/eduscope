@@ -3,8 +3,8 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTelemetryStore, useWsStore } from './ws-store.js';
 import {
-  useAiSet, useAlert, useAlertsList, useAudioControlRow, useDeviceHealth, useExpectedShutdown,
-  useFirmwareState, useLastSegment, useLogTail,
+  useAiSet, useAlert, useAlertsList, useAudioControlRow, useDeviceHealth, useDomainConnection,
+  useExpectedShutdown, useFirmwareState, useIsDomainStale, useLastSegment, useLogTail,
   usePublicationsList, useQuestionEvents, useQuizSession, useRecordingState, useUploadJobEvents,
   useWsShallow,
 } from './selectors.js';
@@ -249,5 +249,30 @@ describe('wave 6 store slices', () => {
     expect(result.current).toEqual([]);
     act(() => useWsStore.getState().ingest(envelope('log.entry', { id: 'L1', message: 'm' }, 0)));
     expect(result.current).toEqual([{ id: 'L1', message: 'm' }]);
+  });
+
+  it('E-09: useDomainConnection reads only its own domain', () => {
+    const { result } = renderHook(() => useDomainConnection('alerts'));
+    expect(result.current).toBeUndefined();
+    act(() =>
+      useWsStore.getState().setDomainConnection('alerts', {
+        phase: 'open', attempt: 0, since: '2026-07-30T09:00:00+00:00',
+      }),
+    );
+    expect(result.current?.phase).toBe('open');
+  });
+
+  it('E-09: useIsDomainStale is false for an untouched domain and true once that domain goes stale', () => {
+    const { result } = renderHook(() => useIsDomainStale('provisioningHealth'));
+    expect(result.current).toBe(false);
+    act(() =>
+      useWsStore.getState().setDomainConnection('provisioningHealth', {
+        phase: 'stale', attempt: 3, since: '2026-07-30T09:00:10+00:00',
+      }),
+    );
+    expect(result.current).toBe(true);
+    // A sibling domain's staleness never leaks into an unrelated one's read.
+    const other = renderHook(() => useIsDomainStale('recording'));
+    expect(other.result.current).toBe(false);
   });
 });

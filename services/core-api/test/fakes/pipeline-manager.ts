@@ -71,6 +71,8 @@ export class FakePipelineManager {
   #offline = false;
   #nextThumbnailOfferResponse: QueuedResponse | null = null;
   readonly #openNegotiations = new Set<string>();
+  #jpegPreviewEnabled = true;
+  #jpegSequence = 0;
 
   constructor(options: { bearerToken: string; replaySize?: number }) {
     this.bearerToken = options.bearerToken;
@@ -195,6 +197,11 @@ export class FakePipelineManager {
     this.#offline = offline;
   }
 
+  /** Test-track control for the production JPEG thumbnail endpoint. */
+  setJpegPreviewEnabled(enabled: boolean): void {
+    this.#jpegPreviewEnabled = enabled;
+  }
+
   #handle(req: IncomingMessage, res: ServerResponse): void {
     if (this.#offline) {
       req.socket.destroy();
@@ -214,6 +221,35 @@ export class FakePipelineManager {
     if (req.method === 'GET' && url.pathname === '/status') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ...this.#status, sequence: this.#sequence }));
+      return;
+    }
+
+    const jpegPreviewMatch = req.method === 'GET'
+      ? /^\/consumers\/thumbnails\/(presentation|lecturer-cam|students-cam)\.jpg$/.exec(url.pathname)
+      : null;
+    if (jpegPreviewMatch) {
+      if (!this.#jpegPreviewEnabled) {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ code: 'thumbnail_unavailable', title: 'thumbnail unavailable', status: 503 }));
+        return;
+      }
+      // Valid 1x1 baseline JPEG. A legal COM segment before EOI carries a
+      // monotonic byte so consecutive responses have distinct digests while
+      // remaining independently decodable images.
+      const base = Buffer.from(
+        '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
+        'base64',
+      );
+      this.#jpegSequence += 1;
+      // Change the JFIF X-density low byte as well as carrying a comment. Both
+      // are decoder-safe metadata and make the complete HTTP payload visibly
+      // different even through image proxies that discard trailing metadata.
+      base[13] = (this.#jpegSequence % 250) + 1;
+      const bytes = Buffer.concat([
+        base.subarray(0, -2), Buffer.from([0xff, 0xfe, 0x00, 0x03, this.#jpegSequence & 0xff]), base.subarray(-2),
+      ]);
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store' });
+      res.end(bytes);
       return;
     }
 

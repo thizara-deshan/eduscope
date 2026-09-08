@@ -1,5 +1,5 @@
-import { CONSUMER_RESTART_BACKOFF_MS } from '@eduscope/shared';
-import type { Clock } from '../../../lib/clock.js';
+import { CONSUMER_RESTART_BACKOFF_MS, TIMERS } from '@eduscope/shared';
+import type { Cancel, Clock } from '../../../lib/clock.js';
 import { DomainBus } from '../../../lib/domain-bus.js';
 import type { LifecycleComponent, LifecycleStopReason } from '../../../lifecycle.js';
 import { ReconnectBackoff } from '../../../lib/reconnect.js';
@@ -81,6 +81,7 @@ export class PipelineManagerBridge implements LifecycleComponent {
 
   #abortController: AbortController | null = null;
   #loopPromise: Promise<void> | null = null;
+  #statusPollCancel: Cancel | null = null;
   #lastSequence = 0;
 
   constructor(deps: PipelineManagerBridgeDeps) {
@@ -94,11 +95,18 @@ export class PipelineManagerBridge implements LifecycleComponent {
     const controller = new AbortController();
     this.#abortController = controller;
     this.#loopPromise = this.#runLoop(controller.signal);
+    this.#statusPollCancel = this.#clock.every(Math.max(1_000, Math.floor(TIMERS['T-HEALTH-STALE'] / 2)), () => {
+      void this.#resync(controller.signal).catch((error: unknown) => {
+        if (!controller.signal.aborted) this.#logger?.warn('pm-bridge status poll failed', { error: this.#describeError(error) });
+      });
+    });
   }
 
   /** Aborts the SSE connection and any pending reconnect wait; issues no PM consumer stop (B-04 lifecycle table). */
   async stop(_reason: LifecycleStopReason): Promise<void> {
     this.#abortController?.abort();
+    this.#statusPollCancel?.cancel();
+    this.#statusPollCancel = null;
     await this.#loopPromise?.catch(() => undefined);
     this.#loopPromise = null;
   }

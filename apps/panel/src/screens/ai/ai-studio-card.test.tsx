@@ -1,5 +1,5 @@
 import { act, createElement, type ReactNode } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
@@ -134,6 +134,31 @@ describe('AiStudioCard', () => {
     act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown(), 0)));
     act(() => useWsStore.setState({ stale: true }));
     expect(screen.getByTestId('ai-studio-card')).toHaveAttribute('data-stale', 'true');
+  });
+
+  it('real recovery: Retry in the degraded body issues generateNow without writing recording, then B\'s ready set replaces it', () => {
+    const { client } = renderCard();
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'degraded', remainingMs: null, nextAt: null }), 0)));
+    act(() => useWsStore.getState().ingest(envelope('ai.set', {
+      setId: 's1', sessionId: 'sess1', state: 'failed', trigger: 'manual', count: null, error: 'unreachable', attempt: 2,
+    }, 1)));
+    expect(screen.getByTestId('ai-studio-card')).toHaveAttribute('data-state', 'degraded');
+
+    const recordingBefore = useWsStore.getState().recording;
+    fireEvent.click(within(screen.getByTestId('ai-studio-degraded')).getByRole('button', { name: 'Retry' }));
+    expect(client.generateNow).toHaveBeenCalledTimes(1);
+    // The card resolves only from events — it never mutates recording state.
+    expect(useWsStore.getState().recording).toBe(recordingBefore);
+
+    // B's recovery events (armed countdown + ready set) flip the card out of
+    // degraded into the ready banner; the card simulates neither.
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'armed' }), 2)));
+    act(() => useWsStore.getState().ingest(envelope('ai.set', {
+      setId: 's2', sessionId: 'sess1', state: 'ready', trigger: 'manual', count: 4, error: null, attempt: 0,
+    }, 3)));
+    expect(screen.getByTestId('ai-studio-card')).toHaveAttribute('data-state', 'armed');
+    expect(screen.getByTestId('ai-studio-readybanner')).toHaveTextContent('4 questions');
+    expect(screen.queryByTestId('ai-studio-degraded')).not.toBeInTheDocument();
   });
 
   it('U-5: a generateNow refusal renders inline without a spinner', async () => {

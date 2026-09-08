@@ -68,8 +68,12 @@ export type PmProjectorRequest =
         prompt: string;
         options: Array<{ id: string; label: 'A' | 'B' | 'C' | 'D'; text: string }>;
         correctOptionId?: string;
-        joinUrl: string | null;
-        joinCode: string | null;
+        // E-49: A's `QuestionOverlay` requires non-null join values (it renders
+        // the join QR/code itself). B resolves the fresh session projection and
+        // guarantees non-null before calling A, or leaves the display in
+        // passthrough — so this internal DTO is honestly non-nullable.
+        joinUrl: string;
+        joinCode: string;
       };
     };
 

@@ -47,6 +47,12 @@ describe('useStartRecording', () => {
     expect(result.current.state.kind).toBe('starting');
   });
 
+  it('does not treat CommandAccepted as a recording transition', async () => {
+    const { result } = renderStart(vi.fn(() => Promise.resolve({ resolveBySec: 10 })));
+    await act(async () => { result.current.start(); await Promise.resolve(); });
+    expect(result.current.state.kind).toBe('starting');
+  });
+
   it('resolves starting when recording.state becomes recording', () => {
     const { result } = renderStart(vi.fn(() => Promise.resolve({ resolveBySec: 10 })));
     act(() => result.current.start());

@@ -40,11 +40,20 @@ export function usePowerOff(): {
     };
   }, [clearCeiling]);
 
+  // A real device power-off tears the socket away: the connection machine
+  // reports `reconnecting`/`stale` and only reaches a clean `closed` on a
+  // deliberate local close. Any of these post-202 drops is the shutdown
+  // succeeding — "transport closure is success" (B-50); there is no
+  // `power.state` event to wait for.
+  const transportDropped = connectionPhase === 'closed'
+    || connectionPhase === 'reconnecting'
+    || connectionPhase === 'stale';
+
   useEffect(() => {
-    if (!expectedShutdown || connectionPhase !== 'closed') return;
+    if (!expectedShutdown || !transportDropped) return;
     clearCeiling();
     setState({ kind: 'accepted' });
-  }, [clearCeiling, connectionPhase, expectedShutdown]);
+  }, [clearCeiling, transportDropped, expectedShutdown]);
 
   const execute = useCallback(() => {
     clearCeiling();
@@ -55,7 +64,8 @@ export function usePowerOff(): {
     void client.powerOffDevice().then((response) => {
       if (!mountedRef.current || requestRef.current !== request) return;
       useWsStore.getState().setExpectedShutdown(true);
-      if (useWsStore.getState().connection?.phase === 'closed') {
+      const phase = useWsStore.getState().connection?.phase;
+      if (phase === 'closed' || phase === 'reconnecting' || phase === 'stale') {
         setState({ kind: 'accepted' });
         return;
       }

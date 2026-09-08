@@ -160,6 +160,39 @@ describe('useAiStudio', () => {
     }
   });
 
+  it('real degrade→retry→ready: pending resolves only from the recovery ai.set, never the command echo', async () => {
+    const { hook, client } = build();
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    // The S-13 real path: B exhausts its retries, degrades the countdown, and
+    // reports the failed set. The hook reflects B's events; it never simulates
+    // the degrade itself.
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'degraded', remainingMs: null, nextAt: null }), 0)));
+    act(() => useWsStore.getState().ingest(envelope('ai.set', {
+      setId: 's1', sessionId: 'sess1', state: 'failed', trigger: 'manual', count: null, error: 'unreachable', attempt: 2,
+    }, 1)));
+    expect(hook.result.current.state).toBe('degraded');
+    expect(hook.result.current.setFailed).toBe(true);
+
+    // Retry issues exactly one command and stays pending across the echo frames.
+    act(() => hook.result.current.generateNow());
+    expect(client.generateNow).toHaveBeenCalledTimes(1);
+    act(() => useWsStore.getState().ingest(envelope('ai.set', {
+      setId: 's2', sessionId: 'sess1', state: 'generating', trigger: 'manual', count: null, error: null, attempt: 0,
+    }, 2)));
+    expect(hook.result.current.generatePending).toBe(true);
+
+    // Only the recovery ready frame clears pending and drives the banner/count.
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'armed' }), 3)));
+    act(() => useWsStore.getState().ingest(envelope('ai.set', {
+      setId: 's2', sessionId: 'sess1', state: 'ready', trigger: 'manual', count: 4, error: null, attempt: 0,
+    }, 4)));
+    expect(hook.result.current.generatePending).toBe(false);
+    expect(hook.result.current.state).toBe('armed');
+    expect(hook.result.current.setReady).toBe(true);
+    expect(hook.result.current.draftCount).toBe(4);
+  });
+
   it('countdown text derives from the absolute nextAt, not a per-second WS event', async () => {
     const { hook } = build();
     act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ nextAt: '2026-08-05T10:20:00Z' }), 0)));

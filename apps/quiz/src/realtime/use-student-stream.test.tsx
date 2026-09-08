@@ -15,7 +15,7 @@ const SNAPSHOT: readonly StudentServerEvent[] = [
 function makeClient(connect: QuizAppClient['connect']) {
   const emitter = createEmitter<StudentServerEvent>();
   const client: QuizAppClient = {
-    scenario: 'student-quiz-happy',
+    scenario: null,
     resolveJoinCode: vi.fn(),
     registerParticipant: vi.fn(),
     submitAnswer: vi.fn(),
@@ -92,6 +92,39 @@ describe('useStudentStream', () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
     expect(connect).toHaveBeenCalledTimes(1); // no retry scheduled
+
+    unmount();
+  });
+
+  it('does not connect while connectRequested is false, but still ingests live frames', async () => {
+    const connect = vi.fn(async () => SNAPSHOT);
+    const { client, emitter } = makeClient(connect);
+    useQuizStore.getState().disableConnect();
+
+    const { unmount } = renderHook(() => useStudentStream(client));
+    await Promise.resolve();
+    expect(connect).not.toHaveBeenCalled();
+
+    emitter.emit({ event: 'quiz.participant', payload: { connectionState: 'offline' } });
+    expect(useQuizStore.getState().connection).toBe('offline');
+    // A forced offline event must not trigger a reconnect attempt while suppressed.
+    expect(connect).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('connects once connectRequested flips true after mount', async () => {
+    const connect = vi.fn(async () => SNAPSHOT);
+    const { client } = makeClient(connect);
+    useQuizStore.getState().disableConnect();
+
+    const { unmount } = renderHook(() => useStudentStream(client));
+    await Promise.resolve();
+    expect(connect).not.toHaveBeenCalled();
+
+    useQuizStore.getState().enableConnect();
+    await vi.waitFor(() => expect(useQuizStore.getState().snapshotReceived).toBe(true));
+    expect(connect).toHaveBeenCalledTimes(1);
 
     unmount();
   });

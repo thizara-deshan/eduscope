@@ -218,7 +218,7 @@ describe('Recorder lock and takeover (R-21, LP-6, KEEP B-15)', () => {
     // KEEP B-15: the displaced owner's panel authority ends immediately.
     const displacedCheck = await ctx.app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
     expect(displacedCheck.statusCode).toBe(401);
-    expect((displacedCheck.json() as { code: string }).code).toBe('auth.session-revoked');
+    expect(displacedCheck.json()).toMatchObject({ code: 'auth.session-revoked', meta: { reason: 'takeover' } });
 
     // The admin's own session, and any future login by the original owner, are unaffected by the revocation scope.
     const adminCheck = await ctx.app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { authorization: `Bearer ${ctx.adminToken}` } });

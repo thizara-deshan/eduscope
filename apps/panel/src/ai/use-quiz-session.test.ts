@@ -54,4 +54,33 @@ describe('useQuizSession', () => {
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.state).toBe('absent');
   });
+
+  it('reflects the full mint lifecycle requesting → failed → open, then the sync states', async () => {
+    const { hook } = build({
+      getQuizSession: vi.fn(() => Promise.resolve({
+        state: 'absent', quizSessionId: null, lectureSessionId: null, joinUrl: null, joinCode: null, joinedCount: 0, syncState: null,
+      })) as unknown as EduscopeClient['getQuizSession'],
+    });
+    await waitFor(() => expect(hook.result.current.state).toBe('absent'));
+
+    const base = { quizSessionId: null, lectureSessionId: '01J00000000000000000000001', joinUrl: null, joinCode: null, joinedCount: 0, syncState: null };
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', { ...base, state: 'requesting' }, 0)));
+    expect(hook.result.current.state).toBe('requesting');
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', { ...base, state: 'failed' }, 1)));
+    expect(hook.result.current.state).toBe('failed');
+
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', session({ joinedCount: 0, syncState: 'synced' }), 2)));
+    expect(hook.result.current.state).toBe('open');
+    expect(hook.result.current.joinUrl).toBe('https://quiz.eduscope.local/j/482913');
+    expect(hook.result.current.syncState).toBe('synced');
+
+    // Losing the heartbeat marks the count stale — never silently live.
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', session({ syncState: 'stale' }), 3)));
+    expect(hook.result.current.syncState).toBe('stale');
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', session({ syncState: 'failed' }), 4)));
+    expect(hook.result.current.syncState).toBe('failed');
+
+    act(() => useWsStore.getState().ingest(envelope('quiz.session', { ...base, state: 'closed' }, 5)));
+    expect(hook.result.current.state).toBe('closed');
+  });
 });

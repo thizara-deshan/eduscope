@@ -1,4 +1,5 @@
 import type { EduscopeClient, PreviewChannel } from '../client.js';
+import type { SourceRoleId } from '@eduscope/shared';
 import { TransportError } from '../errors.js';
 import { createEmitter, type ConnectionStatus, type EventStream } from '../stream.js';
 import type { Clock } from './clock.js';
@@ -17,7 +18,6 @@ import { createPreviewChannel } from './events/preview.js';
 import { startAudioLevels } from './events/telemetry.js';
 import { MockWorld, PAYLOAD_BUILDERS, nextUlid } from './world.js';
 
-export { isMockPreviewFrame } from './events/preview.js';
 
 export interface MockClient extends EduscopeClient {
   readonly scenario: ScenarioName;
@@ -168,6 +168,7 @@ export function createMockClient(
 
   build(scenario, options.seed ?? {});
 
+  let activePreview: PreviewChannel | null = null;
   const client = {
     get scenario() {
       return current;
@@ -184,15 +185,34 @@ export function createMockClient(
 
     events$: envelopes.events$,
     connection$: connectionStream,
-    openPreview: (): PreviewChannel => createPreviewChannel(world),
+    openPreview: (roleId: SourceRoleId): PreviewChannel => {
+      activePreview?.close();
+      const channel: PreviewChannel = createPreviewChannel(world, roleId, () => {
+        if (activePreview === channel) activePreview = null;
+      });
+      activePreview = channel;
+      return channel;
+    },
     resync: async () => {
       // Re-stamp with the outer monotonic counter, same as the live forwarder
       // above — replaying `world.snapshot()`'s raw (world-internal, per-scenario)
       // seq values here would violate the "seq is monotonic per connection"
       // contract stream.ts documents.
       envelopes.replay(world);
+      // A resync IS a reconnect: the fresh full snapshot has now streamed in, so
+      // re-announce the connection as a clean `open` (no `resyncReason` — that
+      // would re-trigger the very resync that called this and loop). The real
+      // adapter's reconnect emits a fresh `open` here; without this, a consumer
+      // that marked itself stale on the `resetDomains` seq-gap would stay stale
+      // forever, because a bare event replay never touches the connection
+      // stream (E-03 recording-chrome recovery).
+      if (lastConnectionStatus) {
+        outwardConnection.emit({ phase: 'open', attempt: 0, since: lastConnectionStatus.since });
+      }
     },
     dispose() {
+      activePreview?.close();
+      activePreview = null;
       for (const stop of teardown) stop();
       teardown = [];
     },

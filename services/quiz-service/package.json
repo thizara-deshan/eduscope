@@ -18,7 +18,8 @@
     "restore": "tsx scripts/restore.ts",
     "smoke:staging": "tsx test/operations/staging-smoke.ts",
     "gate": "pnpm typecheck && pnpm test",
-    "gate:d": "node scripts/gate-quiz-service.mjs"
+    "gate:d": "node scripts/gate-quiz-service.mjs",
+    "e2e:peer": "tsx test/peers/e2e-process-entry.ts"
   },
   "dependencies": {
     "@eduscope/shared": "workspace:*",

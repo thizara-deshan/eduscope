@@ -1,5 +1,13 @@
 {
-  "question_text": "Which layer owns the process supervisor?",
-  "options": ["core-api", "pipeline-manager", "the frontend panel", "nginx"],
-  "join_qr_png_path": "/media/eduscope/qr/join-current.png"
+  "publicationId": "01K4A8E0600000000000000042",
+  "prompt": "Which layer owns the process supervisor?",
+  "options": [
+    { "id": "opt-a", "label": "A", "text": "core-api" },
+    { "id": "opt-b", "label": "B", "text": "pipeline-manager" },
+    { "id": "opt-c", "label": "C", "text": "the frontend panel" },
+    { "id": "opt-d", "label": "D", "text": "nginx" }
+  ],
+  "correctOptionId": "opt-b",
+  "joinUrl": "https://quiz.example.edu/j/E49TEST",
+  "joinCode": "E49TEST"
 }

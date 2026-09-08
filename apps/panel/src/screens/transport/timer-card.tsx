@@ -76,6 +76,9 @@ export function TimerCard({ defaultCollapsed = false }: { readonly defaultCollap
       {!collapsed && lastSegment?.endReason === 'crash' ? (
         <span className="us-timercard__seam">Recording continued after a brief interruption.</span>
       ) : null}
+      {!collapsed && lastSegment?.state === 'truncated' ? (
+        <span className="us-timercard__failure" role="alert">The last recording segment ended unexpectedly.</span>
+      ) : null}
       {!collapsed && stale ? <span className="us-timercard__stalenote">Connection is stale</span> : null}
       {!collapsed && transport.failure ? (
         <span className="us-timercard__failure" role="alert">{transport.failure}</span>
