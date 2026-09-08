@@ -11,8 +11,15 @@ export const RECONNECT_DELAYS_MS = [500, 1000, 2000, 4000, 8000, 10000] as const
  * ignores frames emitted while a snapshot call is in flight — `connect()`
  * itself replays them, and we commit its RETURNED array exactly once via
  * `replaceSnapshot`, never the duplicate frames threaded through `events$`.
+ *
+ * `connectRequested` gates only the `connect()` attempt (and the reconnect
+ * ladder it drives) — the `events$` subscription stays live either way, so a
+ * mock's forced transition still reaches the store while suppressed. S-37/S-38
+ * suppress this for their mounted lifetime (see `quiz-store.ts`'s doc comment).
  */
 export function useStudentStream(client: QuizAppClient | null): void {
+  const connectRequested = useQuizStore((s) => s.connectRequested);
+
   useEffect(() => {
     if (!client) return undefined;
 
@@ -29,6 +36,7 @@ export function useStudentStream(client: QuizAppClient | null): void {
       // `QuizAppClient`. Treat it as the cue to start the reconnect ladder
       // immediately, the same way a real dropped socket would.
       if (event.event === 'quiz.participant' && event.payload.connectionState === 'offline') {
+        if (!connectRequested) return;
         if (retryTimer !== null) {
           clearTimeout(retryTimer);
           retryTimer = null;
@@ -65,12 +73,12 @@ export function useStudentStream(client: QuizAppClient | null): void {
       }
     };
 
-    void connectAtomic();
+    if (connectRequested) void connectAtomic();
 
     return () => {
       cancelled = true;
       off();
       if (retryTimer !== null) clearTimeout(retryTimer);
     };
-  }, [client]);
+  }, [client, connectRequested]);
 }

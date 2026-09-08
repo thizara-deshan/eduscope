@@ -19,6 +19,15 @@ interface QuizStoreState {
   readonly snapshotReceived: boolean;
   /** One-shot: true when the snapshot that just landed followed a live disruption (S-41's "Reconnected" announcement). */
   readonly justReconnected: boolean;
+  /**
+   * The real student WS requires an authenticated participant cookie
+   * (services/quiz-service/src/student/stream.ts) that does not exist yet on
+   * S-37/S-38 — attempting `connect()` there can only ever fail and would
+   * permanently disable those screens' own submit buttons (which also read
+   * `connectionState`). Defaults to true (today's always-on behavior); S-37
+   * and S-38's own hooks suppress it for their mounted lifetime.
+   */
+  readonly connectRequested: boolean;
 
   /** Atomic reconnect/cold-connect replacement — never merges into stale state. */
   replaceSnapshot(events: readonly StudentServerEvent[]): void;
@@ -27,6 +36,8 @@ interface QuizStoreState {
   setReconnecting(): void;
   setConnectProblem(problem: QuizAppProblem): void;
   acknowledgeReconnect(): void;
+  disableConnect(): void;
+  enableConnect(): void;
   reset(): void;
 }
 
@@ -39,6 +50,7 @@ const EMPTY = {
   connectProblem: null,
   snapshotReceived: false,
   justReconnected: false,
+  connectRequested: true,
 };
 
 interface Snapshot {
@@ -134,6 +146,14 @@ export const useQuizStore = create<QuizStoreState>((set, get) => ({
 
   acknowledgeReconnect() {
     set({ justReconnected: false });
+  },
+
+  disableConnect() {
+    set({ connectRequested: false });
+  },
+
+  enableConnect() {
+    set({ connectRequested: true });
   },
 
   reset() {

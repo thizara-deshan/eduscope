@@ -100,4 +100,18 @@ describe('quiz-store', () => {
     expect(state.result).toBeNull();
     expect(state.snapshotReceived).toBe(false);
   });
+
+  it('connectRequested defaults to true, and reset restores it', () => {
+    expect(useQuizStore.getState().connectRequested).toBe(true);
+    useQuizStore.getState().disableConnect();
+    useQuizStore.getState().reset();
+    expect(useQuizStore.getState().connectRequested).toBe(true);
+  });
+
+  it('disableConnect/enableConnect toggle connectRequested', () => {
+    useQuizStore.getState().disableConnect();
+    expect(useQuizStore.getState().connectRequested).toBe(false);
+    useQuizStore.getState().enableConnect();
+    expect(useQuizStore.getState().connectRequested).toBe(true);
+  });
 });
