@@ -319,6 +319,7 @@ export function createMockQuizClient(
           return;
         case 'student.connection.restore':
           connection = 'online';
+          emit({ event: 'quiz.participant', payload: { connectionState: 'online' } });
           return;
         case 'student.question.none':
           questionState = 'none';
