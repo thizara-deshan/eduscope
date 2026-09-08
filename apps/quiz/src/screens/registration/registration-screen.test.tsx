@@ -70,6 +70,14 @@ function idField() {
 beforeEach(() => useQuizStore.getState().reset());
 
 describe('S-38 Self-registration', () => {
+  it('suppresses the student WS connect for its mounted lifetime, and restores it on unmount', async () => {
+    const { unmount } = renderRegistration({});
+    await screen.findByLabelText('Full name');
+    expect(useQuizStore.getState().connectRequested).toBe(false);
+    unmount();
+    expect(useQuizStore.getState().connectRequested).toBe(true);
+  });
+
   it('starts empty with exactly two textboxes and one primary action', async () => {
     renderRegistration({});
     await screen.findByLabelText('Full name');
