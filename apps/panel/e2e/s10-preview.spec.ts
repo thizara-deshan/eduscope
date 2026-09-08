@@ -58,7 +58,9 @@ test.describe('S-10 Source preview lightbox', () => {
     expect(frameBox?.width).toBe(skeletonBox?.width);
     expect(frameBox?.height).toBe(skeletonBox?.height);
     const firstFrame = await frame.getAttribute('src');
-    await page.waitForTimeout(500);
+    // The JPEG preview repaints once per second (POLL_MS); wait past one cadence
+    // to observe a genuinely new frame (a fresh object URL).
+    await page.waitForTimeout(1_200);
     expect(await frame.getAttribute('src')).not.toBe(firstFrame);
 
     await page.getByRole('button', { name: 'Close preview' }).click();
@@ -68,7 +70,7 @@ test.describe('S-10 Source preview lightbox', () => {
     );
   });
 
-  test('a source dropping mid-preview replaces the last frame with its reason', async ({ page }) => {
+  test('a source dropping mid-preview goes stale while retaining the last frame', async ({ page }) => {
     test.setTimeout(25_000);
     await signIn(page);
     await switchScenario(page, 'pipeline-crash-midway');
@@ -76,12 +78,17 @@ test.describe('S-10 Source preview lightbox', () => {
     const camera = page.locator('[data-testid="source-tile"][data-role="lecturer-cam"]');
     await expect(camera).toHaveAttribute('data-state', 'degraded', { timeout: 7_000 });
     await openPreview(page, 'lecturer-cam');
-    await expect(page.getByTestId('preview-frame')).toBeVisible({ timeout: 1_000 });
-    await expect(page.getByRole('status')).toHaveText(
-      'source lecturer-cam is no longer available',
-      { timeout: 8_000 },
-    );
-    await expect(page.getByTestId('preview-frame')).toHaveCount(0);
+    const frame = page.getByTestId('preview-frame');
+    await expect(frame).toBeVisible({ timeout: 1_000 });
+    // E-04 (2026-09-03 JPEG decision): a mid-preview drop keeps the last good
+    // frame and marks it STALE after the three-second deadline — an error is
+    // shown only when no usable frame ever arrived (the unbound/offline-tile
+    // cases below). The frame is retained (a real image), never replaced by a
+    // status message.
+    await expect(page.getByText('STALE')).toBeVisible({ timeout: 14_000 });
+    await expect(frame).toBeVisible();
+    expect(await frame.getAttribute('src')).toMatch(/^blob:/);
+    await expect(page.getByRole('status')).toHaveCount(0);
   });
 
   test('an offline source tile cannot start a new negotiation', async ({ page }) => {

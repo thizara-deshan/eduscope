@@ -199,6 +199,16 @@ export function createMockClient(
       // seq values here would violate the "seq is monotonic per connection"
       // contract stream.ts documents.
       envelopes.replay(world);
+      // A resync IS a reconnect: the fresh full snapshot has now streamed in, so
+      // re-announce the connection as a clean `open` (no `resyncReason` — that
+      // would re-trigger the very resync that called this and loop). The real
+      // adapter's reconnect emits a fresh `open` here; without this, a consumer
+      // that marked itself stale on the `resetDomains` seq-gap would stay stale
+      // forever, because a bare event replay never touches the connection
+      // stream (E-03 recording-chrome recovery).
+      if (lastConnectionStatus) {
+        outwardConnection.emit({ phase: 'open', attempt: 0, since: lastConnectionStatus.since });
+      }
     },
     dispose() {
       activePreview?.close();

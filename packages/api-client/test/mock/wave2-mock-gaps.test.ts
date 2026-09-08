@@ -68,7 +68,7 @@ describe('the preview drops when its role leaves online (S-10)', () => {
     const preview = client.openPreview('lecturer-cam');
     const seen: Array<{ kind: string; code?: string }> = [];
     preview.updates$.subscribe((update) => seen.push(update));
-    clock.advance(0);
+    clock.advance(250); // FIRST_FRAME_MS latency
     expect(seen.some((update) => update.kind === 'frame')).toBe(true);
 
     client.world.apply('HL-06@lecturer-cam');

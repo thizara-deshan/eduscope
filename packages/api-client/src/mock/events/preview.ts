@@ -6,6 +6,11 @@ import { generateFrame } from './telemetry.js';
 
 const POLL_MS = 1_000;
 const STALE_MS = 3_000;
+// The first frame models the initial authenticated request's round-trip: the
+// real poller shows the loading placeholder until the first JPEG returns, so
+// the mock leaves a short `negotiating` window too (otherwise the panel's
+// preview skeleton flashes for a single frame and no UI/e2e can observe it).
+const FIRST_FRAME_MS = 250;
 
 /** Mock implementation of the same receive-only JPEG channel as the real adapter. */
 export function createPreviewChannel(
@@ -77,7 +82,7 @@ export function createPreviewChannel(
   });
 
   armStale(world.clock.now());
-  scheduleFrame(0);
+  scheduleFrame(FIRST_FRAME_MS);
 
   return {
     updates$: updates,

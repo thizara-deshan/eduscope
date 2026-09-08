@@ -23,7 +23,7 @@ describe('mock JPEG preview channel', () => {
     const channel = createPreviewChannel(w, roleId);
     const seen: PreviewUpdate[] = [];
     channel.updates$.subscribe((update) => seen.push(update));
-    clock.advance(0);
+    clock.advance(250); // first-frame request latency (FIRST_FRAME_MS)
     expect(seen).toEqual([{ kind: 'error', code, message: expect.any(String) }]);
     channel.close();
   });
@@ -34,7 +34,7 @@ describe('mock JPEG preview channel', () => {
     const channel = createPreviewChannel(w, 'lecturer-cam');
     const seen: PreviewUpdate[] = [];
     channel.updates$.subscribe((update) => seen.push(update));
-    clock.advance(0);
+    clock.advance(250); // first-frame request latency (FIRST_FRAME_MS)
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ kind: 'frame', stale: false });
     expect((seen[0] as Extract<PreviewUpdate, { kind: 'frame' }>).blob.type).toBe('image/jpeg');
@@ -49,7 +49,7 @@ describe('mock JPEG preview channel', () => {
     const channel = createPreviewChannel(w, 'lecturer-cam');
     const seen: PreviewUpdate[] = [];
     channel.updates$.subscribe((update) => seen.push(update));
-    clock.advance(0);
+    clock.advance(250); // first-frame request latency (FIRST_FRAME_MS)
     w.apply('HL-06@lecturer-cam');
     clock.advance(3_000);
     expect(seen.at(-1)).toMatchObject({ kind: 'stale' });
@@ -66,7 +66,7 @@ describe('mock JPEG preview channel', () => {
     const channel = createPreviewChannel(w, 'lecturer-cam', onClose);
     const seen: PreviewUpdate[] = [];
     channel.updates$.subscribe((update) => seen.push(update));
-    clock.advance(0);
+    clock.advance(250); // first-frame request latency (FIRST_FRAME_MS)
     channel.close();
     channel.close();
     const count = seen.length;
