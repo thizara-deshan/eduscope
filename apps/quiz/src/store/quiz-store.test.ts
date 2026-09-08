@@ -74,6 +74,23 @@ describe('quiz-store', () => {
     expect(state.result?.isCorrect).toBe(true); // untouched
   });
 
+  it('ingest of a newly OPENED question clears the prior result — S-39 reveals in place, not a stale S-40', () => {
+    useQuizStore.getState().replaceSnapshot([session(), participant(), question(), result()]);
+    useQuizStore.getState().ingest({
+      event: 'quiz.question',
+      payload: { state: 'open', publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVCB0', prompt: 'next?', options: [{ id: '01JBQ8ZK3T7WBM5N2Q4XPRVCB1', label: 'A', text: 'x' }, { id: '01JBQ8ZK3T7WBM5N2Q4XPRVCB2', label: 'B', text: 'y' }], ownAnswerOptionId: null },
+    });
+    const state = useQuizStore.getState();
+    expect(state.result).toBeNull();
+    expect(state.question?.state).toBe('open');
+  });
+
+  it('ingest of a CLOSED question retains a still-relevant prior result', () => {
+    useQuizStore.getState().replaceSnapshot([session(), participant(), question(), result()]);
+    useQuizStore.getState().ingest({ event: 'quiz.question', payload: { ...question().payload, state: 'closed' } });
+    expect(useQuizStore.getState().result).not.toBeNull();
+  });
+
   it('setReconnecting retains the last authoritative state', () => {
     useQuizStore.getState().replaceSnapshot([session(), participant(), question(), result()]);
     useQuizStore.getState().setReconnecting();
