@@ -127,13 +127,16 @@ export function createRoutedClient(args: {
     );
     subscriptions.push(
       client.connection$.subscribe((status) => {
-        // The mock adapter's connection is trivially always open and carries
-        // no meaning to a user — only the real backend's status may drive the
-        // single GLOBAL projection (E-09), or a mixed selection's mock status
-        // would intermittently clobber a genuinely degraded real one. Every
-        // selected domain, mock included, still gets its OWN per-domain
-        // status on `connectionByDomain$`.
-        if (kind === 'real') connection.emit(status);
+        // The single GLOBAL projection (E-09) is driven by the real backend
+        // whenever any real domain is selected — otherwise a mixed selection's
+        // trivially-always-open mock status would intermittently clobber a
+        // genuinely degraded real one. But a PURE-mock deployment (the demo,
+        // and every mock Playwright run) has no real transport, so there the
+        // mock connection IS the authoritative global one: it carries the
+        // shutdown close (`powerOffDevice`) and ws-flap stale/reconnect the UI
+        // legitimately reacts to. Every selected domain, mock included, still
+        // gets its OWN per-domain status on `connectionByDomain$`.
+        if (kind === 'real' || (kind === 'mock' && realDomains.size === 0)) connection.emit(status);
         for (const domain of ownedDomains) {
           connectionByDomain.emit({ ...status, domain, kind });
         }
