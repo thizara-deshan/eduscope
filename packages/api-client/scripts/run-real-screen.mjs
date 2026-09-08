@@ -34,7 +34,18 @@ async function main() {
   }
 
   const panelOnly = app === 'panel' && !declaresRealD(source);
-  const stack = await startStack({ env: panelOnly ? { EDUSCOPE_PANEL_ONLY: '1' } : {} });
+  // The quiz app's real e2e run serves its frontend over HTTPS on this fixed
+  // port (apps/quiz/playwright.config.ts, apps/quiz/e2e/https-frontend.mjs)
+  // so its SameSite=Lax participant cookie is schemeful-same-site with the
+  // real quiz-service peer (always HTTPS-only) — quiz-service's CORS
+  // allowlist must match that exact origin.
+  const stack = await startStack({
+    env: panelOnly
+      ? { EDUSCOPE_PANEL_ONLY: '1' }
+      : app === 'quiz'
+        ? { E06_QUIZ_BROWSER_ORIGIN: `https://127.0.0.1:${process.env.EDUSCOPE_QUIZ_HTTPS_PORT ?? '3443'}` }
+        : {},
+  });
   let failure;
   try {
     await run(pnpm, [

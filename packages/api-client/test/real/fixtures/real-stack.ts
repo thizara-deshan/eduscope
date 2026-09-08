@@ -103,6 +103,7 @@ export async function startRealStack(): Promise<RealStackHandle> {
       E06_QUIZ_DEVICE_ID: deviceId,
       E06_QUIZ_DEVICE_BEARER: deviceBearer,
       E06_QUIZ_COOKIE_SECRET: `e06-cookie-${nonce}`,
+      ...(process.env.E06_QUIZ_BROWSER_ORIGIN ? { E06_QUIZ_BROWSER_ORIGIN: process.env.E06_QUIZ_BROWSER_ORIGIN } : {}),
     });
     core = await startCorePeer({
       E06_QUIZ_BASE_URL: quiz.ready.baseUrl,

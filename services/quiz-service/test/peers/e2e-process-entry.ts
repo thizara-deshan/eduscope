@@ -69,7 +69,13 @@ async function main(): Promise<void> {
   const pg: TestPostgres = await startTestPostgres();
   const port = await reservePort();
   const baseUrl = `http://127.0.0.1:${String(port)}`;
-  const browserOrigin = 'http://127.0.0.1:3000';
+  // The quiz app's own real e2e run overrides this to its HTTPS origin
+  // (apps/quiz/playwright.config.ts) so this service's CORS allowlist
+  // (app.ts's `origin: (origin) => origin === config.publicOrigin`) matches
+  // the browser's actual origin; other real-stack consumers (panel specs
+  // that opt into the full B+D stack) never call this service from a real
+  // browser, so the default is harmless for them.
+  const browserOrigin = process.env.E06_QUIZ_BROWSER_ORIGIN ?? 'http://127.0.0.1:3000';
   const config = loadConfig({
     NODE_ENV: 'test',
     QUIZ_SERVICE_HOST: '127.0.0.1',
@@ -149,7 +155,7 @@ async function main(): Promise<void> {
   const control = await listenControl(async (action, input) => {
     switch (action) {
       case 'quiz.capabilities':
-        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers', 'quiz.foreign-room'] };
+        return { actions: ['quiz.start', 'quiz.stop', 'quiz.restart', 'quiz.device-sync', 'quiz.capture-student-snapshot', 'quiz.publication-audit', 'quiz.submit-answers', 'quiz.foreign-room', 'quiz.close-session', 'quiz.participant-audit'] };
       case 'quiz.start':
         await start();
         return { running: true };
@@ -240,6 +246,32 @@ async function main(): Promise<void> {
           body: JSON.stringify({ lectureSessionId: ourLectureSessionId, deviceId: foreignDeviceId, hallDisplayName: 'Foreign Hall' }),
         });
         return { foreignName, foreignStudentIdNumber, crossDeviceStatus: attempt.status };
+      }
+      case 'quiz.close-session': {
+        // Closes an already-open session through D's own real device-facing
+        // `quizSyncCloseSession` endpoint (the same one B calls when a lecture
+        // ends) using the credential this process already holds — a screen
+        // witness needs a genuinely CLOSED join code without spinning up a
+        // real B lecture to get one.
+        const targetId = String((input as { quizSessionId?: unknown } | undefined)?.quizSessionId ?? QUIZ_SESSION_ID);
+        const response = await fetch(`${baseUrl}/device/v1/quiz-sessions/${targetId}/close`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${deviceBearer}` },
+        });
+        if (response.status !== 204) throw new Error(`quiz.close-session: close returned ${String(response.status)}`);
+        return { closed: true };
+      }
+      case 'quiz.participant-audit': {
+        // Counts durable participant rows D has actually stored (optionally
+        // scoped to a session), so a screen witness can prove a read-only
+        // resolve never created one (INV-QP-1). Reads D's own store.
+        const quizSessionId = (input as { quizSessionId?: unknown } | undefined)?.quizSessionId;
+        const running = app;
+        if (!running) throw new Error('quiz.participant-audit requires the quiz service running');
+        const rows = typeof quizSessionId === 'string'
+          ? await running.sql`SELECT count(*)::int AS count FROM participants WHERE quiz_session_id = ${quizSessionId}`
+          : await running.sql`SELECT count(*)::int AS count FROM participants`;
+        return { count: Number((rows[0] as { count: number } | undefined)?.count ?? 0) };
       }
       case 'quiz.publication-audit': {
         // Counts the durable publication rows D has actually stored (optionally
