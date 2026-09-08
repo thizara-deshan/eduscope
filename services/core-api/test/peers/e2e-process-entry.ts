@@ -557,6 +557,7 @@ async function main(): Promise<void> {
           'core.seed-upload', 'core.upload-enqueue-ready', 'core.upload-audit', 'core.upload-retry-now',
           'core.seed-retention', 'core.retention-sweep', 'core.storage-pressure-step', 'core.mount-scratch-device',
           'core.firmware', 'core.internal-log', 'core.alert',
+          'core.pm.jpeg-preview',
         ] };
       case 'core.seed-retention':
         return seedRetention();
@@ -692,6 +693,9 @@ async function main(): Promise<void> {
       case 'core.pm.offline':
         pm.setOffline(value?.offline === true);
         return { offline: value?.offline === true };
+      case 'core.pm.jpeg-preview':
+        pm.setJpegPreviewEnabled(value?.enabled !== false);
+        return { enabled: value?.enabled !== false };
       case 'core.pm.publish':
         if (String(value?.event) === 'evt.pm.consumer.running') {
           const data = value?.data as { consumerId?: unknown; pgid?: unknown } | undefined;

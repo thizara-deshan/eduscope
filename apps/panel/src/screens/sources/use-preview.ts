@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PreviewChannel } from '@eduscope/api-client';
 import type { SourceRoleId } from '@eduscope/shared';
 import { useClient } from '../../client/client-provider.js';
+import { useWsStore } from '../../store/ws-store.js';
 
 export type PreviewErrorCode = 'source-offline' | 'source-unbound' | 'internal';
 
@@ -21,6 +22,7 @@ interface ActivePreview {
 
 export function usePreview(roleId: SourceRoleId): { readonly state: PreviewState; close(): void } {
   const client = useClient();
+  const sourceState = useWsStore((store) => store.sources[roleId]?.state);
   const activeRef = useRef<ActivePreview | null>(null);
   const [state, setState] = useState<PreviewState>({ kind: 'negotiating' });
 
@@ -68,6 +70,13 @@ export function usePreview(roleId: SourceRoleId): { readonly state: PreviewState
       if (activeRef.current === active) finish(false);
     };
   }, [client, finish, roleId]);
+
+  useEffect(() => {
+    if (sourceState === 'online' || sourceState === 'degraded' || sourceState === undefined) return;
+    setState((current) => current.kind === 'live'
+      ? { kind: 'stale', frame: current.frame }
+      : current);
+  }, [sourceState]);
 
   const close = useCallback(() => finish(true), [finish]);
   return { state, close };

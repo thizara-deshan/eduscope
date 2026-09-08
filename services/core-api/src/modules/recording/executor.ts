@@ -1,4 +1,5 @@
 import { LAYOUT_PRESETS, TIMERS, type OutputSpec } from '@eduscope/shared';
+import { mkdir } from 'node:fs/promises';
 import { eq, inArray } from 'drizzle-orm';
 import type { DrizzleDb } from '../../db/client.js';
 import { channelConfigs, lectureSessions, recordings, recordingSegments } from '../../db/schema.js';
@@ -155,6 +156,7 @@ export class RecordingExecutor implements LifecycleComponent {
   }
 
   async #launchPmConsumer(sessionId: string, channel: ChannelValidResult): Promise<void> {
+    await mkdir(`${this.#deps.recordingsRoot}/sessions/${sessionId}`, { recursive: true });
     const preset = LAYOUT_PRESETS.find((entry) => entry.id === channel.layoutPreset.id);
     const body: StartRecordConsumerBody = {
       preset: channel.layoutPreset.id,

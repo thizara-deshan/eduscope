@@ -82,6 +82,26 @@ describe('usePreview', () => {
     unmount();
   });
 
+  it('marks a retained frame stale when the source status goes offline', () => {
+    const preview = fakeChannel();
+    const { result, unmount } = renderPreview(preview.channel);
+    act(() => preview.emit({
+      kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
+    }));
+    act(() => useWsStore.setState({
+      sources: { presentation: {
+        roleId: 'presentation', state: 'offline', detail: 'unplugged',
+        since: '2026-09-08T04:00:00.000Z', inputId: null,
+      } },
+    }));
+    expect(result.current.state).toEqual({ kind: 'stale', frame: 'blob:preview-5' });
+    act(() => preview.emit({
+      kind: 'frame', blob: new Blob(['recovered'], { type: 'image/jpeg' }), receivedAt: 4, stale: false,
+    }));
+    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-9' });
+    unmount();
+  });
+
   it('shows an error before any usable frame but retains a live frame on a transient error', () => {
     const preview = fakeChannel();
     const { result, unmount } = renderPreview(preview.channel);
