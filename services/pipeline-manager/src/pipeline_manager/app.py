@@ -349,6 +349,7 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
         "projector:main",
         platform=app.state.platform,
         precondition_holds=lambda: True,
+        runtime_dir=settings.runtime_dir,
         supervisor=app.state.supervisor,
         ledger=app.state.ledger,
         confirmer=app.state.confirmer,

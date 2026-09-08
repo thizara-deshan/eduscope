@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from pipeline_manager.api.routes import ProjectorModeBody
 from pipeline_manager.pipelines.builder import DisplayPlacement
 from pipeline_manager.pipelines.platforms.base import DisplayOut
 from pipeline_manager.pipelines.platforms.rk3588 import RK3588Profile
@@ -29,6 +30,40 @@ def _load_question() -> QuestionOverlay:
     return QuestionOverlay.model_validate(json.loads(FIXTURE.read_text(encoding="utf-8")))
 
 
+# ── E-49 A/B payload reconciliation ─────────────────────────────────────────
+# The exact internal question payload B sends (core-api `PmProjectorRequest`)
+# must parse against A's `ProjectorModeBody`/`QuestionOverlay` with no snake_case
+# translation and no pre-rendered path — one canonical DTO on both sides.
+_B_QUESTION_PAYLOAD = {
+    "publicationId": "01K4A8E0600000000000000042",
+    "prompt": "Which layer owns the process supervisor?",
+    "options": [
+        {"id": "opt-a", "label": "A", "text": "core-api"},
+        {"id": "opt-b", "label": "B", "text": "pipeline-manager"},
+        {"id": "opt-c", "label": "C", "text": "the frontend panel"},
+        {"id": "opt-d", "label": "D", "text": "nginx"},
+    ],
+    "correctOptionId": "opt-b",
+    "joinUrl": "https://quiz.example.edu/j/E49TEST",
+    "joinCode": "E49TEST",
+}
+
+
+def test_b_question_payload_parses_against_a_projector_mode_body() -> None:
+    body = ProjectorModeBody.model_validate({"mode": "question", "questionPayload": _B_QUESTION_PAYLOAD})
+    assert body.questionPayload is not None
+    assert body.questionPayload.publicationId == "01K4A8E0600000000000000042"
+    assert [o.label for o in body.questionPayload.options] == ["A", "B", "C", "D"]
+    assert body.questionPayload.joinUrl == "https://quiz.example.edu/j/E49TEST"
+
+
+@pytest.mark.parametrize("forbidden", ["leaderboard", "participantCount", "score", "studentId", "responses"])
+def test_projector_mode_body_rejects_privacy_fields(forbidden: str) -> None:
+    payload = {**_B_QUESTION_PAYLOAD, forbidden: "nope"}
+    with pytest.raises(ValidationError):
+        ProjectorModeBody.model_validate({"mode": "question", "questionPayload": payload})
+
+
 def test_passthrough_and_question_modes_share_the_same_build() -> None:
     """No mode parameter exists on build_projector — switching modes never
     regenerates the pipeline, so the same argv/child serves both (A-22)."""
@@ -37,30 +72,31 @@ def test_passthrough_and_question_modes_share_the_same_build() -> None:
     assert first.argv == second.argv
 
 
-def test_question_data_is_a_control_message_not_argv() -> None:
+def test_question_text_never_reaches_argv() -> None:
     spec = build_projector(RK3588Profile())
     question = _load_question()
-    message = encode_control_message(ProjectorMode.QUESTION, question)
-    assert question.question_text not in spec.argv
-    assert b"question_text" not in b"".join(token.encode() for token in spec.argv)
-    assert b"question_text" in message
+    joined = b"".join(token.encode() for token in spec.argv)
+    # The prompt (and join code) are distinctive question data; the projector
+    # argv is fixed at build time and never carries any of it.
+    assert question.prompt.encode() not in joined
+    assert question.joinCode.encode() not in joined
+    assert question.joinUrl.encode() not in joined
 
 
-def test_control_message_is_length_delimited_json() -> None:
-    question = _load_question()
-    message = encode_control_message(ProjectorMode.QUESTION, question)
+def test_question_control_message_carries_only_a_card_path() -> None:
+    message = encode_control_message(ProjectorMode.QUESTION, card_png_path="/run/eduscope/projector/pub-1.png")
     header, _, body = message.partition(b"\n")
     assert int(header) == len(body)
     decoded = json.loads(body)
     assert decoded["mode"] == "question"
-    assert decoded["payload"]["question_text"] == question.question_text
+    assert decoded["card"]["card_png_path"] == "/run/eduscope/projector/pub-1.png"
 
 
-def test_passthrough_message_has_no_payload() -> None:
+def test_passthrough_message_has_no_card() -> None:
     message = encode_control_message(ProjectorMode.PASSTHROUGH)
     _, _, body = message.partition(b"\n")
     decoded = json.loads(body)
-    assert decoded["payload"] is None
+    assert decoded["card"] is None
 
 
 @pytest.mark.parametrize("forbidden_field", ["leaderboard", "answer", "participantCount", "score"])
@@ -78,10 +114,10 @@ def test_hdmi_1_placement_is_selected() -> None:
 
 
 class TestWorkerArgv:
-    """A-REV-009: `build_projector` now spawns a real long-running Python
-    worker (mode-switching a running `input-selector` needs GObject property
-    access `gst-launch-1.0` has no way to reach) instead of a plain
-    `gst-launch-1.0` command."""
+    """A-REV-009: `build_projector` spawns a real long-running Python worker
+    (mode-switching a running `input-selector` needs GObject property access
+    `gst-launch-1.0` has no way to reach) instead of a plain `gst-launch-1.0`
+    command."""
 
     def test_argv_is_a_python_worker_invocation(self) -> None:
         spec = build_projector(RK3588Profile())
@@ -108,11 +144,12 @@ class TestWorkerGraph:
         assert "socket-path=/tmp/usb.sock" in graph
         assert "sel.sink_0" in graph
 
-    def test_question_pad_has_textoverlay_and_qr_image_overlay(self) -> None:
+    def test_question_pad_overlays_a_single_rendered_card_image(self) -> None:
         graph = worker_graph("video/x-raw,format=NV12", "xvimagesink sync=false")
-        assert "textoverlay" in graph
-        assert "gdkpixbufoverlay" in graph
+        assert "gdkpixbufoverlay name=card" in graph
         assert "sel.sink_1" in graph
+        # The full card is a rendered PNG; no per-line text overlay remains.
+        assert "textoverlay" not in graph
 
     def test_single_named_selector_drives_the_switch(self) -> None:
         graph = worker_graph("video/x-raw,format=NV12", "xvimagesink sync=false")
@@ -134,13 +171,13 @@ class TestControlFrameRoundTrip:
         decoded = decode_control_message(header.decode("ascii"), body)
         assert decoded == ProjectorControlMessage(mode=ProjectorMode.PASSTHROUGH)
 
-    def test_question_round_trips_with_payload(self) -> None:
-        question = _load_question()
-        message = encode_control_message(ProjectorMode.QUESTION, question)
+    def test_question_round_trips_with_card_path(self) -> None:
+        message = encode_control_message(ProjectorMode.QUESTION, card_png_path="/run/eduscope/projector/p.png")
         header, _, body = message.partition(b"\n")
         decoded = decode_control_message(header.decode("ascii"), body)
         assert decoded.mode is ProjectorMode.QUESTION
-        assert decoded.payload == question
+        assert decoded.card is not None
+        assert decoded.card.card_png_path == "/run/eduscope/projector/p.png"
 
     def test_length_mismatch_rejected(self) -> None:
         with pytest.raises(InvalidControlFrame):

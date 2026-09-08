@@ -12,17 +12,33 @@ from pipeline_manager.supervisor.ledger import EncodeLedger
 from .conftest import FakeConfirmer, FakeSupervisor
 
 
-def _consumer(precondition_holds=lambda: True):
+def _consumer(precondition_holds=lambda: True, runtime_dir=None):
     supervisor = FakeSupervisor()
     consumer = ProjectorConsumer(
         "projector:1",
         platform=RK3588Profile(),
         precondition_holds=precondition_holds,
+        runtime_dir=runtime_dir,
         supervisor=supervisor,
         ledger=EncodeLedger(),
         confirmer=FakeConfirmer(),
     )
     return consumer, supervisor
+
+
+def _question(**overrides):
+    data = {
+        "publicationId": "pub-1",
+        "prompt": "Q?",
+        "options": [
+            {"id": "o1", "label": "A", "text": "a"},
+            {"id": "o2", "label": "B", "text": "b"},
+        ],
+        "joinUrl": "https://quiz.example.edu/j/CONS01",
+        "joinCode": "CONS01",
+    }
+    data.update(overrides)
+    return QuestionOverlay.model_validate(data)
 
 
 def test_restart_class_is_display() -> None:
@@ -31,18 +47,41 @@ def test_restart_class_is_display() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mode_switch_does_not_spawn_a_second_child() -> None:
-    consumer, supervisor = _consumer()
+async def test_mode_switch_does_not_spawn_a_second_child(tmp_path) -> None:
+    consumer, supervisor = _consumer(runtime_dir=tmp_path)
     await consumer.start()
     assert len(supervisor.calls) == 1
 
-    consumer.set_mode(
-        ProjectorMode.QUESTION,
-        QuestionOverlay(question_text="Q?", options=["a", "b"], join_qr_png_path="/qr.png"),
-    )
+    consumer.set_mode(ProjectorMode.QUESTION, _question())
     consumer.set_mode(ProjectorMode.PASSTHROUGH)
 
     assert len(supervisor.calls) == 1  # still just the one worker
+
+
+@pytest.mark.asyncio
+async def test_question_mode_renders_a_card_and_sends_its_path(tmp_path) -> None:
+    consumer, _ = _consumer(runtime_dir=tmp_path)
+    await consumer.start()
+
+    consumer.set_mode(ProjectorMode.QUESTION, _question(publicationId="pub-render"))
+
+    card = tmp_path / "projector" / "pub-render.png"
+    assert card.exists()
+    frame = consumer.process.popen.stdin.written[-1]
+    assert str(card).encode() in frame
+    # the rendered card holds the question, not the control frame
+    assert b"Q?" not in frame
+
+
+@pytest.mark.asyncio
+async def test_superseded_cards_are_cleaned_up(tmp_path) -> None:
+    consumer, _ = _consumer(runtime_dir=tmp_path)
+    await consumer.start()
+    for i in range(5):
+        consumer.set_mode(ProjectorMode.QUESTION, _question(publicationId=f"pub-{i}"))
+    remaining = sorted(p.name for p in (tmp_path / "projector").glob("*.png"))
+    # bounded history: only the most recent cards survive
+    assert remaining == ["pub-3.png", "pub-4.png"]
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,30 +18,62 @@ class ProjectorMode(str, Enum):
     QUESTION = "question"
 
 
-class QuestionOverlay(BaseModel):
-    """extra='forbid' makes leaderboard/answer/participant fields structurally
-    impossible (A-22, Q-31) — this is a slide overlay, not a quiz result view."""
+class ProjectorOption(BaseModel):
+    """One answer option — the exact internal shape B sends (core-api
+    `PmProjectorRequest.questionPayload.options[]`), reconciled here so A
+    accepts B's payload without a translation DTO (E-49)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    question_text: str = Field(min_length=1, max_length=500)
-    options: list[str] = Field(min_length=1, max_length=10)
-    join_qr_png_path: str = Field(min_length=1)
+    id: str
+    label: Literal["A", "B", "C", "D"]
+    text: str = Field(min_length=1, max_length=300)
+
+
+class QuestionOverlay(BaseModel):
+    """The one canonical internal projector payload — identical to B's
+    `PmProjectorRequest` question payload. `extra='forbid'` makes
+    leaderboard/answer/participant/score fields structurally impossible
+    (A-22, Q-31): this is a slide overlay, not a quiz result view."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    publicationId: str
+    prompt: str = Field(min_length=1, max_length=500)
+    options: list[ProjectorOption] = Field(min_length=2, max_length=4)
+    correctOptionId: str | None = None
+    joinUrl: str
+    joinCode: str
+
+
+class ProjectorCard(BaseModel):
+    """The rendered-card handle carried to the worker: A renders the whole
+    1920×1080 question card server-side (`overlays.render_question_card`) and
+    the worker only swaps one `gdkpixbufoverlay.location` to this PNG path —
+    never any question text, so nothing sensitive touches argv or a GObject
+    property string."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    card_png_path: str = Field(min_length=1)
 
 
 class ProjectorControlMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: ProjectorMode
-    payload: QuestionOverlay | None = None
+    card: ProjectorCard | None = None
 
 
-def encode_control_message(mode: ProjectorMode, payload: QuestionOverlay | None = None) -> bytes:
+def encode_control_message(mode: ProjectorMode, card_png_path: str | None = None) -> bytes:
     """Length-delimited JSON control frame written to the worker's stdin.
 
-    Question data travels as a validated message, never interpolated into argv.
+    For question mode the frame carries only the rendered card's PNG path; the
+    question text/options/QR are already baked into that image, never
+    interpolated into argv (A-22).
     """
-    message = ProjectorControlMessage(mode=mode, payload=payload)
+    card = ProjectorCard(card_png_path=card_png_path) if card_png_path is not None else None
+    message = ProjectorControlMessage(mode=mode, card=card)
     body = message.model_dump_json().encode("utf-8")
     return f"{len(body)}\n".encode("ascii") + body
 
@@ -74,17 +107,40 @@ def decode_control_message(header: str, body: bytes) -> ProjectorControlMessage:
 _SLIDE_CAPS = "video/x-raw,format=I420,width=1920,height=1080,framerate=5/1"
 
 
+# Test-only worker seam (E-49 A+B+D integration): when this env var is set the
+# projector spawns a stdin-draining child instead of the real GStreamer worker,
+# so the A FastAPI process can accept mode switches and render real cards
+# without a GStreamer/HDMI display. Never set in production (create_production_app
+# leaves it unset), so `build_projector` always returns the real argv on-board.
+_FAKE_WORKER_ENV = "EDUSCOPE_PM_PROJECTOR_FAKE_WORKER"
+# A long-lived child that reports PLAYING (so the health confirmer clears it),
+# drains its stdin (so control frames never fill the pipe), and exits only on
+# EOF or signal — exactly the observable liveness the supervisor's restart path
+# needs, minus GStreamer.
+_FAKE_WORKER_SCRIPT = (
+    "import sys\n"
+    "sys.stdout.write('PLAYING\\n')\n"
+    "sys.stdout.flush()\n"
+    "while sys.stdin.buffer.read(1) != b'':\n"
+    "    pass\n"
+)
+
+
 def worker_argv(
     video_caps: str,
     display_sink_tokens: str,
     python_executable: str = sys.executable,
 ) -> tuple[str, ...]:
     """One long-running worker for the projector's whole session (A-REV-009):
-    a real `input-selector` picks passthrough vs. the question slide, and
-    the question text/QR image are GObject properties (`textoverlay.text`,
-    `gdkpixbufoverlay.location`) the worker updates from stdin control
-    frames — never a pipeline rebuild, so mode switches share one PGID.
+    a real `input-selector` picks passthrough vs. the question slide, and the
+    rendered question card is a `gdkpixbufoverlay.location` the worker updates
+    from stdin control frames — never a pipeline rebuild, so mode switches
+    share one PGID.
     """
+    import os
+
+    if os.environ.get(_FAKE_WORKER_ENV):
+        return (python_executable, "-c", _FAKE_WORKER_SCRIPT)
     return (
         python_executable,
         "-m",
@@ -100,9 +156,10 @@ def worker_argv(
 def worker_graph(video_caps: str, display_sink_tokens: str) -> str:
     """The gst-launch-syntax pipeline body the worker parses via
     `Gst.parse_launch`. `sel.sink_0` is the live passthrough (PRESENTATION
-    shm); `sel.sink_1` is a static slide (`textoverlay` + `gdkpixbufoverlay`)
-    updated in place for each question — `input-selector.active-pad` is the
-    only thing a mode switch touches.
+    shm); `sel.sink_1` is a static slide showing one full-screen rendered
+    question card (`gdkpixbufoverlay name=card`) swapped in place for each
+    question — `input-selector.active-pad` and `card.location` are the only
+    two things a mode switch touches, never a pipeline rebuild.
     """
     from .builder import ROLE_SOCKETS
 
@@ -112,8 +169,7 @@ def worker_graph(video_caps: str, display_sink_tokens: str) -> str:
         f"queue max-size-buffers=6 leaky=downstream ! videorate drop-only=true ! video/x-raw,framerate=30/1 ! "
         f"sel.sink_0 "
         f"videotestsrc is-live=true pattern=black ! {_SLIDE_CAPS} ! "
-        f'textoverlay name=overlay text="" valignment=bottom halignment=center font-desc="Sans 36" ! '
-        f"gdkpixbufoverlay name=qr ! "
+        f"gdkpixbufoverlay name=card overlay-width=1920 overlay-height=1080 ! "
         f"sel.sink_1 "
         f"input-selector name=sel ! videoconvert ! {display_sink_tokens}"
     )
@@ -155,17 +211,15 @@ def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragm
 
     pipeline = Gst.parse_launch(worker_graph(video_caps, display_sink_tokens))
     selector = pipeline.get_by_name("sel")
-    overlay = pipeline.get_by_name("overlay")
-    qr = pipeline.get_by_name("qr")
+    card = pipeline.get_by_name("card")
     pads = {ProjectorMode.PASSTHROUGH: selector.get_static_pad("sink_0"), ProjectorMode.QUESTION: selector.get_static_pad("sink_1")}
 
     bus = pipeline.get_bus()
     loop = GLib.MainLoop()
 
     def _apply(message: ProjectorControlMessage) -> bool:
-        if message.mode is ProjectorMode.QUESTION and message.payload is not None:
-            overlay.set_property("text", message.payload.question_text)
-            qr.set_property("location", message.payload.join_qr_png_path)
+        if message.mode is ProjectorMode.QUESTION and message.card is not None:
+            card.set_property("location", message.card.card_png_path)
         selector.set_property("active-pad", pads[message.mode])
         return False
 

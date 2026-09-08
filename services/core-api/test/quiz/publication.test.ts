@@ -229,7 +229,7 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
 
     await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/projector'));
     const projectorCall = ctx.pm.calls.find((call) => call.path === '/consumers/projector')!;
-    const projectorBody = projectorCall.body as { mode: string; questionPayload: { correctOptionId?: string; joinUrl: string | null; joinCode: string | null } };
+    const projectorBody = projectorCall.body as { mode: string; questionPayload: { correctOptionId?: string; joinUrl: string; joinCode: string } };
     expect(projectorBody.mode).toBe('question');
     expect(projectorBody.questionPayload.correctOptionId).toBeUndefined();
     expect(projectorBody.questionPayload.joinUrl).toMatch(/^https:\/\/quiz\.example\.edu\/j\//);
@@ -296,6 +296,26 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     expect(ctx.pm.calls.some((call) => call.path === '/consumers/projector')).toBe(false);
     const question = ctx.app.db.select().from(questions).where(eq(questions.id, questionId)).get()!;
     expect(question.state).toBe('draft');
+  });
+
+  it('E-49: a session with no resolved join URL/code leaves the projector in passthrough and raises quiz.projector-failed', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    const quizSessionId = await openQuizSession(ctx, sessionId);
+    // The join projection has not resolved (or was cleared): B must not
+    // synthesize a URL or call A with nullable fields.
+    ctx.app.db.update(quizSessionProjections).set({ joinUrl: null, joinCode: null }).where(eq(quizSessionProjections.id, quizSessionId)).run();
+    const questionId = await createDraftQuestion(ctx);
+
+    await sendToProjector(ctx, questionId);
+    // Publish still reaches quiz-service; only the projector question switch is withheld.
+    await waitFor(() => ctx.quiz.calls.some((call) => call.path === '/device/v1/publications'));
+    await waitFor(async () => {
+      const list = await ctx.app.inject({ method: 'GET', url: '/api/v1/alerts', headers: { authorization: `Bearer ${ctx.ownerToken}` } });
+      return (list.json() as { items: Array<{ code: string }> }).items.some((alert) => alert.code === 'quiz.projector-failed');
+    });
+    const projectorQuestionCalls = ctx.pm.calls.filter((call) => call.path === '/consumers/projector' && (call.body as { mode: string }).mode === 'question');
+    expect(projectorQuestionCalls).toHaveLength(0);
   });
 
   it('Q-35: closePublication carries the authoritative closedAt and is idempotent on a second call', async () => {
