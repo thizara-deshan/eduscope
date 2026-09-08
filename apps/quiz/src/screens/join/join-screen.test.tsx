@@ -68,6 +68,14 @@ const SESSION_ID = '01JBQ8ZK3T7WBM5N2Q4XPRVC9D';
 beforeEach(() => useQuizStore.getState().reset());
 
 describe('S-37 Join', () => {
+  it('suppresses the student WS connect for its mounted lifetime, and restores it on unmount', async () => {
+    const { unmount } = renderJoin({ initialCode: '', autoSubmit: false });
+    await screen.findByRole('textbox', { name: /quiz code/i });
+    expect(useQuizStore.getState().connectRequested).toBe(false);
+    unmount();
+    expect(useQuizStore.getState().connectRequested).toBe(true);
+  });
+
   it('shows a shaped skeleton while resolving', async () => {
     renderJoin({ initialCode: 'ABC123', autoSubmit: true });
     expect(await screen.findByTestId('join-skeleton')).toHaveTextContent('Finding your quiz');
@@ -128,10 +136,7 @@ describe('S-37 Join', () => {
 
   it('offline retains the code, disables Join, and shows reconnecting; restore permits retry', async () => {
     renderJoin({ initialCode: '', autoSubmit: false, offlineControl: true });
-    // Let the app-lifetime connect() (mounted regardless of route) settle
-    // before forcing offline — otherwise it's still "snapshotting" and the
-    // offline event would be silently swallowed.
-    await waitFor(() => expect(useQuizStore.getState().snapshotReceived).toBe(true));
+    await screen.findByRole('textbox', { name: /quiz code/i });
     fireEvent.change(screen.getByRole('textbox', { name: /quiz code/i }), { target: { value: 'ABC123' } });
 
     fireEvent.click(screen.getByTestId('go-offline'));

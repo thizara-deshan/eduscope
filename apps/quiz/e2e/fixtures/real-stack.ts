@@ -8,13 +8,29 @@ interface RealStackDescriptor {
   readonly fixtureIds: Record<string, string>;
 }
 
+export interface RealStack extends RealStackDescriptor {
+  control<T = unknown>(action: string, input?: unknown): Promise<T>;
+}
+
 function descriptor(): RealStackDescriptor {
   const encoded = process.env.EDUSCOPE_REAL_STACK_DESCRIPTOR;
   if (!encoded) throw new Error('real Playwright fixture requires EDUSCOPE_REAL_STACK_DESCRIPTOR');
   return JSON.parse(encoded) as RealStackDescriptor;
 }
 
-export const test = base.extend<{ realStack: RealStackDescriptor }>({
+async function control<T>(stack: RealStackDescriptor, action: string, input?: unknown): Promise<T> {
+  const group = action.startsWith('quiz.') ? 'quiz' : 'core';
+  const response = await fetch(stack.controls[group], {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action, input }),
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`real-stack control ${action} returned ${String(response.status)}: ${raw}`);
+  return raw.length === 0 ? (undefined as T) : (JSON.parse(raw) as T);
+}
+
+export const test = base.extend<{ realStack: RealStack }>({
   realStack: async ({ page }, use) => {
     const stack = descriptor();
     await page.route('**/config.json', async (route) => {
@@ -29,7 +45,7 @@ export const test = base.extend<{ realStack: RealStackDescriptor }>({
         }),
       });
     });
-    await use(stack);
+    await use({ ...stack, control: (action, input) => control(stack, action, input) });
   },
 });
 
