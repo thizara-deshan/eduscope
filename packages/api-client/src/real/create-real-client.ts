@@ -110,6 +110,7 @@ export function createRealClient(
     options.fetch ?? (globalThis.fetch as unknown as FetchLike | undefined);
   if (!fetchImpl) throw new Error('createRealClient: no fetch implementation available');
 
+  // eslint-disable-next-line prefer-const -- late-init: assigned after the coordinator that closes over it.
   let transport: HttpTransport;
   const coordinator = createAuthCoordinator({
     store,
@@ -330,8 +331,7 @@ export function createRealClient(
     connection$: socket.connection$,
     openPreview: (roleId) => {
       activePreview?.close();
-      let channel!: PreviewChannel;
-      channel = createPreviewPoller({
+      const channel: PreviewChannel = createPreviewPoller({
         roleId,
         clock: previewClock,
         request: ({ roleId: requestedRole, cacheBust, signal }) => call('getSourcePreview', {

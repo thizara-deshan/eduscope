@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "/api/v1",
+  "quizBaseUrl": "@QUIZ_PUBLIC_ORIGIN@",
+  "environment": "production",
+  "adapters": { "default": "real", "overrides": {} }
+}

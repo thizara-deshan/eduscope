@@ -129,7 +129,7 @@ try {
   console.log('PASS E-48 real JPEG preview acceptance');
 } finally {
   if (recordingStarted) {
-    try { await page.getByRole('button', { name: 'Stop' }).click({ timeout: 2_000 }); } catch {}
+    try { await page.getByRole('button', { name: 'Stop' }).click({ timeout: 2_000 }); } catch { /* the Stop control may already be gone */ }
   }
   await browser.close();
 }

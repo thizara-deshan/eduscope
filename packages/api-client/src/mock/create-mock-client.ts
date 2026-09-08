@@ -187,8 +187,7 @@ export function createMockClient(
     connection$: connectionStream,
     openPreview: (roleId: SourceRoleId): PreviewChannel => {
       activePreview?.close();
-      let channel!: PreviewChannel;
-      channel = createPreviewChannel(world, roleId, () => {
+      const channel: PreviewChannel = createPreviewChannel(world, roleId, () => {
         if (activePreview === channel) activePreview = null;
       });
       activePreview = channel;

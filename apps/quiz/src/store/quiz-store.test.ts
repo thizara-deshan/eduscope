@@ -87,7 +87,18 @@ describe('quiz-store', () => {
 
   it('ingest of a CLOSED question retains a still-relevant prior result', () => {
     useQuizStore.getState().replaceSnapshot([session(), participant(), question(), result()]);
-    useQuizStore.getState().ingest({ event: 'quiz.question', payload: { ...question().payload, state: 'closed' } });
+    useQuizStore.getState().ingest({
+      event: 'quiz.question',
+      payload: {
+        state: 'closed', publicationId: '01JBQ8ZK3T7WBM5N2Q4XPRVC9F',
+        prompt: 'Which planet is known as the Red Planet?',
+        options: [
+          { id: '01JBQ8ZK3T7WBM5N2Q4XPRVCA0', label: 'A', text: 'Mercury' },
+          { id: '01JBQ8ZK3T7WBM5N2Q4XPRVCA1', label: 'B', text: 'Venus' },
+        ],
+        ownAnswerOptionId: null,
+      },
+    });
     expect(useQuizStore.getState().result).not.toBeNull();
   });
 

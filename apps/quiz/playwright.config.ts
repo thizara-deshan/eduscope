@@ -16,6 +16,12 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   fullyParallel: true,
+  // E-50: named `mock` and `real` projects, conditional on the adapter env so
+  // existing runs are unchanged (mock/default exposes `mock`, HTTPS real runs
+  // expose `real`). The gate selects one with `--project=<name>`.
+  projects: realAdapter
+    ? [{ name: 'real', grep: /real:/ }]
+    : [{ name: 'mock', grepInvert: /real:/ }],
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
@@ -29,6 +35,11 @@ export default defineConfig({
     viewport: { width: 390, height: 844 },
     trace: 'retain-on-failure',
     ...(realAdapter ? { ignoreHTTPSErrors: true } : {}),
+    // Air-gapped/firewalled hosts can't reach Playwright's browser CDN; point
+    // at a locally installed Chromium instead (no effect unless the env is set).
+    ...(process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: process.env.EDUSCOPE_PLAYWRIGHT_CHROMIUM_PATH } }
+      : {}),
   },
   webServer: realAdapter
     ? {
