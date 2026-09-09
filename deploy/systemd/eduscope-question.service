@@ -1,0 +1,26 @@
+[Unit]
+Description=Eduscope question generation service
+Requires=eduscope-runtime-config.service
+Wants=network-online.target
+After=eduscope-runtime-config.service network-online.target
+
+[Service]
+Type=simple
+User=eduscope-ai
+Group=eduscope-ai
+EnvironmentFile=/run/eduscope/env/question.env
+WorkingDirectory=/opt/eduscope/current/services/ai
+ExecStart=/opt/eduscope/current/venvs/ai/bin/eduscope-question-service
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/eduscope/ai
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

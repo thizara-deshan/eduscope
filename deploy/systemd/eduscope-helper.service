@@ -1,0 +1,23 @@
+[Unit]
+Description=Eduscope privileged helper
+Requires=eduscope-helper.socket
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/eduscope/current/venvs/helper/bin/eduscope-privileged-helper
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+ReadOnlyPaths=/etc/eduscope
+ReadWritePaths=/etc/systemd/network /media/eduscope /run/eduscope/helper /run/eduscope/relay /sys/class/leds
+UMask=0077
+TimeoutStopSec=10

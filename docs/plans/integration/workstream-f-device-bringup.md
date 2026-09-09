@@ -807,7 +807,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   ExecStart=/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/eduscope.conf
   Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production
   ExecStart=/opt/eduscope/current/deploy/runtime/render.py --manifest /etc/eduscope/device-manifest.json --secrets /etc/eduscope/secrets.json --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
-  ExecStart=/opt/eduscope/current/deploy/runtime/render-hardware.py --manifest /etc/eduscope/device-manifest.json --runtime-only --output-root /run/eduscope
+  ExecStart=/opt/eduscope/current/deploy/runtime/render-hardware.py --manifest /etc/eduscope/device-manifest.json --runtime-only --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
   NoNewPrivileges=true
   PrivateTmp=true
   ProtectSystem=strict
@@ -1098,7 +1098,13 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
 
   Expected: `PASS systemd unit graph`; `systemd-analyze verify` exits 0 with no cycle, unknown directive, or executable-path error.
 
-- [ ] **Step 7: Verify live ordering, restart, and degradation on the staging target**
+- [ ] **Step 7: Defer live ordering, restart, and degradation verification until F-08**
+
+  This live witness is executed by F-08 Step 7, after that task installs the A–E
+  artifacts and rendered units at their exact target paths. F-05 closes on the
+  static syntax, dependency-graph, hardening, and contract checks in Steps 6
+  and 8. Do not simulate the live witness or create a dated evidence directory
+  during F-05.
 
   With A–E artifacts installed at the exact `/opt/eduscope/current` paths and rendered units copied to `/etc/systemd/system`, run:
 
@@ -1113,7 +1119,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
 
   `--live` records activation timestamps, kills each main PID separately, and applies this exact matrix: the killed unit restarts once; killing A leaves B/kiosk active and B reports A unavailable until recovery; killing B leaves A/AI active and kiosk reconnects after B returns; killing any AI service leaves A/B/kiosk active; killing kiosk leaves every backend active; helper restarts on the next socket call. It also proves the mounted source resolves to F-01's expected UUID and no other removable disk mounted automatically.
 
-  Expected: `PASS systemd live restart matrix`; the security report is captured without claiming an arbitrary score as a pass/fail threshold.
+  Expected during F-08 Step 7: `PASS systemd live restart matrix`; the security report is captured without claiming an arbitrary score as a pass/fail threshold.
 
 - [ ] **Step 8: Run contract regression and commit**
 
@@ -1712,9 +1718,21 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   ```bash
   /path/to/release/deploy/install.sh --profile demo-staging --acknowledge-open-firmware-acceptance --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release --dry-run
   /path/to/release/deploy/install.sh --profile demo-staging --acknowledge-open-firmware-acceptance --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
+  EVIDENCE_DIR="docs/evidence/phase-4/workstream-f/f05/$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$EVIDENCE_DIR"
+  sudo bash deploy/tests/verify-systemd.sh --live
+  systemd-analyze security eduscope-helper.service eduscope-pipeline-manager.service eduscope-core-api.service eduscope-stt.service eduscope-slide.service eduscope-question.service eduscope-kiosk.service > "$EVIDENCE_DIR/systemd-security.txt"
   ```
 
-  Expected: the panel at `http://127.0.0.1/` shows the persistent firmware-acceptance notice; A/B/C and the single origin are healthy; a two-minute recording finalizes and passes `ffprobe`; firmware apply/rollback invoke no runner; output is `PASS demo smoke profile=demo-staging placeholder / firmware acceptance still open`. This is the earliest management-demo gate and is not F-09 acceptance.
+  The deferred F-05 `--live` check records activation timestamps, kills each
+  main PID separately, and applies the restart/degradation matrix specified in
+  F-05 Step 7. Expected: `PASS systemd live restart matrix`; the security report
+  is captured without an arbitrary score threshold. The panel at
+  `http://127.0.0.1/` shows the persistent firmware-acceptance notice; A/B/C and
+  the single origin are healthy; a two-minute recording finalizes and passes
+  `ffprobe`; firmware apply/rollback invoke no runner; install output is `PASS
+  demo smoke profile=demo-staging placeholder / firmware acceptance still
+  open`. This is the earliest management-demo gate and is not F-09 acceptance.
 
   Later, after F-02b, on a disposable clean A/B image:
 

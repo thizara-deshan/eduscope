@@ -1,0 +1,13 @@
+[Unit]
+Description=Eduscope recordings volume
+Before=eduscope-runtime-config.service eduscope-pipeline-manager.service eduscope-core-api.service
+
+[Mount]
+What=/dev/disk/by-uuid/@RECORDINGS_UUID@
+Where=/media/eduscope
+Type=ext4
+Options=noatime,nodev,nosuid
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target

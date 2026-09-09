@@ -1,0 +1,13 @@
+[Unit]
+Description=Eduscope privileged helper socket
+
+[Socket]
+ListenStream=/run/eduscope/helper.sock
+SocketUser=root
+SocketGroup=eduscope
+SocketMode=0660
+DirectoryMode=0750
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,28 @@
+[Unit]
+Description=Eduscope Chromium kiosk
+Requires=eduscope-runtime-config.service
+Wants=network-online.target nginx.service eduscope-core-api.service
+After=display-manager.service graphical.target network-online.target nginx.service eduscope-core-api.service
+
+[Service]
+Type=simple
+User=eduscope-kiosk
+Group=eduscope-kiosk
+SupplementaryGroups=video render
+Environment=DISPLAY=:0
+ExecStartPre=/opt/eduscope/current/deploy/systemd/wait-http.py http://127.0.0.1:5000/healthz 60
+ExecStart=/opt/eduscope/current/deploy/kiosk/launcher.sh
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/eduscope/kiosk /run/user/@KIOSK_UID@
+DevicePolicy=closed
+DeviceAllow=/dev/dri rw
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,28 @@
+[Unit]
+Description=Eduscope slide OCR service
+Requires=eduscope-runtime-config.service
+Wants=eduscope-pipeline-manager.service
+After=eduscope-runtime-config.service eduscope-pipeline-manager.service
+
+[Service]
+Type=simple
+User=eduscope-ai
+Group=eduscope-ai
+SupplementaryGroups=eduscope-media
+EnvironmentFile=/run/eduscope/env/slide.env
+WorkingDirectory=/opt/eduscope/current/services/ai
+ExecStart=/opt/eduscope/current/venvs/ai/bin/eduscope-slide-service
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/eduscope/ai /media/eduscope
+CPUAffinity=0 1 2 3
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

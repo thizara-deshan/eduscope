@@ -1,0 +1,31 @@
+[Unit]
+Description=Eduscope core API
+Requires=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket
+Wants=network-online.target eduscope-pipeline-manager.service
+After=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket network-online.target eduscope-pipeline-manager.service
+
+[Service]
+Type=simple
+User=eduscope-core
+Group=eduscope-core
+SupplementaryGroups=eduscope eduscope-media
+EnvironmentFile=/run/eduscope/env/core.env
+WorkingDirectory=/opt/eduscope/current/services/core-api
+ExecStart=/usr/bin/node /opt/eduscope/current/services/core-api/dist/src/server.js
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/eduscope /run/eduscope/relay /media/eduscope
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target
