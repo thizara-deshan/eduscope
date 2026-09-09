@@ -36,6 +36,7 @@
 - The current helper wire mismatch, first-seed hardware/user gap, relay candidate gap, expected mount omission, X11 session omission, and production build omission are corrected inside their existing F tasks exactly as recorded in the master-plan F gate flag dated 2026-09-08.
 - **Signed-updater gate reclassified (approved 2026-09-10):** F-02a is the host-side helper/client implementation. F-03 through F-08 depend on F-02a and may proceed while firmware calls remain injected-runner-only and labelled `not firmware acceptance`. F-02b is a later physical-device gate beside F-09/F-12; it requires the release-owner interface, trust root, A/B layout, boot-success marker, and automatic rollback, and it must pass before production F-09. The inspected target has one root filesystem and no updater, so F-02b remains open. Fixtures never close it.
 - **Demo/staging install exception (approved 2026-09-10):** F-08 may install on the current single-rootfs Radxa with `--profile demo-staging --acknowledge-open-firmware-acceptance`. This profile skips only updater/A-B preflight, does not create or simulate slots, disables `firmware.apply` and `firmware.rollback` at the helper boundary, and shows `placeholder / firmware acceptance still open` in both panel UI and install output. It produces demo smoke evidence only—never F-02b, F-09, or final Workstream F PASS evidence.
+- **Demo/staging hardware exception (approved 2026-09-10):** F-04 may render with `--profile demo-staging` while final display/passthrough observations and the dedicated recordings volume remain unavailable. It reports `display/passthrough acceptance open` and/or `recordings volume acceptance open`, and permits `/media/eduscope` on the current SD-card root filesystem. Production still rejects every unresolved F-04 field. Demo rendering and a current-boot recording smoke test never satisfy F-04's cold-boot/replug acceptance witness.
 - **STOP before F-12 execution:** D-10/D-11 require an actual campus PostgreSQL 16 host, DNS name, valid TLS certificate, and firewall route. Local Testcontainers do not replace the physical-phone/campus staging witness.
 
 ### Management demo readiness
@@ -607,6 +608,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
     slave.format S16_LE
     slave.rate 48000
     slave.channels 2
+    hint { show on; description "Eduscope room microphone"; }
   }
   ctl.eduscope_mic { type hw; card "@MIC_CARD_ID@"; }
   pcm.eduscope_meeting_hdmi {
@@ -615,6 +617,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
     slave.format S16_LE
     slave.rate 48000
     slave.channels 2
+    hint { show on; description "Eduscope meeting HDMI"; }
   }
   ctl.eduscope_meeting_hdmi { type hw; card "@HDMI2_CARD_ID@"; }
   ```
@@ -631,20 +634,22 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   EDUSCOPE_AUDIO_CHANNELS=2
   ```
 
-  `render-hardware.py` supports install-time `--output-root <staging-root>` for the udev/ALSA files and runtime `--runtime-only --output-root /run/eduscope` for only `env/audio.env`; runtime mode never writes `/etc`.
+  `render-hardware.py` supports `--profile production|demo-staging` (default `production`), install-time `--output-root <staging-root>` for the udev/ALSA files, and runtime `--runtime-only --output-root /run/eduscope` for only `env/audio.env`; runtime mode never writes `/etc`. Demo/staging may defer only display/passthrough and recordings-volume fields and must print the applicable open-acceptance notices; capture, touch, microphone, and HDMI-audio identities remain required.
 
 - [ ] **Step 4: Render and run syntax/fixture checks**
 
   Run:
 
   ```bash
-  python3 deploy/runtime/render-hardware.py --manifest /etc/eduscope-private/device-manifest.json --output-root /tmp/eduscope-hardware-render
+  python3 deploy/runtime/render-hardware.py --profile production --manifest /etc/eduscope-private/device-manifest.json --output-root /tmp/eduscope-hardware-render
   udevadm verify /tmp/eduscope-hardware-render/etc/udev/rules.d/*.rules
   ALSA_CONFIG_PATH=/tmp/eduscope-hardware-render/etc/alsa/conf.d/90-eduscope.conf arecord -L | rg '^eduscope_mic$'
   ALSA_CONFIG_PATH=/tmp/eduscope-hardware-render/etc/alsa/conf.d/90-eduscope.conf aplay -L | rg '^eduscope_meeting_hdmi$'
   ```
 
   Expected: rule verification exits 0 and each named PCM appears exactly once.
+
+  On the current single-rootfs demo target, substitute `--profile demo-staging`. This verifies syntax only and does not close the physical witness below.
 
 - [ ] **Step 5: Perform the on-device stability witness**
 

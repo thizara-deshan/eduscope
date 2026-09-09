@@ -1,0 +1,1 @@
+SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_FS_UUID}!="", ENV{ID_BUS}=="usb", ENV{EDUSCOPE_STORAGE_CANDIDATE}="1", TAG+="systemd"

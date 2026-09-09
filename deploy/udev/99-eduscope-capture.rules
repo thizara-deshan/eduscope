@@ -1,0 +1,1 @@
+SUBSYSTEM=="video4linux", ATTR{index}=="@CAPTURE_V4L_INDEX@", ATTRS{idVendor}=="@CAPTURE_VID@", ATTRS{idProduct}=="@CAPTURE_PID@", @CAPTURE_STABLE_MATCH@, GROUP="video", MODE="0660", SYMLINK+="eduscope/pc-capture"

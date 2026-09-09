@@ -1,0 +1,1 @@
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/vendor}=="@TOUCH_VID@", ATTRS{id/product}=="@TOUCH_PID@", @TOUCH_STABLE_MATCH@, OWNER="eduscope-kiosk", MODE="0600", ENV{ID_SEAT}="seat0", TAG+="seat"
