@@ -34,9 +34,16 @@
 - Shared media root is exactly `/media/eduscope` for core-api, pipeline-manager, and slide-service. A/C's code defaults differ today, so F-03's rendered environment must override them.
 - Shared GStreamer sockets remain the already-executed A/C paths `/tmp/{usb,rtsp,rtsp2,audio}.sock`. Consequently `PrivateTmp=false` is mandatory for pipeline-manager and STT; changing socket paths belongs to A/C, not F.
 - The current helper wire mismatch, first-seed hardware/user gap, relay candidate gap, expected mount omission, X11 session omission, and production build omission are corrected inside their existing F tasks exactly as recorded in the master-plan F gate flag dated 2026-09-08.
-- **STOP before F-02 execution:** the deploy/release owner must supply and reviewers must acknowledge a signed updater with a release manifest, provisioned trust root, fixed `check/apply/rollback` CLI, A/B target-image layout, boot-success marker, and automatic rollback satisfying `INV-FU-1/2`. The inspected target has one root filesystem and no updater. Fixture-only firmware calls are not acceptance.
-- **Approved development split (2026-09-10):** F-02 is executed in two internal phases without changing its master-plan ownership. F-02a may implement the helper, canonicalize clients, and run all host-side automated regressions before updater/device availability. Firmware handlers in F-02a must retain the fixed `/usr/libexec/eduscope-updater` argv and may be exercised only through an injected runner; this is development evidence, never updater acceptance. F-02b is the original on-device gate and real `describe` schema-validation witness. F-02 is not acceptance-complete, and F-03 must not start, until F-02b passes on the A/B target.
+- **Signed-updater gate reclassified (approved 2026-09-10):** F-02a is the host-side helper/client implementation. F-03 through F-08 depend on F-02a and may proceed while firmware calls remain injected-runner-only and labelled `not firmware acceptance`. F-02b is a later physical-device gate beside F-09/F-12; it requires the release-owner interface, trust root, A/B layout, boot-success marker, and automatic rollback, and it must pass before production F-09. The inspected target has one root filesystem and no updater, so F-02b remains open. Fixtures never close it.
+- **Demo/staging install exception (approved 2026-09-10):** F-08 may install on the current single-rootfs Radxa with `--profile demo-staging --acknowledge-open-firmware-acceptance`. This profile skips only updater/A-B preflight, does not create or simulate slots, disables `firmware.apply` and `firmware.rollback` at the helper boundary, and shows `placeholder / firmware acceptance still open` in both panel UI and install output. It produces demo smoke evidence only—never F-02b, F-09, or final Workstream F PASS evidence.
 - **STOP before F-12 execution:** D-10/D-11 require an actual campus PostgreSQL 16 host, DNS name, valid TLS certificate, and firewall route. Local Testcontainers do not replace the physical-phone/campus staging witness.
+
+### Management demo readiness
+
+- **Earliest honest recording demo: after F-08's demo/staging Step 7 passes.** At that point the panel is served at `http://127.0.0.1/`, helper/non-firmware operations and local A/B/C services are installed and ordered, the physical capture/audio path can record and finalize a two-minute clip, and `ffprobe` verifies the result. The persistent banner and install report state that firmware and recordings-volume acceptance remain open.
+- Device bring-up does not install campus D on localhost. For a quiz preview before F-12, the demo report must name either the mock quiz domains or a separately launched local D integration stack; neither is the real campus/30-phone acceptance.
+- **Production device demo: after F-09.** This adds F-02b, a freshly flashed A/B-capable image, the dedicated recordings volume, two successful boots, real adapters, and clean-install evidence.
+- **Full product acceptance: after F-14.** F-10–F-14 add long-recording/recovery, upload/AI, campus quiz, hardware fault/power, and resource-headroom evidence.
 
 ### Repository and test conventions
 
@@ -109,8 +116,11 @@
   Image provenance (`image.name`, `image.sourceUrl`, and `image.sha256`) may be
   `null` through F-08 when the original approved image artifact is unavailable.
   F-09 is the named hard gate for resolving all three values: its clean-device
-  installer and acceptance procedure must reject a manifest with any unresolved
-  image-provenance value before flashing or installation.
+  production installer and acceptance procedure must reject a manifest with any
+  unresolved image-provenance value before flashing or production installation.
+  F-08's acknowledged `demo-staging` profile may install onto the already-running
+  target with unresolved provenance, but must report that deferral and cannot
+  produce F-09 evidence.
 
   When final room displays and their HDMI-audio mapping, passthrough wiring, or the dedicated recordings
   volume are not yet installed, their observed fields above may be `null` in
@@ -159,7 +169,7 @@
   printf 'PASS inventory captured: %s\n' "$evidence_dir"
   ```
 
-  Copy facts into the private manifest with these mappings: H-1 capture tuple/path/hub, H-2 canonical room-mic ALSA IDs/control, H-3 three display EDIDs/connectors/modes plus touch tuple, H-4 LED present/config or explicit absent reason, H-5 observed HDMI passthrough topology in `hdmiPassthrough`, P-1 hall/title/timezone, P-3 campus origin and LLM endpoint. Embedded capture-card audio is not the room mic and is not stored in `audio.mic*`. Record the exact supported-image name, source URL, and SHA-256 when known; otherwise set all three to `null`. F-09 must resolve all three and reject unresolved image provenance before flashing or installation; the current installed version string alone is insufficient. Fields explicitly deferred above remain `null` until F-04; do not substitute the root filesystem for the recordings volume.
+  Copy facts into the private manifest with these mappings: H-1 capture tuple/path/hub, H-2 canonical room-mic ALSA IDs/control, H-3 three display EDIDs/connectors/modes plus touch tuple, H-4 LED present/config or explicit absent reason, H-5 observed HDMI passthrough topology in `hdmiPassthrough`, P-1 hall/title/timezone, P-3 campus origin and LLM endpoint. Embedded capture-card audio is not the room mic and is not stored in `audio.mic*`. Record the exact supported-image name, source URL, and SHA-256 when known; otherwise set all three to `null`. F-09 must resolve all three and reject unresolved image provenance before flashing or production installation; the current installed version string alone is insufficient. F-08 demo/staging may use the already-running image only under its explicit non-acceptance profile. Fields explicitly deferred above remain `null` until F-04; do not substitute the root filesystem for the production recordings volume.
 
 - [ ] **Step 4: Validate both the example and the private deployable manifest**
 
@@ -193,7 +203,7 @@
 
 ### Task F-02: Implement the privileged helper and canonicalize its clients
 
-F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b is the release-owner/on-device acceptance gate in Step 1 plus validation of the real updater `describe` output. The specified F-02 commit closes F-02a only while F-02b is unavailable; it must be reported as such and must not be used to open F-03.
+F-02a is the host-side implementation and regression phase in Steps 1–7. The later F-02b gate appears between F-08 and F-09. The specified F-02 commit closes F-02a and opens F-03 through F-08. It does not close firmware acceptance or open production F-09.
 
 **Files:**
 - Create: `deploy/provisioning/updater-interface.schema.json`
@@ -208,30 +218,14 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 - Test: `services/core-api/test/firmware/firmware.test.ts`
 
 **Interfaces:**
-- Consumes: systemd listener fd 3; `/etc/eduscope/helper.json`; canonical request `{verb,args,requestId}`; reviewed updater executable `/usr/libexec/eduscope-updater`.
+- Consumes: systemd listener fd 3; `/etc/eduscope/helper.json`; canonical request `{verb,args,requestId}`. F-02a fixes the updater executable path without requiring it to exist; F-02b later consumes the reviewed executable.
 - Produces: one newline-delimited response `{ok:true,detail:string}` or `{ok:false,detail:string}`; `peer_credentials(socket)->PeerCredentials(pid,uid,gid)`; `VerbRegistry.dispatch(request,peer)`; JSON audit per request.
 
-- [ ] **Step 1 (F-02b): Satisfy the explicit signed-updater gate before device acceptance**
-
-  Run:
-
-  ```bash
-  test -x /usr/libexec/eduscope-updater
-  /usr/libexec/eduscope-updater describe --json | python3 -m json.tool
-  test -f /secure/release/updater-interface-v1.json
-  python3 -m json.tool /secure/release/updater-interface-v1.json
-  lsblk -o NAME,PARTLABEL,PARTUUID,MOUNTPOINTS
-  ```
-
-  Expected: the release-owner document and `describe` agree on `interfaceVersion:1`, `signatureAlgorithm`, `trustRootSha256`, distinct `activeSlot`/`inactiveSlot`, `bootSuccessMarker`, and commands `check/apply/rollback`; `lsblk` proves the reported slots exist. On the currently inspected single-rootfs target this step fails: stop F execution and return to the Workstream F gate. Do not substitute scripts that merely return fixture JSON.
-
-  When the approved development split is active, a failure here blocks F-02b and every later F task, but does not block Steps 2–8 as F-02a. Record the failure; do not create a fake updater, release document, trust root, slot, or acceptance witness.
-
-- [ ] **Step 2: Write failing peer, framing, verb, and rate-limit tests**
+- [ ] **Step 1: Write failing peer, framing, verb, and rate-limit tests**
 
   Cover: `SO_PEERCRED` unpacking with `struct.Struct('3i')`; UID allowlist for `eduscope-core` and `eduscope-pipeline`; exactly one UTF-8 JSON line capped at 64 KiB; canonical `requestId` only (reject A's old `id`); duplicate/extra/missing fields; all twelve verbs; wrong types; traversal; control characters; devnodes outside `/dev`; unknown interface/UUID/hub/LED; wrong UID; response redaction; runner timeout; no shell; exact argv; per-verb rolling-window exhaustion; audit containing request id/uid/verb/result/duration but no stream key, bearer, password, or full network payload.
 
-- [ ] **Step 3: Run focused suites and verify red**
+- [ ] **Step 2: Run focused suites and verify red**
 
   Run:
 
@@ -242,7 +236,7 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 
   Expected: helper import tests fail and A's canonical framing assertions fail.
 
-- [ ] **Step 4: Implement peer checking and socket-activated framing**
+- [ ] **Step 3: Implement peer checking and socket-activated framing**
 
   In F-02a, encode only the minimum interface fields already fixed by this plan in `updater-interface.schema.json` and validate representative test data. In F-02b, reconcile that schema with the acknowledged release-owner document and add the test that the real `describe` output validates against it; F does not choose or extend updater fields.
 
@@ -287,7 +281,7 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 
   `server.py` adopts fd 3 only when `LISTEN_PID == os.getpid()` and `LISTEN_FDS == 1`, accepts one request per connection, applies a 5-second read timeout and 64-KiB limit, rejects non-allowlisted UIDs before JSON dispatch, writes one response line, and logs one redacted JSON audit to stdout. Directly binding `/run/eduscope/helper.sock` is allowed only behind an injected test listener; production refuses to unlink or replace the systemd-owned socket.
 
-- [ ] **Step 5: Implement the closed verb registry with fixed argv**
+- [ ] **Step 4: Implement the closed verb registry with fixed argv**
 
   Define strict dataclass validators and the following only; the runner receives `tuple[str,...]`, uses `subprocess.run(..., shell=False, check=False, capture_output=True, text=True, timeout=VERB_TIMEOUT[verb])`, and accepts no executable from input:
 
@@ -308,11 +302,11 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 
   Re-resolve UUID/devnode/interface/mount state at dispatch time. Reject the root filesystem, its parents, mounted format targets, symlinks escaping `/dev`, labels with control/shell characters, and network fields not already allowed by B. Rate limits are: `led.set` 120/min, `relay.reload` 30/min, `net.apply` 10/min, `smart.read` 12/min, `volume.mount|unmount` 10/min, `volume.format` 1/10min, `usbhub.cycle` 2/hour, `system.poweroff` 1/min, `firmware.check` 6/hour, `firmware.apply|rollback` 1/hour. Persist timestamps atomically at `/run/eduscope/helper/rate-limits.json`.
 
-- [ ] **Step 6: Canonicalize A's client**
+- [ ] **Step 5: Canonicalize A's client**
 
   Replace A's request key `id` with `requestId`; parse only `{ok:boolean,detail:string}`; preserve 16-KiB response and 2-second connect/response timeouts; return a typed response carrying `request_id`, `ok`, and `detail`. `set_led()` and `cycle_usb_hub()` remain the only public methods. The fake helper must reject either old request/response shape so protocol drift cannot recur.
 
-- [ ] **Step 7: Run helper, A/B regressions, and the source safety scan**
+- [ ] **Step 6: Run helper, A/B regressions, and the source safety scan**
 
   Run:
 
@@ -325,7 +319,7 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 
   Expected: all tests pass; scan has no application `sudo`, shell execution, generic verb, or string-exec call.
 
-- [ ] **Step 8: Run contract regression and commit**
+- [ ] **Step 7: Run contract regression and commit**
 
   ```bash
   git diff --check
@@ -416,6 +410,7 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   render.py --manifest /etc/eduscope/device-manifest.json
             --secrets /etc/eduscope/secrets.json
             --output-root /run/eduscope
+            --profile production|demo-staging
             [--check]
   ```
 
@@ -430,13 +425,13 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   env/question.env            root:eduscope-ai      0640
   ```
 
-  Public `config.json` is exactly:
+  Production `config.json` is exactly:
 
   ```json
-  {"apiBaseUrl":"/api/v1","quizBaseUrl":"https://quiz.campus.invalid","environment":"production","adapters":{"default":"real","overrides":{}}}
+  {"apiBaseUrl":"/api/v1","quizBaseUrl":"https://quiz.campus.invalid","environment":"production","adapters":{"default":"real","overrides":{}},"deploymentProfile":"production","notices":[]}
   ```
 
-  The shown origin is the schema-valid example output; a deployable render substitutes the manifest's non-example HTTPS P-3 origin and refuses null when F-12 is being accepted. Environment files set loopback ports `5000`, `8091`, `7101`, `7102`, `7103`; the common internal bearer; `/media/eduscope`; `/run/eduscope`; PM helper/capture-hub/LED/ALSA settings; Vosk model path/version; and production core JWT/secretbox keys. No secret enters `config.json` or `device-bootstrap.json`.
+  The shown origin is the schema-valid example output; a deployable production render substitutes the manifest's non-example HTTPS P-3 origin and refuses null when F-12 is being accepted. `demo-staging` keeps the real local A/B/C adapters, sets `deploymentProfile` to `demo-staging`, and sets `notices` to exactly `["placeholder / firmware acceptance still open"]`; it may use the mock quiz adapter or a separately launched local D endpoint but must identify that choice in the install report. Environment files set loopback ports `5000`, `8091`, `7101`, `7102`, `7103`; the common internal bearer; `/media/eduscope`; `/run/eduscope`; PM helper/capture-hub/LED/ALSA settings; Vosk model path/version; and production core JWT/secretbox keys. No secret enters `config.json` or `device-bootstrap.json`.
 
   Render these exact env keys (right-hand `@...@` values come from the validated manifest/secrets and are never committed):
 
@@ -804,7 +799,8 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   Group=root
   RemainAfterExit=yes
   ExecStart=/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/eduscope.conf
-  ExecStart=/opt/eduscope/current/deploy/runtime/render.py --manifest /etc/eduscope/device-manifest.json --secrets /etc/eduscope/secrets.json --output-root /run/eduscope
+  Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production
+  ExecStart=/opt/eduscope/current/deploy/runtime/render.py --manifest /etc/eduscope/device-manifest.json --secrets /etc/eduscope/secrets.json --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
   ExecStart=/opt/eduscope/current/deploy/runtime/render-hardware.py --manifest /etc/eduscope/device-manifest.json --runtime-only --output-root /run/eduscope
   NoNewPrivileges=true
   PrivateTmp=true
@@ -1497,14 +1493,21 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 - Create: `deploy/{install.sh,README.md,packages.ubuntu-24.04-aarch64.lock}`
 - Create: `deploy/lib/{common,preflight,packages,identity,artifacts,configuration,services,verify,rollback}.sh`
 - Create: `deploy/tests/{install.bats,preflight.bats,rollback.bats,test-production-build.mjs}`
+- Modify: `services/privileged-helper/src/eduscope_privileged_helper/verbs.py`
+- Modify: `packages/api-client/src/mixed/runtime-config.ts`
+- Test: `packages/api-client/test/mixed/production-config.test.ts`
+- Modify: `apps/panel/src/config/runtime-config.tsx`
+- Modify: `apps/panel/src/routes/panel-shell.tsx`
+- Test: `apps/panel/src/config/runtime-config.test.tsx`
+- Test: `apps/panel/src/routes/panel-shell.test.tsx`
 
 **Interfaces:**
-- Consumes: `deploy/install.sh --manifest ABS --secrets ABS --release ABS [--dry-run]`; F-01…F-07 artifacts; reviewed updater.
-- Produces: immutable `/opt/eduscope/releases/<release-id>`, atomic `/opt/eduscope/current`, venvs, panel/core/shared builds, installed config/units, rollback evidence, and `PASS install verified`.
+- Consumes: `deploy/install.sh --profile production|demo-staging --manifest ABS --secrets ABS --release ABS [--acknowledge-open-firmware-acceptance] [--dry-run]`; F-01…F-07 artifacts. Production additionally consumes F-02b's reviewed updater; demo/staging explicitly does not.
+- Produces: immutable `/opt/eduscope/releases/<release-id>`, atomic `/opt/eduscope/current`, venvs, panel/core/shared builds, installed config/units, rollback evidence, and either `PASS install verified profile=production` or `PASS demo smoke profile=demo-staging placeholder / firmware acceptance still open`.
 
 - [ ] **Step 1: Write failing build, dry-run, idempotency, and rollback tests**
 
-  `test-production-build.mjs` builds shared then core, launches compiled core with temp DB/provisioning/helper/PM fixtures, and requires `/healthz` v1. Bats tests mock `apt-get`, `install`, `systemctl`, `udevadm`, renderers, and health probes; assert preflight precedes first mutation, exact stage order 1–10, second identical run performs no package/config/unit mutation, foreign admin files are refused, a forced failure at every stage restores files/current symlink/unit enablement, and secrets never enter argv/output.
+  `test-production-build.mjs` builds shared then core, launches compiled core with temp DB/provisioning/helper/PM fixtures, and requires `/healthz` v1. Bats tests mock `apt-get`, `install`, `systemctl`, `udevadm`, renderers, and health probes; assert preflight precedes first mutation, exact stage order 1–10, second identical run performs no package/config/unit mutation, foreign admin files are refused, a forced failure at every stage restores files/current symlink/unit enablement, and secrets never enter argv/output. Profile tests prove production refuses a missing updater/A-B layout, demo/staging requires the exact acknowledgement flag, demo/staging performs no partition/updater mutation, and helper `firmware.apply|rollback` return a redacted disabled response without invoking the runner. Panel tests require the exact open-acceptance notice on every demo/staging route and no notice in production.
 
 - [ ] **Step 2: Run and verify red**
 
@@ -1611,22 +1614,30 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   done
 
   usage() {
-    printf 'usage: %s --manifest ABS --secrets ABS --release ABS [--dry-run]\n' "$0" >&2
+    printf 'usage: %s --profile production|demo-staging --manifest ABS --secrets ABS --release ABS [--acknowledge-open-firmware-acceptance] [--dry-run]\n' "$0" >&2
     exit 64
   }
 
   (( EUID == 0 )) || { printf 'install must run as root\n' >&2; exit 77; }
-  manifest= secrets= release= dry_run=false
+  profile= manifest= secrets= release= acknowledge_open_firmware=false dry_run=false
   while (( $# )); do
     case "$1" in
+      --profile)  (( $# >= 2 )) || usage; profile=$2; shift 2 ;;
       --manifest) (( $# >= 2 )) || usage; manifest=$2; shift 2 ;;
       --secrets)  (( $# >= 2 )) || usage; secrets=$2; shift 2 ;;
       --release)  (( $# >= 2 )) || usage; release=$2; shift 2 ;;
+      --acknowledge-open-firmware-acceptance) acknowledge_open_firmware=true; shift ;;
       --dry-run)  dry_run=true; shift ;;
       *) usage ;;
     esac
   done
+  [[ "$profile" == production || "$profile" == demo-staging ]] || usage
   [[ -n "$manifest" && -n "$secrets" && -n "$release" ]] || usage
+  if [[ "$profile" == demo-staging && "$acknowledge_open_firmware" != true ]]; then
+    printf 'demo-staging requires --acknowledge-open-firmware-acceptance\n' >&2
+    exit 78
+  fi
+  export EDUSCOPE_INSTALL_PROFILE="$profile"
   export EDUSCOPE_INSTALL_DRY_RUN="$dry_run"
 
   current_stage=preflight
@@ -1660,13 +1671,15 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   trap - ERR
   ```
 
-  Preflight verifies Ubuntu 24.04, aarch64, kernel/image match, >=10 GiB system free space, manifest/schema/deployable status, expected disk/display/device topology, time sync/network, Node >=22.13, Python >=3.11, pnpm 9.12.3, GStreamer and every `RK3588Profile.required_elements()`, artifact/model/prompt hashes, updater gate, and absence of unresolved render tokens. Package lock contains exact `name=version` pairs resolved on the frozen image for GStreamer plugins/tools, ffmpeg, nginx/libnginx-mod-rtmp, stunnel4, Chromium/GDM/X11 tools, ALSA/v4l/udev/gpiod/smart/uhub tools, Node/pnpm prerequisites, Python venv/build, Bats, and ShellCheck.
+  Common preflight verifies Ubuntu 24.04, aarch64, kernel match, >=10 GiB system free space, manifest/schema status, expected display/device topology, time sync/network, Node >=22.13, Python >=3.11, pnpm 9.12.3, GStreamer and every `RK3588Profile.required_elements()`, artifact/model/prompt hashes, and absence of unresolved runtime tokens. Production additionally requires deployable image provenance, the expected recordings volume, and F-02b's real updater/A-B gate. Demo/staging permits only the already-running single-rootfs target and, when the dedicated recording volume is unavailable, uses `/media/eduscope` as a root-filesystem directory while clearly reporting `recordings volume acceptance open`; all A/B/C services still share that exact path. It never flashes, repartitions, calls the updater, or records acceptance evidence. Package lock contains exact `name=version` pairs resolved on the frozen image for GStreamer plugins/tools, ffmpeg, nginx/libnginx-mod-rtmp, stunnel4, Chromium/GDM/X11 tools, ALSA/v4l/udev/gpiod/smart/uhub tools, Node/pnpm prerequisites, Python venv/build, Bats, and ShellCheck.
+
+  The installed helper config contains `firmwareMode:"enabled"` only in production after F-02b passes; demo/staging renders `firmwareMode:"disabled"`. The helper checks that field before runner dispatch and returns `{ "ok":false, "detail":"placeholder / firmware acceptance still open" }` for `firmware.apply` and `firmware.rollback`. No fake updater executable is installed. Demo/staging installs deploy-owned systemd drop-ins that set `EDUSCOPE_DEPLOYMENT_PROFILE=demo-staging`, disable `media-eduscope.mount`, and reset only the `Requires=`/`After=` entries that name that mount on runtime/A/B/C units while retaining their other ordering. Tests enumerate every unit containing the mount dependency and require a matching demo override, so none is missed. Removing the profile through the installer removes those drop-ins, so reboot cannot silently become production. Runtime `config.json` carries the F-03 profile/notice fields, `packages/api-client` validates them, and `panel-shell.tsx` renders each notice as a persistent, non-dismissible status banner.
 
   Install release content under a new release id; build Node artifacts; create separate helper/pipeline/AI venvs with wheels and hashes; copy panel dist; migrate SQLite twice as `eduscope-core`; render files before activation; verify units/configs; atomically switch `current`; daemon-reload/reload udev; enable mount/helper/runtime/A/B/C/kiosk/nginx/stunnel in dependency order. D remains campus-only.
 
 - [ ] **Step 5: Implement bounded smoke and rollback**
 
-  `verify.sh` checks mount UUID, permissions, loopback listeners, `/healthz`, production `/config.json`, REST and both WS upgrades through Nginx, no failed Eduscope units, no mixed overrides, and journal/source scans for secrets/sudo. It starts/stops a 2-minute recording through the public API, waits for resolving events, and runs `ffprobe` on TS/MP4. Print `PASS install verified` only after all checks.
+  `verify.sh` checks mount/media-root policy, permissions, loopback listeners, `/healthz`, profile-correct `/config.json`, REST and both WS upgrades through Nginx, no failed Eduscope units, no mixed local A/B/C overrides, and journal/source scans for secrets/sudo. It starts/stops a 2-minute recording through the public API, waits for resolving events, and runs `ffprobe` on TS/MP4. Production prints `PASS install verified profile=production` only after all checks. Demo/staging additionally verifies disabled firmware mutation and the visible banner, then prints only `PASS demo smoke profile=demo-staging placeholder / firmware acceptance still open`.
 
   Rollback stops only units first started by this run, restores each owned file from the recorded digest map, restores the previous `current` symlink and enablement set, daemon-reloads, restarts the previous known-good set, and prints `ROLLBACK COMPLETE stage=<name> evidence=<absolute-path>`. It never deletes an unknown release or administrator file.
 
@@ -1678,6 +1691,7 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
   pnpm --filter @eduscope/shared build
   pnpm --filter @eduscope/core-api build
   pnpm --filter @eduscope/panel build
+  pnpm --filter @eduscope/panel test -- src/config/runtime-config.test.tsx src/routes/panel-shell.test.tsx
   node deploy/tests/test-production-build.mjs
   bats deploy/tests/preflight.bats deploy/tests/install.bats deploy/tests/rollback.bats
   shellcheck deploy/install.sh deploy/lib/*.sh scripts/bringup/*.sh
@@ -1685,30 +1699,61 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 
   Expected: compiled core health passes; Bats prints all PASS; ShellCheck emits no finding.
 
-- [ ] **Step 7: Run clean-image dry run, two installs, and forced rollback**
+- [ ] **Step 7: Run demo/staging on the current target and production on the clean A/B target**
 
-  On a disposable clean image:
+  On the current single-rootfs demo target:
 
   ```bash
-  /path/to/release/deploy/install.sh --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release --dry-run
-  /path/to/release/deploy/install.sh --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
-  /path/to/release/deploy/install.sh --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
-  EDUSCOPE_INSTALL_FAIL_STAGE=services /path/to/release/deploy/install.sh --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
+  /path/to/release/deploy/install.sh --profile demo-staging --acknowledge-open-firmware-acceptance --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release --dry-run
+  /path/to/release/deploy/install.sh --profile demo-staging --acknowledge-open-firmware-acceptance --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
   ```
 
-  Expected: dry-run mutation ledger is empty; first install prints `PASS install verified`; second prints `NO CHANGE` for stages 2–8 then verifies; forced run exits nonzero after `ROLLBACK COMPLETE`, and prior health/config digests match.
+  Expected: the panel at `http://127.0.0.1/` shows the persistent firmware-acceptance notice; A/B/C and the single origin are healthy; a two-minute recording finalizes and passes `ffprobe`; firmware apply/rollback invoke no runner; output is `PASS demo smoke profile=demo-staging placeholder / firmware acceptance still open`. This is the earliest management-demo gate and is not F-09 acceptance.
+
+  Later, after F-02b, on a disposable clean A/B image:
+
+  ```bash
+  /path/to/release/deploy/install.sh --profile production --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release --dry-run
+  /path/to/release/deploy/install.sh --profile production --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
+  /path/to/release/deploy/install.sh --profile production --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
+  EDUSCOPE_INSTALL_FAIL_STAGE=services /path/to/release/deploy/install.sh --profile production --manifest /secure/device-manifest.json --secrets /secure/secrets.json --release /path/to/release
+  ```
+
+  Expected: dry-run mutation ledger is empty; first install prints `PASS install verified profile=production`; second prints `NO CHANGE` for stages 2–8 then verifies; forced run exits nonzero after `ROLLBACK COMPLETE`, and prior health/config digests match.
 
 - [ ] **Step 8: Run contract regression and commit**
 
   ```bash
   git diff --check
-  git add packages/shared/package.json packages/shared/tsconfig.build.json services/core-api/package.json services/core-api/tsconfig.build.json deploy
+  git add packages/shared/package.json packages/shared/tsconfig.build.json services/core-api/package.json services/core-api/tsconfig.build.json deploy services/privileged-helper/src/eduscope_privileged_helper/verbs.py packages/api-client/src/mixed/runtime-config.ts packages/api-client/test/mixed/production-config.test.ts apps/panel/src/config apps/panel/src/routes
   git commit -m "feat(deploy): install reproducible device release"
   ```
 
 ---
 
+### Gate F-02b: Accept the signed updater on an A/B-capable target
+
+This is a later physical-device acceptance gate, not a new numbered Workstream F task. It runs after F-08 is available and immediately before production F-09. It is not run for demo/staging.
+
+Run:
+
+```bash
+test -x /usr/libexec/eduscope-updater
+/usr/libexec/eduscope-updater describe --json | python3 -m json.tool
+test -f /secure/release/updater-interface-v1.json
+python3 -m json.tool /secure/release/updater-interface-v1.json
+lsblk -o NAME,PARTLABEL,PARTUUID,MOUNTPOINTS
+```
+
+Expected: the release-owner document and `describe` agree on `interfaceVersion:1`, `signatureAlgorithm`, `trustRootSha256`, distinct `activeSlot`/`inactiveSlot`, `bootSuccessMarker`, and commands `check/apply/rollback`; `lsblk` proves the reported slots exist. Then execute signed check/apply, bad-signature rejection, boot-success marking, and forced failed-boot automatic rollback using the release-owner procedure. Commit only real, redacted device evidence labelled `PASS F-02b signed updater acceptance`.
+
+On the currently inspected single-rootfs target this gate fails and stays open. That does not block F-03 through F-08 or the F-08 demo/staging smoke, but it blocks production F-09 and every final acceptance task. Do not create a fake updater, release document, trust root, slot, or acceptance witness.
+
+---
+
 ### Task F-09: Accept clean provisioning on a freshly flashed device
+
+**Gate:** F-02b must first pass on the real A/B-capable image. A demo/staging install is not an F-09 prerequisite substitute and its evidence directory is rejected.
 
 **Files:**
 - Create: `scripts/bringup/clean-install-check.sh`
@@ -2173,7 +2218,8 @@ F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b
 - [ ] Mechanical units/configuration/wrapper contracts are complete enough to copy without an architectural choice; device-specific values come only from F-01's validated manifest.
 - [ ] The 2026-09-08 master gate flag records every discovered contradiction: helper protocol/language, first-seed hardware/admin, relay candidate, mount/X11/build gaps, signed-updater STOP, JPEG-not-WebRTC F-14 load, and the corrected 86-operation/B-36 ownership audit.
 - [ ] Contract counts and ownership remain unchanged by F: 86 REST operations total (83 core plus 3 quiz), 22 panel events, 5 retained preview compatibility messages, 4 device↔quiz messages, and 4 student events; F owns none.
-- [ ] D-02b stays labelled `placeholder only / D-02b still open`; F-12 cannot execute without campus D-10/D-11; F-02 cannot execute without the reviewed signed updater/A-B layout.
+- [ ] D-02b stays labelled `placeholder only / D-02b still open`; F-12 cannot execute without campus D-10/D-11; F-03–F-08 depend on completed F-02a; F-02b and production F-09 cannot pass without the reviewed signed updater/A-B layout.
+- [ ] Demo/staging requires explicit acknowledgement, never flashes/repartitions/simulates A/B, disables firmware apply/rollback without installing a fake updater, displays the exact open-acceptance notice, and cannot produce F-02b/F-09/F-14 PASS evidence.
 - [ ] Search this plan for placeholder prose and unresolved render markers; only quoted rejection criteria or manifest template tokens whose renderer is fully specified may remain.
 
   ```bash
