@@ -8,6 +8,8 @@ export interface CoreConfig {
   recordingsRoot: string;
   runtimeDir: string;
   provisioningPath: string;
+  deviceBootstrapPath: string;
+  bootstrapAdminPasswordFile: string;
   helperSocketPath: string;
   pipelineManagerBaseUrl: string;
   internalBearer: string;
@@ -31,6 +33,8 @@ const rawEnvSchema = z.object({
   CORE_API_RECORDINGS_ROOT: z.string().min(1).default('/media/eduscope'),
   CORE_API_RUNTIME_DIR: z.string().min(1).default('/run/eduscope'),
   CORE_API_PROVISIONING_PATH: z.string().min(1).default('/etc/eduscope/provisioning.json'),
+  CORE_API_DEVICE_BOOTSTRAP_PATH: z.string().min(1).default('/etc/eduscope/device-bootstrap.json'),
+  CORE_API_BOOTSTRAP_ADMIN_PASSWORD_FILE: z.string().min(1).default('/etc/eduscope/bootstrap-admin.password'),
   CORE_API_HELPER_SOCKET: z.string().min(1).default('/run/eduscope/helper.sock'),
   CORE_API_PM_BASE_URL: z.string().url().default('http://127.0.0.1:8091'),
   CORE_API_INTERNAL_BEARER: z.string().default('dev-internal-bearer'),
@@ -73,6 +77,8 @@ export function loadConfig(env: Record<string, string | undefined>): CoreConfig 
     recordingsRoot: raw.CORE_API_RECORDINGS_ROOT,
     runtimeDir: raw.CORE_API_RUNTIME_DIR,
     provisioningPath: raw.CORE_API_PROVISIONING_PATH,
+    deviceBootstrapPath: raw.CORE_API_DEVICE_BOOTSTRAP_PATH,
+    bootstrapAdminPasswordFile: raw.CORE_API_BOOTSTRAP_ADMIN_PASSWORD_FILE,
     helperSocketPath: raw.CORE_API_HELPER_SOCKET,
     pipelineManagerBaseUrl: raw.CORE_API_PM_BASE_URL,
     internalBearer: raw.CORE_API_INTERNAL_BEARER,

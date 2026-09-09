@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "wiredInterface", "inputs", "bootstrapAdmin"],
+  "properties": {
+    "version": {"const": 1},
+    "wiredInterface": {"type": "string", "minLength": 1},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["presentation", "lecturer-cam", "students-cam", "mic-lecturer"],
+      "properties": {
+        "presentation": {"$ref": "#/$defs/input"},
+        "lecturer-cam": {"$ref": "#/$defs/input"},
+        "students-cam": {"$ref": "#/$defs/input"},
+        "mic-lecturer": {"$ref": "#/$defs/input"}
+      }
+    },
+    "bootstrapAdmin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username", "displayName", "passwordFile"],
+      "properties": {
+        "username": {"type": "string", "minLength": 1},
+        "displayName": {"type": "string", "minLength": 1},
+        "passwordFile": {"const": "/etc/eduscope/bootstrap-admin.password"}
+      }
+    }
+  },
+  "$defs": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "address"],
+      "properties": {
+        "kind": {"enum": ["v4l2", "rtsp", "alsa"]},
+        "address": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

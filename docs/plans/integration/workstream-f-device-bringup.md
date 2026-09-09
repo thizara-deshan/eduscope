@@ -408,6 +408,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
 
   ```text
   render.py --manifest /etc/eduscope/device-manifest.json
+            --provisioning /etc/eduscope/provisioning.json
             --secrets /etc/eduscope/secrets.json
             --output-root /run/eduscope
             --profile production|demo-staging
@@ -538,7 +539,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   python3 -m unittest deploy.tests.test_runtime_render deploy.tests.test_sysusers_tmpfiles -v
   pnpm --filter @eduscope/core-api test -- test/db/device-bootstrap.test.ts test/unit/config.test.ts test/settings/sources.test.ts test/auth/auth.test.ts
   render_check_dir="$(mktemp -d)"
-  python3 deploy/runtime/render.py --manifest /etc/eduscope-private/device-manifest.json --secrets /etc/eduscope-private/secrets.json --output-root "$render_check_dir"
+  python3 deploy/runtime/render.py --manifest /etc/eduscope-private/device-manifest.json --provisioning /etc/eduscope-private/provisioning.json --secrets /etc/eduscope-private/secrets.json --output-root "$render_check_dir" --profile production
   ! rg -n 'quizDeviceCredential|JWT_SECRET|SECRETBOX_KEY|INTERNAL_BEARER|bootstrap-admin' "$render_check_dir/config.json" apps/panel/dist/config.json
   rm -r -- "$render_check_dir"
   ```

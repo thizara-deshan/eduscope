@@ -12,6 +12,7 @@ import type { CoreDatabase, DrizzleDb } from './db/client.js';
 import { openDatabase } from './db/client.js';
 import { migrate } from './db/migrate.js';
 import { seed } from './db/seeds.js';
+import { loadDeviceBootstrap, pushEnabledBindings, seedBootstrapAdmin, type DeviceBootstrap } from './db/device-bootstrap.js';
 import type { ArgvRunner } from './lib/argv-worker.js';
 import { ArgvWorker } from './lib/argv-worker.js';
 import type { Clock } from './lib/clock.js';
@@ -164,6 +165,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const lifecycle = new LifecycleRegistry();
 
   const app = Fastify({ logger: true });
+  let deviceBootstrap: DeviceBootstrap | undefined;
+  try {
+    deviceBootstrap = loadDeviceBootstrap(config.deviceBootstrapPath);
+  } catch (error) {
+    if (config.nodeEnv !== 'test') throw error;
+  }
 
   let core: CoreDatabase | undefined;
   lifecycle.register({
@@ -171,7 +178,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     async start(): Promise<void> {
       core = openDatabase(config.dbPath);
       migrate(core);
-      seed(core, clock.now(), ids);
+      seed(core, clock.now(), ids, deviceBootstrap);
+      if (deviceBootstrap) {
+        await seedBootstrapAdmin(core, clock.now(), ids, { ...deviceBootstrap.bootstrapAdmin, passwordFile: config.bootstrapAdminPasswordFile });
+      }
       app.decorate('db', core.db);
     },
     async stop(): Promise<void> {
@@ -468,6 +478,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     clock,
     ids,
   });
+  if (config.nodeEnv !== 'test' || deviceBootstrap) {
+    lifecycle.register({
+      name: 'source-binding-bootstrap',
+      async start(): Promise<void> {
+        await pushEnabledBindings(app.db, pmClient, secretStore);
+      },
+      async stop(): Promise<void> {},
+    });
+  }
   registerSourceSettingsRoutes(app, authService, {
     get db(): DrizzleDb {
       return app.db;

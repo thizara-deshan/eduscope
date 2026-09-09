@@ -2,6 +2,7 @@ import { LAYOUT_PRESETS } from '@eduscope/shared';
 import { eq } from 'drizzle-orm';
 import type { IdGenerator } from '../lib/ids.js';
 import type { CoreDatabase } from './client.js';
+import type { DeviceBootstrap } from './device-bootstrap.js';
 import {
   channelConfigs,
   encodingProfiles,
@@ -50,7 +51,7 @@ const WIRED_INTERFACES = [{ interfaceName: 'eth0', kind: 'lan' as const }] as co
  * natural PK; ulid-keyed skeletons key on the natural discriminator that owns
  * them (role, scope) so re-seeding never depends on a freshly generated id.
  */
-export function seed(core: CoreDatabase, now: Date, ids: IdGenerator): void {
+export function seed(core: CoreDatabase, now: Date, ids: IdGenerator, bootstrap?: DeviceBootstrap): void {
   const nowIso = now.toISOString();
 
   for (const role of SOURCE_ROLES) {
@@ -94,7 +95,10 @@ export function seed(core: CoreDatabase, now: Date, ids: IdGenerator): void {
       .run();
   }
 
-  for (const skeleton of PHYSICAL_INPUT_SKELETONS) {
+  const inputSkeletons = bootstrap
+    ? Object.entries(bootstrap.inputs).map(([roleId, value]) => ({ roleId, ...value })) as Array<{ roleId: typeof PHYSICAL_INPUT_SKELETONS[number]['roleId']; kind: typeof PHYSICAL_INPUT_SKELETONS[number]['kind']; address: string }>
+    : PHYSICAL_INPUT_SKELETONS;
+  for (const skeleton of inputSkeletons) {
     const existingBinding = core.db
       .select()
       .from(sourceBindings)
@@ -124,7 +128,8 @@ export function seed(core: CoreDatabase, now: Date, ids: IdGenerator): void {
       .run();
   }
 
-  for (const iface of WIRED_INTERFACES) {
+  const wiredInterfaces = bootstrap ? [{ interfaceName: bootstrap.wiredInterface, kind: 'lan' as const }] : WIRED_INTERFACES;
+  for (const iface of wiredInterfaces) {
     const existing = core.db.select().from(networkConfigs).where(eq(networkConfigs.interfaceName, iface.interfaceName)).get();
     if (existing) continue;
     core.db

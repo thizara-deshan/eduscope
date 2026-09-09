@@ -69,6 +69,8 @@ describe('loadConfig', () => {
     expect(config.dbPath).toBe('/var/lib/eduscope/core.db');
     expect(config.runtimeDir).toBe('/run/eduscope');
     expect(config.provisioningPath).toBe('/etc/eduscope/provisioning.json');
+    expect(config.deviceBootstrapPath).toBe('/etc/eduscope/device-bootstrap.json');
+    expect(config.bootstrapAdminPasswordFile).toBe('/etc/eduscope/bootstrap-admin.password');
     expect(config.helperSocketPath).toBe('/run/eduscope/helper.sock');
     expect(config.accessTokenTtlSec).toBeGreaterThan(0);
     expect(config.refreshTokenTtlSec).toBeGreaterThan(0);

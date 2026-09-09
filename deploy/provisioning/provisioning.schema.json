@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "deviceId", "instituteProfileId", "hallDisplayName", "featureFlags", "provisionedAt", "provisionedBy", "rtsp", "bootstrapAdmin"],
+  "properties": {
+    "version": {"const": 1},
+    "deviceId": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+    "instituteProfileId": {"type": "string", "minLength": 1, "maxLength": 64},
+    "hallDisplayName": {"type": "string", "minLength": 1, "maxLength": 128},
+    "featureFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recordingEnabled", "aiQuizEnabled", "streamingEnabled"],
+      "properties": {
+        "recordingEnabled": {"type": "boolean"},
+        "aiQuizEnabled": {"type": "boolean"},
+        "streamingEnabled": {"type": "boolean"}
+      }
+    },
+    "provisionedAt": {"type": "string", "format": "date-time"},
+    "provisionedBy": {"type": ["string", "null"], "maxLength": 128},
+    "rtsp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lecturer-cam", "students-cam"],
+      "properties": {
+        "lecturer-cam": {"type": "string", "pattern": "^rtsp://[^\\s]+$"},
+        "students-cam": {"type": "string", "pattern": "^rtsp://[^\\s]+$"}
+      }
+    },
+    "bootstrapAdmin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username", "displayName"],
+      "properties": {
+        "username": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,31}$"},
+        "displayName": {"type": "string", "minLength": 1, "maxLength": 100}
+      }
+    }
+  }
+}
