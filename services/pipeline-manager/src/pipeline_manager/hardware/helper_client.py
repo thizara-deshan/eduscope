@@ -42,8 +42,7 @@ class HelperResponseTooLarge(HelperError):
 class HelperResponse:
     request_id: str
     ok: bool
-    error: str | None = None
-    data: dict | None = None
+    detail: str
 
 
 Connector = Callable[[], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
@@ -87,7 +86,7 @@ class HelperClient:
 
     async def _send(self, verb: str, args: BaseModel) -> HelperResponse:
         request_id = self._id_factory()
-        payload = json.dumps({"id": request_id, "verb": verb, "args": args.model_dump()}) + "\n"
+        payload = json.dumps({"verb": verb, "args": args.model_dump(), "requestId": request_id}) + "\n"
 
         try:
             async with asyncio.timeout(self._connect_timeout):
@@ -122,12 +121,9 @@ class HelperClient:
                 raise HelperResponseTooLarge(f"response exceeds {MAX_RESPONSE_BYTES} bytes")
 
             data = json.loads(line.decode("utf-8"))
-            return HelperResponse(
-                request_id=data.get("id", request_id),
-                ok=bool(data.get("ok", False)),
-                error=data.get("error"),
-                data=data.get("data"),
-            )
+            if not isinstance(data, dict) or set(data) != {"ok", "detail"} or type(data["ok"]) is not bool or not isinstance(data["detail"], str):
+                raise HelperError("invalid helper response")
+            return HelperResponse(request_id=request_id, ok=data["ok"], detail=data["detail"])
         finally:
             writer.close()
             with suppress(Exception):

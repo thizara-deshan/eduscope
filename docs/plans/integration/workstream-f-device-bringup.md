@@ -35,6 +35,7 @@
 - Shared GStreamer sockets remain the already-executed A/C paths `/tmp/{usb,rtsp,rtsp2,audio}.sock`. Consequently `PrivateTmp=false` is mandatory for pipeline-manager and STT; changing socket paths belongs to A/C, not F.
 - The current helper wire mismatch, first-seed hardware/user gap, relay candidate gap, expected mount omission, X11 session omission, and production build omission are corrected inside their existing F tasks exactly as recorded in the master-plan F gate flag dated 2026-09-08.
 - **STOP before F-02 execution:** the deploy/release owner must supply and reviewers must acknowledge a signed updater with a release manifest, provisioned trust root, fixed `check/apply/rollback` CLI, A/B target-image layout, boot-success marker, and automatic rollback satisfying `INV-FU-1/2`. The inspected target has one root filesystem and no updater. Fixture-only firmware calls are not acceptance.
+- **Approved development split (2026-09-10):** F-02 is executed in two internal phases without changing its master-plan ownership. F-02a may implement the helper, canonicalize clients, and run all host-side automated regressions before updater/device availability. Firmware handlers in F-02a must retain the fixed `/usr/libexec/eduscope-updater` argv and may be exercised only through an injected runner; this is development evidence, never updater acceptance. F-02b is the original on-device gate and real `describe` schema-validation witness. F-02 is not acceptance-complete, and F-03 must not start, until F-02b passes on the A/B target.
 - **STOP before F-12 execution:** D-10/D-11 require an actual campus PostgreSQL 16 host, DNS name, valid TLS certificate, and firewall route. Local Testcontainers do not replace the physical-phone/campus staging witness.
 
 ### Repository and test conventions
@@ -192,6 +193,8 @@
 
 ### Task F-02: Implement the privileged helper and canonicalize its clients
 
+F-02a is the host-side implementation and regression phase in Steps 2–8. F-02b is the release-owner/on-device acceptance gate in Step 1 plus validation of the real updater `describe` output. The specified F-02 commit closes F-02a only while F-02b is unavailable; it must be reported as such and must not be used to open F-03.
+
 **Files:**
 - Create: `deploy/provisioning/updater-interface.schema.json`
 - Create: `services/privileged-helper/pyproject.toml`
@@ -208,7 +211,7 @@
 - Consumes: systemd listener fd 3; `/etc/eduscope/helper.json`; canonical request `{verb,args,requestId}`; reviewed updater executable `/usr/libexec/eduscope-updater`.
 - Produces: one newline-delimited response `{ok:true,detail:string}` or `{ok:false,detail:string}`; `peer_credentials(socket)->PeerCredentials(pid,uid,gid)`; `VerbRegistry.dispatch(request,peer)`; JSON audit per request.
 
-- [ ] **Step 1: Satisfy the explicit signed-updater gate before changing code**
+- [ ] **Step 1 (F-02b): Satisfy the explicit signed-updater gate before device acceptance**
 
   Run:
 
@@ -221,6 +224,8 @@
   ```
 
   Expected: the release-owner document and `describe` agree on `interfaceVersion:1`, `signatureAlgorithm`, `trustRootSha256`, distinct `activeSlot`/`inactiveSlot`, `bootSuccessMarker`, and commands `check/apply/rollback`; `lsblk` proves the reported slots exist. On the currently inspected single-rootfs target this step fails: stop F execution and return to the Workstream F gate. Do not substitute scripts that merely return fixture JSON.
+
+  When the approved development split is active, a failure here blocks F-02b and every later F task, but does not block Steps 2–8 as F-02a. Record the failure; do not create a fake updater, release document, trust root, slot, or acceptance witness.
 
 - [ ] **Step 2: Write failing peer, framing, verb, and rate-limit tests**
 
@@ -239,7 +244,7 @@
 
 - [ ] **Step 4: Implement peer checking and socket-activated framing**
 
-  First encode the acknowledged release-owner document as `updater-interface.schema.json` and add a test that the real `describe` output validates against it; F does not choose or extend updater fields.
+  In F-02a, encode only the minimum interface fields already fixed by this plan in `updater-interface.schema.json` and validate representative test data. In F-02b, reconcile that schema with the acknowledged release-owner document and add the test that the real `describe` output validates against it; F does not choose or extend updater fields.
 
   `pyproject.toml` is complete:
 

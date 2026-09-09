@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eduscope.local/schemas/updater-interface-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["interfaceVersion", "signatureAlgorithm", "trustRootSha256", "activeSlot", "inactiveSlot", "bootSuccessMarker", "commands"],
+  "properties": {
+    "interfaceVersion": {"const": 1},
+    "signatureAlgorithm": {"type": "string", "minLength": 1, "maxLength": 64},
+    "trustRootSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "activeSlot": {"type": "string", "minLength": 1, "maxLength": 64},
+    "inactiveSlot": {"type": "string", "minLength": 1, "maxLength": 64},
+    "bootSuccessMarker": {"type": "string", "pattern": "^/[^\\u0000-\\u001f\\u007f]+$"},
+    "commands": {"type": "array", "prefixItems": [{"const": "check"}, {"const": "apply"}, {"const": "rollback"}], "items": false, "minItems": 3, "maxItems": 3}
+  }
+}

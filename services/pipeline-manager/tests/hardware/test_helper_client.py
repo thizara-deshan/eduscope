@@ -108,7 +108,7 @@ class TestNoGenericRequestMethod:
 
 @pytest.mark.asyncio
 async def test_set_led_sends_verb_and_mode_and_propagates_request_id() -> None:
-    connector, reader, writer = _connector_returning({"id": "will-be-overwritten", "ok": True})
+    connector, reader, writer = _connector_returning({"ok": True, "detail": "done"})
     client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector, id_factory=lambda: "req-1")
 
     response = await client.set_led("blink")
@@ -116,13 +116,16 @@ async def test_set_led_sends_verb_and_mode_and_propagates_request_id() -> None:
     sent = json.loads(writer.written.decode("utf-8"))
     assert sent["verb"] == "led.set"
     assert sent["args"] == {"mode": "blink"}
-    assert sent["id"] == "req-1"
+    assert sent["requestId"] == "req-1"
+    assert "id" not in sent
     assert response.ok is True
+    assert response.request_id == "req-1"
+    assert response.detail == "done"
 
 
 @pytest.mark.asyncio
 async def test_cycle_usb_hub_sends_verb_and_args() -> None:
-    connector, reader, writer = _connector_returning({"id": "req-2", "ok": True})
+    connector, reader, writer = _connector_returning({"ok": True, "detail": "cycled"})
     client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector, id_factory=lambda: "req-2")
 
     await client.cycle_usb_hub("1-2", 3)
@@ -158,7 +161,7 @@ async def test_response_timeout_raises_helper_timeout() -> None:
 
 @pytest.mark.asyncio
 async def test_oversize_response_is_rejected() -> None:
-    huge = {"id": "req-3", "ok": True, "data": {"padding": "x" * (17 * 1024)}}
+    huge = {"ok": True, "detail": "x" * (17 * 1024)}
     connector, _, _ = _connector_returning(huge)
     client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector)
     with pytest.raises(HelperResponseTooLarge):
@@ -167,7 +170,7 @@ async def test_oversize_response_is_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_writer_is_always_closed() -> None:
-    connector, _, writer = _connector_returning({"id": "req-4", "ok": True})
+    connector, _, writer = _connector_returning({"ok": True, "detail": "ok"})
     client = HelperClient(Path("/run/eduscope/helper.sock"), connector=connector)
     await client.set_led("on")
     assert writer.closed is True

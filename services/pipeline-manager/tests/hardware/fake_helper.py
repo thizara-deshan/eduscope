@@ -20,7 +20,11 @@ class FakeHelperServer:
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         line = await reader.readline()
         self.received_lines.append(line.decode("utf-8").rstrip("\n"))
-        response = self.responses.pop(0) if self.responses else {"id": "unknown", "ok": True}
+        request = json.loads(self.received_lines[-1])
+        if set(request) != {"verb", "args", "requestId"}:
+            response = {"ok": False, "detail": "invalid canonical request"}
+        else:
+            response = self.responses.pop(0) if self.responses else {"ok": True, "detail": "ok"}
         writer.write((json.dumps(response) + "\n").encode("utf-8"))
         await writer.drain()
         writer.close()
