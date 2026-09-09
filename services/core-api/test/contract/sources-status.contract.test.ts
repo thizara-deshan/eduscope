@@ -164,6 +164,7 @@ describe('sources status contract (openapi.yaml tag: sources — getSourcesStatu
     expect(() => zSourcesStatusPayload.parse(onlineRole)).not.toThrow();
 
     // Unplug: publisher reports offline, and the reading is repeated under T-HEALTH-STALE so the link stays fresh through the 10s debounce.
+    testApp.pm.setStatus({ publishers: statusWith('offline').publishers });
     for (let i = 0; i < 5; i += 1) {
       testApp.app.bus.publish('pm.status.resynced', statusWith('offline'));
       testApp.clock.advance(2000);
@@ -175,6 +176,9 @@ describe('sources status contract (openapi.yaml tag: sources — getSourcesStatu
     expect(findRole(zGetSourcesStatusResponse.parse(offline.body).items, 'lecturer-cam')?.state).toBe('offline');
 
     // No further telemetry — the link itself goes stale (T-HEALTH-STALE, 6s) and REST honestly reads unknown, never the last-healthy value.
+    testApp.pm.setOffline(true);
+    testApp.pm.dropConnections();
+    await waitFor(() => testApp.pm.openConnectionCount === 0);
     testApp.clock.advance(6000);
     await waitFor(() => lastFor(events, 'lecturer-cam')?.state === 'unknown');
 
