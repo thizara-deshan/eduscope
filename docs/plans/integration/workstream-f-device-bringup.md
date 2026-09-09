@@ -91,18 +91,32 @@
 
   ```text
   schemaVersion=1
-  image={name,sourceUrl,sha256,osId,osVersion,architecture,kernelRelease}
+  image={name|null,sourceUrl|null,sha256|null,osId,osVersion,architecture,kernelRelease}
   board={model,serial,memoryBytes}
   capture={vid,pid,serial|null,usbPortPath,videoByPath,v4lIndex,hubLocation,hubPort}
-  audio={micCardId,micPcmDevice,micControl,hdmi2CardId,hdmi2PcmDevice,format,rateHz,channels}
-  displays=[{role:projector|meeting|panel,edidSha256,observedConnector,mode,width,height,refreshHz}]
+  audio={micCardId,micPcmDevice,micControl,hdmi2CardId|null,hdmi2PcmDevice|null,format,rateHz,channels}
+  displays=[{role:projector|meeting|panel,edidSha256|null,observedConnector|null,mode|null,width|null,height|null,refreshHz|null}]
   touch={vid,pid,serial|null,name}
-  storage={recordingsUuid,filesystem,minBytes}
+  hdmiPassthrough={inputConnector|null,outputConnector|null,observedPath|null,latencyMs|null}
+  storage={recordingsUuid|null,filesystem,minBytes|null}
   network={wiredInterface}
   led={present:false,reason} | {present:true,sysfsName,activeValue}
   integrations={hallCode,titlePattern,timezone,ntpServers,quizPublicOrigin|null,llmEndpoint|null}
   chromium={forceHardwareAcceleration:false}
   ```
+
+  Image provenance (`image.name`, `image.sourceUrl`, and `image.sha256`) may be
+  `null` through F-08 when the original approved image artifact is unavailable.
+  F-09 is the named hard gate for resolving all three values: its clean-device
+  installer and acceptance procedure must reject a manifest with any unresolved
+  image-provenance value before flashing or installation.
+
+  When final room displays and their HDMI-audio mapping, passthrough wiring, or the dedicated recordings
+  volume are not yet installed, their observed fields above may be `null` in
+  F-01. F-04 is the named hard gate for resolving them: its renderer and
+  physical replug verification must reject any unresolved display, HDMI-audio,
+  passthrough, or recordings-volume value. The current root filesystem UUID
+  must not be substituted for the intended recordings volume.
 
   Assert display roles are exactly `{projector,meeting,panel}`, EDID hashes are unique, `micCardId`/`hdmi2CardId` are nonnumeric ALSA IDs, UUID/VID/PID/hash formats are strict, `filesystem` is `ext4`, audio is `S16LE/48000/2`, panel is `1280×800`, and `--deployable` rejects empty strings, sentinel words, example domains, unresolved required hosts, duplicate identities, and a capture symlink not under `/dev/v4l/by-path/`.
 
@@ -144,7 +158,7 @@
   printf 'PASS inventory captured: %s\n' "$evidence_dir"
   ```
 
-  Copy facts into the private manifest with these mappings: H-1 capture tuple/path/hub, H-2 mic ALSA IDs/control, H-3 three display EDIDs/connectors/modes plus touch tuple, H-4 LED present/config or explicit absent reason, H-5 observed HDMI passthrough topology, P-1 hall/title/timezone, P-3 campus origin and LLM endpoint. Record the exact supported-image source URL and SHA-256; the current installed version string alone is insufficient.
+  Copy facts into the private manifest with these mappings: H-1 capture tuple/path/hub, H-2 canonical room-mic ALSA IDs/control, H-3 three display EDIDs/connectors/modes plus touch tuple, H-4 LED present/config or explicit absent reason, H-5 observed HDMI passthrough topology in `hdmiPassthrough`, P-1 hall/title/timezone, P-3 campus origin and LLM endpoint. Embedded capture-card audio is not the room mic and is not stored in `audio.mic*`. Record the exact supported-image name, source URL, and SHA-256 when known; otherwise set all three to `null`. F-09 must resolve all three and reject unresolved image provenance before flashing or installation; the current installed version string alone is insufficient. Fields explicitly deferred above remain `null` until F-04; do not substitute the root filesystem for the recordings volume.
 
 - [ ] **Step 4: Validate both the example and the private deployable manifest**
 

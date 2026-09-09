@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "image": {"name": null, "sourceUrl": null, "sha256": null, "osId": "ubuntu", "osVersion": "24.04", "architecture": "aarch64", "kernelRelease": "6.1.0-1025-rockchip"},
+  "board": {"model": "Radxa ROCK 5 ITX", "serial": "example-board-0001", "memoryBytes": 17179869184},
+  "capture": {"vid": "534d", "pid": "2109", "serial": "example-capture-0001", "usbPortPath": "platform-xhci-hcd.5.auto-usb-0:1.2", "videoByPath": "/dev/v4l/by-path/platform-xhci-hcd.5.auto-usb-0:1.2:1.0-video-index0", "v4lIndex": 0, "hubLocation": "1-1", "hubPort": 2},
+  "audio": {"micCardId": "USBMic", "micPcmDevice": "hw:CARD=USBMic,DEV=0", "micControl": "Mic Capture Switch", "hdmi2CardId": "rockchiphdmi1", "hdmi2PcmDevice": "hw:CARD=rockchiphdmi1,DEV=0", "format": "S16LE", "rateHz": 48000, "channels": 2},
+  "displays": [
+    {"role": "projector", "edidSha256": "1111111111111111111111111111111111111111111111111111111111111111", "observedConnector": "HDMI-A-1", "mode": "1920x1080", "width": 1920, "height": 1080, "refreshHz": 60},
+    {"role": "meeting", "edidSha256": "2222222222222222222222222222222222222222222222222222222222222222", "observedConnector": "HDMI-A-2", "mode": "1920x1080", "width": 1920, "height": 1080, "refreshHz": 60},
+    {"role": "panel", "edidSha256": "3333333333333333333333333333333333333333333333333333333333333333", "observedConnector": "DP-1", "mode": "1280x800", "width": 1280, "height": 800, "refreshHz": 60}
+  ],
+  "touch": {"vid": "222a", "pid": "0001", "serial": null, "name": "ILITEK Multi-Touch-V3000"},
+  "hdmiPassthrough": {"inputConnector": "HDMI-IN", "outputConnector": "HDMI-A-1", "observedPath": "laptop HDMI output to capture passthrough input to projector", "latencyMs": 50},
+  "storage": {"recordingsUuid": "123e4567-e89b-42d3-a456-426614174000", "filesystem": "ext4", "minBytes": 1000000000000},
+  "network": {"wiredInterface": "enP4p65s0"},
+  "led": {"present": false, "reason": "No dedicated recording LED fitted to the example device"},
+  "integrations": {"hallCode": "F1301", "titlePattern": "{hallCode}-{yyyy}/{MM}/{dd}-{hh}.{mm}{AM|PM}", "timezone": "Asia/Colombo", "ntpServers": ["ntp.ubuntu.com"], "quizPublicOrigin": null, "llmEndpoint": null},
+  "chromium": {"forceHardwareAcceleration": false}
+}
