@@ -1,16 +1,24 @@
 import { createHash } from 'node:crypto';
+import { closeSync, constants, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { inArray } from 'drizzle-orm';
 import type { DrizzleDb } from '../../db/client.js';
 import { streamTargets } from '../../db/schema.js';
 import type { Clock } from '../../lib/clock.js';
 import type { HelperClient } from '../../lib/helper-client.js';
 import type { IdGenerator } from '../../lib/ids.js';
+import type { SecretStore } from '../../lib/secret-store.js';
 import type { RelayTargetActivator } from '../channels/machine.js';
 
 export interface RedactedRelayTarget {
   readonly id: string;
   readonly platform: 'youtube' | 'facebook' | 'custom-rtmp';
   readonly ingestUrl: string;
+}
+
+export interface RelayCandidateTarget extends RedactedRelayTarget {
+  readonly streamKey: string;
+  readonly requiresTlsBridge: boolean;
 }
 
 /**
@@ -39,16 +47,13 @@ export function renderRelayTargets(
   return ordered;
 }
 
-/** A deterministic digest over the redacted, ordered target list — identical input always yields the identical digest, so an unrelated field edit never bounces the relay. */
-export function digestRelayTargets(targets: readonly RedactedRelayTarget[]): string {
-  return createHash('sha256').update(JSON.stringify(targets)).digest('hex');
-}
-
 export interface RelayConfigDeps {
   db: DrizzleDb;
   helper: HelperClient;
   clock: Clock;
   ids: IdGenerator;
+  secrets: SecretStore;
+  candidatePath: string;
 }
 
 /**
@@ -90,12 +95,42 @@ export class RelayConfigActivator implements RelayTargetActivator {
   async #reload(): Promise<void> {
     const configuredIds = this.#activeConfiguredIds ?? [];
     const rows = configuredIds.length === 0 ? [] : this.#deps.db.select().from(streamTargets).where(inArray(streamTargets.id, configuredIds)).all();
-    const targets = renderRelayTargets(configuredIds, rows);
-    const digest = digestRelayTargets(targets);
+    const redactedTargets = renderRelayTargets(configuredIds, rows);
+    const byId = new Map(rows.map((row) => [row.id, row] as const));
+    const targets: RelayCandidateTarget[] = redactedTargets.map((target) => {
+      const row = byId.get(target.id)!;
+      const streamKey = this.#deps.secrets.get(row.streamKeyRef);
+      if (streamKey === null) throw new Error(`relay target secret unavailable: ${target.id}`);
+      return { ...target, streamKey, requiresTlsBridge: row.requiresTlsBridge };
+    });
+    const bytes = Buffer.from(JSON.stringify({ version: 1, targets }));
+    const digest = createHash('sha256').update(bytes).digest('hex');
     if (digest === this.#lastDigest) return;
 
+    stageCandidate(this.#deps.candidatePath, bytes);
     const now = this.#deps.clock.now();
     await this.#deps.helper.request('relay.reload', { configDigest: digest }, this.#deps.ids.next(now));
     this.#lastDigest = digest;
+  }
+}
+
+function stageCandidate(candidatePath: string, bytes: Buffer): void {
+  const directory = dirname(candidatePath);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const tempPath = join(directory, `.${process.pid}-${Date.now()}.candidate`);
+  let fd: number | undefined;
+  try {
+    fd = openSync(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    writeSync(fd, bytes);
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    renameSync(tempPath, candidatePath);
+    const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY);
+    try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+  } catch (error) {
+    if (fd !== undefined) closeSync(fd);
+    try { unlinkSync(tempPath); } catch {}
+    throw error;
   }
 }

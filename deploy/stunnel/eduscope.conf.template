@@ -1,0 +1,9 @@
+foreground = no
+pid = /run/stunnel4/eduscope.pid
+client = yes
+verifyChain = yes
+CAfile = /etc/ssl/certs/ca-certificates.crt
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+
+@SERVICE_SECTIONS@

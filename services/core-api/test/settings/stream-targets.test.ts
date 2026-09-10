@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -11,7 +12,7 @@ import { loadConfig } from '../../src/config.js';
 import { channelConfigs, lectureSessions, storageVolumes, streamTargets, users } from '../../src/db/schema.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
-import { digestRelayTargets, renderRelayTargets } from '../../src/modules/relay/config.js';
+import { renderRelayTargets } from '../../src/modules/relay/config.js';
 import { FakeClock } from '../fakes/clock.js';
 import { InMemoryHelperTransport } from '../fakes/helper-server.js';
 import { FakePipelineManager } from '../fakes/pipeline-manager.js';
@@ -35,6 +36,7 @@ interface TestApp {
   transport: InMemoryHelperTransport;
   lecturerToken: string;
   adminToken: string;
+  candidatePath: string;
 }
 
 async function loginAs(app: FastifyInstance, username: string, password: string): Promise<string> {
@@ -62,7 +64,8 @@ async function startTestApp(): Promise<TestApp> {
 
   const ids = new UlidGenerator();
   const transport = new InMemoryHelperTransport();
-  const app = await buildApp({ config, clock: new FakeClock(NOW), ids, helperTransport: transport });
+  const candidatePath = join(dir, 'relay', 'candidate.json');
+  const app = await buildApp({ config, clock: new FakeClock(NOW), ids, helperTransport: transport, relayCandidatePath: candidatePath });
   await app.lifecycle.start();
   await waitFor(() => pm.openConnectionCount === 1);
 
@@ -91,7 +94,7 @@ async function startTestApp(): Promise<TestApp> {
   const lecturerToken = await loginAs(app, 'lecturer1', 'Password1');
   const adminToken = await loginAs(app, 'admin1', 'Password1');
 
-  return { app, dir, pm, transport, lecturerToken, adminToken };
+  return { app, dir, pm, transport, lecturerToken, adminToken, candidatePath };
 }
 
 async function stopTestApp(testApp: TestApp): Promise<void> {
@@ -211,7 +214,6 @@ describe('stream targets (openapi.yaml tag: settings — listStreamTargets/creat
     const currentRows = testApp.app.db.select().from(streamTargets).all();
     const expected = renderRelayTargets(configuredIds, currentRows);
     expect(expected.map((t) => t.id)).toEqual([a.json.id, b.json.id]);
-    const expectedDigest = digestRelayTargets(expected);
 
     // Enabling the streaming channel requires an active recording (CH-01/`session.not-active`).
     await testApp.app.inject({ method: 'POST', url: '/api/v1/recording/start', headers: { authorization: `Bearer ${testApp.adminToken}` } });
@@ -221,7 +223,13 @@ describe('stream targets (openapi.yaml tag: settings — listStreamTargets/creat
 
     await testApp.app.inject({ method: 'POST', url: '/api/v1/channels/streaming/enable', headers: { authorization: `Bearer ${testApp.adminToken}` } });
     await waitFor(() => relayReloadDigests(testApp).length > 0);
-    expect(relayReloadDigests(testApp)).toEqual([expectedDigest]);
+    const candidateBytes = readFileSync(testApp.candidatePath);
+    const candidate = JSON.parse(candidateBytes.toString()) as { version: number; targets: Array<{ id: string; streamKey: string }> };
+    expect(candidate.version).toBe(1);
+    expect(candidate.targets.map((target) => target.id)).toEqual([a.json.id, b.json.id]);
+    expect(candidate.targets.map((target) => target.streamKey)).toEqual(['ka', 'kb']);
+    expect(statSync(testApp.candidatePath).mode & 0o777).toBe(0o600);
+    expect(relayReloadDigests(testApp)).toEqual([createHash('sha256').update(candidateBytes).digest('hex')]);
 
     // Disabling reloads the relay to the empty set exactly once, never repeating the same non-empty digest.
     await testApp.app.inject({ method: 'POST', url: '/api/v1/channels/streaming/disable', headers: { authorization: `Bearer ${testApp.adminToken}` } });

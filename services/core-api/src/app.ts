@@ -147,6 +147,8 @@ export interface BuildAppOptions {
   quizServiceBaseUrl?: string;
   /** B-32 quiz-sync boundary; tests inject a fixture bearer. Production resolves `null` (dormant) until B-34 wires the deploy-minted device credential (DR-03). */
   quizDeviceBearer?: string;
+  /** F-06 relay candidate seam; production always uses the fixed runtime path. */
+  relayCandidatePath?: string;
 }
 
 function zodIssuesToDetail(error: ZodError): string {
@@ -425,6 +427,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('uploadScheduler', uploadScheduler);
   registerUploadRoutes(app, authService, uploadScheduler);
 
+  const secretStore = await SecretStore.create({
+    dir: join(dirname(config.dbPath), 'secrets'),
+    key: config.secretboxKey,
+    clock,
+    ids,
+  });
+
   const relayConfig = new RelayConfigActivator({
     get db(): DrizzleDb {
       return app.db;
@@ -432,6 +441,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     helper: helperClient,
     clock,
     ids,
+    secrets: secretStore,
+    candidatePath: options.relayCandidatePath ?? '/run/eduscope/relay/candidate.json',
   });
   // Same dormant-unless-asked-for shape as the upload adapter above: outside
   // test env the real relay is always wired; inside test env it only wires
@@ -472,12 +483,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerSourceRoutes(app, authService, sourceExecutor);
   registerJpegPreviewRoute(app, authService, pmClient);
 
-  const secretStore = await SecretStore.create({
-    dir: join(dirname(config.dbPath), 'secrets'),
-    key: config.secretboxKey,
-    clock,
-    ids,
-  });
   if (config.nodeEnv !== 'test' || deviceBootstrap) {
     lifecycle.register({
       name: 'source-binding-bootstrap',

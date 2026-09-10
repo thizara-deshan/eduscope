@@ -1271,11 +1271,21 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   ```bash
   pnpm --filter @eduscope/core-api test -- test/settings/stream-targets.test.ts test/channels/runtime.test.ts
   python3 -m unittest deploy.tests.test_proxy_config deploy.tests.test_relay_reload -v
-  node deploy/tests/single-origin-smoke.mjs --origin http://127.0.0.1
-  nginx -t
+  node deploy/tests/single-origin-smoke.mjs
   ```
 
-  Expected: `PASS relay candidate`, `PASS single-origin REST WS RANGE`, and `nginx -t` successful; the PM fixture ledger shows zero record stop/restart calls during reload.
+  `single-origin-smoke.mjs` is self-contained: it starts a temporary loopback
+  Core HTTP/WS/Range fixture on an ephemeral port, renders
+  `deploy/nginx/eduscope.conf` into a temporary Nginx prefix with another
+  ephemeral loopback port plus temporary panel/config files, runs `nginx -t`
+  against that complete temporary configuration, starts that Nginx without
+  installing or replacing host configuration, performs the REST, both
+  WS, and Range probes through the temporary single origin, and always stops
+  both child processes and removes the temporary prefix. It must fail if any
+  probe reaches the fixture without passing through Nginx. `--origin URL`
+  remains available only for the later installed-device smoke in F-08.
+
+  Expected: `PASS relay candidate`, `PASS single-origin REST WS RANGE`, and the temporary `nginx -t` successful; the PM fixture ledger shows zero record stop/restart calls during reload.
 
 - [ ] **Step 7: Run contract regression and commit**
 

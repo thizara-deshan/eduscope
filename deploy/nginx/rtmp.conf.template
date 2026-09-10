@@ -1,0 +1,12 @@
+rtmp {
+  server {
+    listen 127.0.0.1:1935;
+    chunk_size 4096;
+    application live {
+      live on;
+      record off;
+      deny play all;
+      include /run/eduscope/relay/nginx-push.conf;
+    }
+  }
+}
