@@ -82,4 +82,10 @@ describe('RuntimeConfigProvider', () => {
     );
     await waitFor(() => expect(screen.getByTestId('probe').textContent).toBe('development:mock'));
   });
+
+  it('provides the demo acceptance notice', () => {
+    function Notice() { return <div>{useRuntimeConfig().notices?.[0]}</div>; }
+    render(<RuntimeConfigProvider config={{...mixedConfig,deploymentProfile:'demo-staging',notices:['placeholder / firmware acceptance still open']}}><Notice /></RuntimeConfigProvider>);
+    expect(screen.getByText('placeholder / firmware acceptance still open')).toBeTruthy();
+  });
 });

@@ -5,6 +5,7 @@ import { OfflineMarker } from '../shell/offline-marker.js';
 import { PanelHeader } from '../shell/panel-header.js';
 import { RecordingChrome } from '../shell/recording-chrome.js';
 import { StreamingWhilePaused } from '../shell/streaming-while-paused.js';
+import { useOptionalRuntimeConfig } from '../config/runtime-config.js';
 
 /**
  * No header, alerts or streaming-while-paused before login (C-1: nothing is
@@ -21,10 +22,12 @@ const AUTH_ROUTE_PATHS = new Set(['/login', '/login/reset']);
  */
 export function PanelShell() {
   const location = useLocation();
+  const runtimeConfig = useOptionalRuntimeConfig();
   const showAuthenticatedChrome = !AUTH_ROUTE_PATHS.has(location.pathname);
 
   return (
     <OverlayProvider>
+      {(runtimeConfig?.notices??[]).map(notice=><div className="us-deployment-notice" role="status" key={notice}>{notice}</div>)}
       {showAuthenticatedChrome && <PanelHeader />}
       <RecordingChrome />
       {showAuthenticatedChrome && <StreamingWhilePaused />}

@@ -2,5 +2,7 @@
   "apiBaseUrl": "/api/v1",
   "quizBaseUrl": "@QUIZ_PUBLIC_ORIGIN@",
   "environment": "production",
+  "deploymentProfile": "production",
+  "notices": [],
   "adapters": { "default": "real", "overrides": {} }
 }

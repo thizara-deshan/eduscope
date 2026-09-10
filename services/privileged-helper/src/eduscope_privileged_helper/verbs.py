@@ -76,6 +76,9 @@ class VerbRegistry:
             verb, request_id = request["verb"], request["requestId"]
             if verb not in ALL_VERBS or not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or any(ord(c) < 32 for c in request_id):
                 raise ValueError("invalid request")
+            if verb in {"firmware.apply", "firmware.rollback"} and self.config.get("firmwareMode") == "disabled":
+                _exact(request["args"], set(), {"version"})
+                return {"ok": False, "detail": "placeholder / firmware acceptance still open"}
             operation = self._operation(verb, request["args"])
             if not self._take_rate_limit(verb):
                 return {"ok": False, "detail": "rate limit exceeded"}

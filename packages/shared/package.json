@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./schemas": "./src/schemas/rest.ts" },
+  "exports": {".":{"types":"./src/index.ts","development":"./src/index.ts","default":"./dist/src/index.js"},"./schemas":{"types":"./src/schemas/rest.ts","development":"./src/schemas/rest.ts","default":"./dist/src/schemas/rest.js"}},
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "codegen": "openapi-ts -f codegen.config.ts && openapi-ts -f quiz-codegen.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

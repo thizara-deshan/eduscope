@@ -5,6 +5,8 @@
   "type": "module",
   "engines": { "node": ">=22.13" },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp -a migrations dist/migrations",
+    "start": "node dist/src/server.js",
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -19,6 +19,8 @@ export const zRuntimeConfig = z
     apiBaseUrl: z.string().min(1),
     quizBaseUrl: z.string().url(),
     environment: z.enum(['development', 'integration', 'production']),
+    deploymentProfile: z.enum(['production', 'demo-staging']).optional(),
+    notices: z.array(z.string().min(1)).optional(),
     adapters: z
       .object({
         default: z.enum(['mock', 'real']),
@@ -38,6 +40,7 @@ export const zRuntimeConfig = z
         message: 'production overrides are forbidden',
       });
     }
+    if(value.deploymentProfile==='demo-staging'&&!value.notices?.includes('placeholder / firmware acceptance still open'))ctx.addIssue({code:'custom',path:['notices'],message:'demo-staging requires acceptance notice'});
   });
 
 export type RuntimeConfig = z.infer<typeof zRuntimeConfig>;
@@ -47,6 +50,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   apiBaseUrl: '/api/v1',
   quizBaseUrl: 'https://quiz.example.edu',
   environment: 'development',
+  deploymentProfile: 'demo-staging', notices: ['placeholder / firmware acceptance still open'],
   adapters: { default: 'mock', overrides: {} },
 };
 

@@ -9,6 +9,8 @@ import { AuthProvider } from '../auth/auth-context.js';
 import { ClientContext } from '../client/client-provider.js';
 import '../styles/tokens.css';
 import { routeObjects } from './router.js';
+import { RuntimeConfigProvider } from '../config/runtime-config.js';
+import type { RuntimeConfig } from '@eduscope/api-client';
 
 function makeUser(): User {
   return {
@@ -24,7 +26,7 @@ function makeUser(): User {
   };
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, runtime?: RuntimeConfig) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const stub = {
     getProvisioning: vi.fn(() => new Promise(() => {})),
@@ -36,10 +38,10 @@ function renderAt(path: string) {
     createElement(
       QueryClientProvider,
       { client: queryClient },
-      createElement(ClientContext.Provider, { value: stub }, createElement(AuthProvider, {
-        initialUser: makeUser(),
-        children,
-      })),
+      createElement(RuntimeConfigProvider, {
+        config: runtime ?? {apiBaseUrl:'/api/v1',quizBaseUrl:'https://quiz.example.edu',environment:'production',deploymentProfile:'production',notices:[],adapters:{default:'real',overrides:{}}},
+        children: createElement(ClientContext.Provider, { value: stub }, createElement(AuthProvider, {initialUser: makeUser(), children})),
+      }),
     );
   render(createElement(RouterProvider, { router }), { wrapper });
 }
@@ -61,5 +63,10 @@ describe('PanelShell — header visibility (S-01 §12, S-02 §12)', () => {
     expect(document.querySelector('.us-header')).not.toBeNull();
     expect(document.querySelector('.us-notifications')).not.toBeNull();
     expect(document.querySelector('.us-alertlane')).toBeNull();
+  });
+
+  it.each(['/', '/advanced/library', '/login'])('shows demo notice at %s', (path) => {
+    renderAt(path,{apiBaseUrl:'/api/v1',quizBaseUrl:'https://quiz.example.edu',environment:'production',deploymentProfile:'demo-staging',notices:['placeholder / firmware acceptance still open'],adapters:{default:'real',overrides:{}}});
+    expect(document.querySelector('.us-deployment-notice')?.textContent).toBe('placeholder / firmware acceptance still open');
   });
 });

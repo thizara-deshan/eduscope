@@ -47,6 +47,13 @@ class VerbTests(unittest.TestCase):
         self.assertTrue(self.request("relay.reload", {"configDigest": digest})["ok"])
         self.assertEqual(self.runner.calls[-1][0], ("/usr/libexec/eduscope-relay-reload", digest))
 
+    def test_demo_firmware_mutations_do_not_invoke_runner(self):
+        self.config["firmwareMode"] = "disabled"
+        before = len(self.runner.calls)
+        for verb in ("firmware.apply", "firmware.rollback"):
+            self.assertEqual(self.request(verb, {}), {"ok": False, "detail": "placeholder / firmware acceptance still open"})
+        self.assertEqual(len(self.runner.calls), before)
+
     def test_exact_argv_for_hub_power_volume_format_mount_unmount_and_smart(self):
         from unittest.mock import patch
         self.assertTrue(self.request("usbhub.cycle", {"location": "1-2", "port": 3})["ok"])

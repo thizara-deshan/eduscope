@@ -115,6 +115,17 @@ body {
 
 button { font-family: inherit; cursor: pointer; }
 
+.us-deployment-notice {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 10000;
+  padding: 8px 16px;
+  background: #7a3100;
+  color: #fff;
+  text-align: center;
+  font-weight: 700;
+}
+
 /* Every touch target meets the floor. */
 :where(button, a[role="button"], [role="tab"]) { min-height: var(--tap-min); }
 

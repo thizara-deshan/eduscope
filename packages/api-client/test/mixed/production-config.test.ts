@@ -26,9 +26,15 @@ describe('E-50 production runtime config', () => {
       apiBaseUrl: '/api/v1',
       quizBaseUrl: 'https://quiz.campus.example.edu',
       environment: 'production',
+      deploymentProfile: 'production',
+      notices: [],
       adapters: { default: 'real', overrides: {} },
     });
     expect(zRuntimeConfig.parse(parsed).adapters).toEqual({ default: 'real', overrides: {} });
+  });
+
+  it('rejects demo staging without the acceptance notice', () => {
+    expect(zRuntimeConfig.safeParse({apiBaseUrl:'/api/v1',quizBaseUrl:'https://quiz.campus.example.edu',environment:'production',deploymentProfile:'demo-staging',notices:[],adapters:{default:'real',overrides:{}}}).success).toBe(false);
   });
 
   it('the template placeholder is unresolved until deploy substitution', () => {

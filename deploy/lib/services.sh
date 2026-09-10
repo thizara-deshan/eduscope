@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2154
+install_and_verify_units(){ fail_stage services;[[ $EDUSCOPE_INSTALL_DRY_RUN == false ]]||{ action 'verify and enable units';return;};ln -sfn "$release_target" /opt/eduscope/current.new;mv -Tf /opt/eduscope/current.new /opt/eduscope/current;systemctl daemon-reload;udevadm control --reload;systemctl enable eduscope-helper.socket eduscope-runtime-config.service eduscope-pipeline-manager.service eduscope-core-api.service eduscope-stt.service eduscope-slide.service eduscope-question.service eduscope-kiosk.service nginx.service;systemctl disable eduscope-stunnel.service; }
