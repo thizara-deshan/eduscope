@@ -59,6 +59,7 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertNotIn("Requires=eduscope-pipeline-manager.service", core)
         kiosk = self.read("eduscope-kiosk.service")
         self.assertIn("wait-http.py http://127.0.0.1:5000/healthz 60", kiosk)
+        self.assertIn("Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production", kiosk)
         stunnel = self.read("eduscope-stunnel.service")
         self.assertIn("ExecStartPre=/usr/libexec/eduscope-stunnel-validate /run/eduscope/relay/stunnel.conf", stunnel)
         self.assertIn("ExecStart=/usr/bin/stunnel4 /run/eduscope/relay/stunnel.conf", stunnel)

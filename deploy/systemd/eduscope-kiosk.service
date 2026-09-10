@@ -10,6 +10,7 @@ User=eduscope-kiosk
 Group=eduscope-kiosk
 SupplementaryGroups=video render
 Environment=DISPLAY=:0
+Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production
 ExecStartPre=/opt/eduscope/current/deploy/systemd/wait-http.py http://127.0.0.1:5000/healthz 60
 ExecStart=/opt/eduscope/current/deploy/kiosk/launcher.sh
 Restart=on-failure
