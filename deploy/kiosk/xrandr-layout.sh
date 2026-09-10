@@ -37,8 +37,8 @@ if [[ "$profile" == demo-staging ]]; then
     exit 78
   fi
   touch_name=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["touch"]["name"])' "$manifest")
-  xrandr --output HDMI-1 --mode 1280x800 --pos 0x0 --primary \
-    --output DP-2 --auto --pos 1280x0
+  xrandr --output HDMI-1 --auto --pos 0x0 --primary \
+    --output DP-2 --auto --right-of HDMI-1
   xinput map-to-output "$touch_name" HDMI-1
   printf 'multi-display acceptance open\n'
   exit 0
