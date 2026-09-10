@@ -197,6 +197,22 @@ describe('library routes (openapi.yaml tag: recordings — listRecordings, getRe
     expect((byQ.json() as { items: Array<{ id: string }> }).items.map((r) => r.id)).toEqual(['r-1']);
   });
 
+  it('listRecordings: omits zero-segment start failures that cannot satisfy the Recording contract', async () => {
+    testApp = await startTestApp();
+    seedRecording(testApp, { recordingId: 'r-ready', sessionId: 's-ready', ownerUserId: testApp.ownerId, startedAt: NOW });
+    seedRecording(testApp, { recordingId: 'r-no-media', sessionId: 's-no-media', ownerUserId: testApp.ownerId, startedAt: NOW });
+    testApp.app.db.update(recordings).set({ segmentCount: 0 }).where(eq(recordings.id, 'r-no-media')).run();
+
+    const response = await testApp.app.inject({
+      method: 'GET',
+      url: '/api/v1/recordings',
+      headers: { authorization: `Bearer ${testApp.ownerToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as { items: Array<{ id: string }> }).items.map((row) => row.id)).toEqual(['r-ready']);
+  });
+
   it('listRecordings: cursor is a (startedAt, id) keyset — paging never repeats or skips a row', async () => {
     testApp = await startTestApp();
     const times = [0, 1, 2, 3, 4].map((i) => new Date(NOW.getTime() + i * 60_000));

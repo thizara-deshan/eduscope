@@ -18,6 +18,8 @@ export interface RemovedRow {
 
 export interface UseRecordings {
   loading: boolean;
+  /** Initial REST failure; never reinterpret a failed contract/transport read as an empty device. */
+  error: boolean;
   /** REST rows patched by live artifact/upload.job — the same "no client owner-filter" page the server returned (C-1). */
   rows: readonly Recording[];
   /** Rows an artifact{deleted} pulled out from under the user (state 9/10) — dropped from `rows`. */
@@ -83,6 +85,7 @@ export function useRecordings(filters: LibraryFilters): UseRecordings {
 
   return {
     loading: query.isPending,
+    error: query.isError && query.data === undefined,
     rows,
     removed,
     hasMore: query.hasNextPage ?? false,

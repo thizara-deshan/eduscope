@@ -49,6 +49,17 @@ describe('useRecordings (S-21 paged list + live merge)', () => {
     expect(result.current.rows.map((r) => r.id)).toEqual(['R1', 'R2']);
   });
 
+  it('surfaces a failed list request instead of presenting it as an empty library', async () => {
+    const listRecordings = vi.fn(() => Promise.reject(new Error('invalid recording response')));
+    const wrapper = build(listRecordings as unknown as EduscopeClient['listRecordings']);
+
+    const { result } = renderHook(() => useRecordings({}), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe(true);
+    expect(result.current.rows).toEqual([]);
+  });
+
   it('a filter change re-issues listRecordings with the param and a reset cursor', async () => {
     const listRecordings = vi.fn<EduscopeClient['listRecordings']>(() =>
       Promise.resolve({ items: [rec({})], nextCursor: null }));

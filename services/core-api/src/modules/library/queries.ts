@@ -1,5 +1,5 @@
 import type { Recording, RecordingDetail, RecordingFile, RecordingSegment } from '@eduscope/shared';
-import { and, desc, eq, lt, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, ne, or, sql } from 'drizzle-orm';
 import { ProblemError } from '../../contracts/problem.js';
 import type { DrizzleDb } from '../../db/client.js';
 import { lectureSessions, recordingFiles, recordingSegments, recordings, uploadJobs, users } from '../../db/schema.js';
@@ -104,7 +104,10 @@ function joinedQuery(db: DrizzleDb) {
 
 /** `listRecordings` (openapi.yaml, design/core-api.md §5.3): server-side ownership (INV-RC-5), filters, and `(startedAt, id)` keyset pagination — never a client-filtered page. */
 export function listRecordings(db: DrizzleDb, actor: AuthContext, query: ListRecordingsQuery): ListRecordingsResult {
-  const conditions = [];
+  // The public Recording contract requires segmentCount >= 1. A start that
+  // failed before opening its first segment has no playable artifact and must
+  // not poison validation of the whole library page.
+  const conditions = [gt(recordings.segmentCount, 0)];
 
   if (actor.role === 'lecturer') {
     conditions.push(eq(recordings.ownerUserId, actor.userId));
@@ -131,7 +134,7 @@ export function listRecordings(db: DrizzleDb, actor: AuthContext, query: ListRec
       or(
         lt(lectureSessions.startedAt, cursor.startedAt),
         and(eq(lectureSessions.startedAt, cursor.startedAt), lt(recordings.id, cursor.id)),
-      ),
+      )!,
     );
   }
 

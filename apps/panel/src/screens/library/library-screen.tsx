@@ -31,7 +31,7 @@ export function LibraryScreen(): JSX.Element {
   const [filters, setFilters] = useState<LibraryFiltersValue>({});
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { loading, rows, removed, hasMore, loadMore, loadingMore } = useRecordings(filters);
+  const { loading, error, rows, removed, hasMore, loadMore, loadingMore } = useRecordings(filters);
   const uploadJobs = useUploadJobEvents();
 
   const toggleSelected = (id: string) => {
@@ -104,6 +104,11 @@ export function LibraryScreen(): JSX.Element {
             <li key={i} className="us-reclist__item us-reclist__item--skeleton" data-testid="row-skeleton" />
           ))}
         </ul>
+      ) : error ? (
+        <div className="us-library__empty" role="alert">
+          <p>Recordings could not be loaded.</p>
+          <p>Please leave this screen and try again.</p>
+        </div>
       ) : (
         <>
       {removed.length > 0 ? (

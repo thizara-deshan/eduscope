@@ -78,6 +78,13 @@ describe('LibraryScreen (S-21)', () => {
     expect(screen.getByLabelText('Search recordings')).toBeVisible();
   });
 
+  it('failed request: reports that recordings could not be loaded instead of claiming the device is empty', async () => {
+    const listRecordings = vi.fn(() => Promise.reject(new Error('invalid response')));
+    renderLibrary({ viewer: admin, listRecordings: listRecordings as unknown as EduscopeClient['listRecordings'] });
+    await waitFor(() => expect(screen.getByText('Recordings could not be loaded.')).toBeInTheDocument());
+    expect(screen.queryByText('No recordings on this device.')).not.toBeInTheDocument();
+  });
+
   it('keeps filters visible when an active search returns no rows', async () => {
     const listRecordings = vi.fn(() => Promise.resolve({ items: [], nextCursor: null }));
     renderLibrary({ viewer: admin, listRecordings });
