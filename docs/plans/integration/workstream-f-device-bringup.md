@@ -1606,7 +1606,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   }
   ```
 
-  Add exactly `"build":"tsc -p tsconfig.build.json"` and `"start":"node dist/src/server.js"` to core's existing scripts. Build order is shared → core → panel. Also build quiz-service/quiz for the separate campus bundle; do not install D as a device unit.
+  Add exactly `"build":"tsc -p tsconfig.build.json && cp -a migrations dist/migrations"` and `"start":"node dist/src/server.js"` to core's existing scripts. The copy is required because `dist/src/db/migrate.js` resolves its immutable migration bundle at `dist/migrations`; `test-production-build.mjs` must prove the compiled process can migrate a new temporary database and serve `/healthz`. Build order is shared → core → panel. Also build quiz-service/quiz for the separate campus bundle; do not install D as a device unit.
 
 - [ ] **Step 4: Implement the ten installer stages exactly**
 
