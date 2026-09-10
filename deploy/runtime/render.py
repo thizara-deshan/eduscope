@@ -72,6 +72,19 @@ def _atomic_write(directory: pathlib.Path, name: str, content: str, mode: int, u
         os.close(dir_fd)
 
 
+def _write_outputs(files, output_root: pathlib.Path, public_output_root: pathlib.Path):
+    for relative, (content, mode, (uid, gid)) in files.items():
+        path = pathlib.PurePosixPath(relative)
+        if path.is_absolute() or '..' in path.parts:
+            raise ValueError('invalid output path')
+        _atomic_write(output_root / pathlib.Path(*path.parts[:-1]), path.name, content, mode, uid, gid)
+
+    public_output_root.mkdir(parents=True, exist_ok=True, mode=0o755)
+    os.chmod(public_output_root, 0o755)
+    public_content = files['config.json'][0]
+    _atomic_write(public_output_root, 'config.json', public_content, 0o644, os.getuid(), os.getgid())
+
+
 def _env(lines):
     for value in lines.values():
         if '\n' in str(value) or '\r' in str(value):
@@ -104,6 +117,7 @@ def main():
     parser.add_argument('--provisioning', required=True, type=pathlib.Path)
     parser.add_argument('--secrets', required=True, type=pathlib.Path)
     parser.add_argument('--output-root', required=True, type=pathlib.Path)
+    parser.add_argument('--public-output-root', default='/run/eduscope-public', type=pathlib.Path)
     parser.add_argument('--profile', choices=['production', 'demo-staging'], required=True)
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
@@ -114,11 +128,7 @@ def main():
         files = render(manifest, provisioning, secret_values, args.profile)
         Draft202012Validator(json.loads((ROOT / 'runtime/device-bootstrap.schema.json').read_text())).validate(json.loads(files['device-bootstrap.json'][0]))
         if not args.check:
-            for relative, (content, mode, (uid, gid)) in files.items():
-                path = pathlib.PurePosixPath(relative)
-                if path.is_absolute() or '..' in path.parts:
-                    raise ValueError('invalid output path')
-                _atomic_write(args.output_root / pathlib.Path(*path.parts[:-1]), path.name, content, mode, uid, gid)
+            _write_outputs(files, args.output_root, args.public_output_root)
         print('PASS runtime configuration')
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)

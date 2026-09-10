@@ -29,6 +29,7 @@ m eduscope-kiosk render
 
     def test_tmpfiles_definition_is_exact(self):
         expected = """d /run/eduscope 0750 root eduscope -
+d /run/eduscope-public 0755 root root -
 d /run/eduscope/env 0750 root eduscope -
 d /run/eduscope/helper 0700 root root -
 d /run/eduscope/pipeline-manager 0750 eduscope-pipeline eduscope -

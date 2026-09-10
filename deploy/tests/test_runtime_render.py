@@ -50,6 +50,26 @@ class RuntimeRenderTest(unittest.TestCase):
         self.assertTrue(files)
         self.assertFalse((self.root / "out").exists())
 
+    def test_public_config_is_written_to_a_separate_public_root(self):
+        module = self.module()
+        runtime = self.root / "runtime"
+        public = self.root / "public"
+        files = self.rendered()
+        public_file = {
+            "config.json": (
+                files["config.json"][0],
+                0o644,
+                (os.getuid(), os.getgid()),
+            )
+        }
+        module._write_outputs(public_file, runtime, public)
+        self.assertEqual(
+            json.loads((public / "config.json").read_text()),
+            json.loads(files["config.json"][0]),
+        )
+        self.assertEqual((public / "config.json").stat().st_mode & 0o777, 0o644)
+        self.assertFalse((public / "device-bootstrap.json").exists())
+
     def test_rejects_short_secrets_symlinks_and_broad_modes(self):
         module = self.module()
         unsafe = self.root / "unsafe.json"

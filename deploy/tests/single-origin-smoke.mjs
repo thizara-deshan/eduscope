@@ -56,7 +56,7 @@ async function startFixture() {
   config = config
     .replace('listen 127.0.0.1:80 default_server;', `listen 127.0.0.1:${nginxPort} default_server;`)
     .replace('root /opt/eduscope/current/apps/panel/dist;', `root ${panel};`)
-    .replace('alias /run/eduscope/config.json;', `alias ${join(run, 'config.json')};`)
+    .replace('alias /run/eduscope-public/config.json;', `alias ${join(run, 'config.json')};`)
     .replaceAll('http://127.0.0.1:5000', `http://127.0.0.1:${backendPort}`);
   await writeFile(join(prefix, 'nginx.conf'), `error_log logs/error.log;\nevents {}\nhttp {\naccess_log logs/access.log;\n${config}\n}\n`);
   const syntax = spawnSync('nginx', ['-t', '-p', prefix, '-c', 'nginx.conf', '-g', `pid ${join(run, 'nginx.pid')};`], { encoding: 'utf8' });

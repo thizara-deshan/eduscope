@@ -10,7 +10,7 @@ class ProxyConfigTest(unittest.TestCase):
         http = (ROOT / "deploy/nginx/eduscope.conf").read_text()
         rtmp = (ROOT / "deploy/nginx/rtmp.conf.template").read_text()
         self.assertIn("listen 127.0.0.1:80 default_server;", http)
-        self.assertIn("alias /run/eduscope/config.json;", http)
+        self.assertIn("alias /run/eduscope-public/config.json;", http)
         self.assertIn("proxy_pass http://127.0.0.1:5000", http)
         self.assertIn("proxy_buffering off;", http)
         self.assertIn("proxy_force_ranges on;", http)
