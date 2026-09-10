@@ -23,7 +23,7 @@ ProtectHome=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/tmp /var/lib/eduscope/ai
 CPUAffinity=4 5 6 7
-MemoryMax=5G
+MemoryMax=8G
 Nice=5
 
 [Install]

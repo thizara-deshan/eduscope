@@ -79,7 +79,7 @@ class SystemdUnitsTest(unittest.TestCase):
             self.assertIn("ReadWritePaths=", body)
         stt = self.read("eduscope-stt.service")
         self.assertIn("CPUAffinity=4 5 6 7", stt)
-        self.assertIn("MemoryMax=5G", stt)
+        self.assertIn("MemoryMax=8G", stt)
         self.assertIn("Nice=5", stt)
         slide = self.read("eduscope-slide.service")
         self.assertIn("CPUAffinity=0 1 2 3", slide)

@@ -737,7 +737,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   question: /opt/eduscope/current/venvs/ai/bin/eduscope-question-service
   ```
 
-  Pipeline and STT use `PrivateTmp=false`; pipeline has video/audio/render access, `ReadWritePaths=/tmp /run/eduscope/pipeline-manager /media/eduscope`, and no `PrivateDevices`. Core uses `ReadWritePaths=/var/lib/eduscope /run/eduscope/relay /media/eduscope`, loopback networking, and `UMask=0007`. STT uses `CPUAffinity=4 5 6 7`, `MemoryMax=5G`, `Nice=5`; slide uses `CPUAffinity=0 1 2 3`, `MemoryMax=1G`; question uses `MemoryMax=1G`. All three AI units are `Wants`, never `Requires`, from the device target. Every service reads only its own `/run/eduscope/env/*.env` plus the shared audio env where applicable.
+  Pipeline and STT use `PrivateTmp=false`; pipeline has video/audio/render access, `ReadWritePaths=/tmp /run/eduscope/pipeline-manager /media/eduscope`, and no `PrivateDevices`. Core uses `ReadWritePaths=/var/lib/eduscope /run/eduscope/relay /media/eduscope`, loopback networking, and `UMask=0007`. STT uses `CPUAffinity=4 5 6 7`, `MemoryMax=8G`, `Nice=5`; slide uses `CPUAffinity=0 1 2 3`, `MemoryMax=1G`; question uses `MemoryMax=1G`. All three AI units are `Wants`, never `Requires`, from the device target. Every service reads only its own `/run/eduscope/env/*.env` plus the shared audio env where applicable.
 
 - [ ] **Step 5: Add bounded health waits and relay drop-ins**
 
@@ -928,7 +928,7 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
   ReadWritePaths=/tmp /var/lib/eduscope/ai
   CPUAffinity=4 5 6 7
-  MemoryMax=5G
+  MemoryMax=8G
   Nice=5
 
   [Install]
