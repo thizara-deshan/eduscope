@@ -1,0 +1,14 @@
+{
+  "PasswordManagerEnabled": false,
+  "BrowserSignin": 0,
+  "RestoreOnStartup": 4,
+  "RestoreOnStartupURLs": ["http://127.0.0.1/"],
+  "ExtensionInstallBlocklist": ["*"],
+  "PrintingEnabled": false,
+  "DownloadRestrictions": 3,
+  "DeveloperToolsAvailability": 2,
+  "DefaultPopupsSetting": 2,
+  "HomepageLocation": "http://127.0.0.1/",
+  "URLAllowlist": ["http://127.0.0.1/*"],
+  "URLBlocklist": ["*"]
+}

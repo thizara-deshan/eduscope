@@ -23,6 +23,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/var/lib/eduscope/kiosk /run/user/@KIOSK_UID@
 DevicePolicy=closed
 DeviceAllow=/dev/dri rw
+DeviceAllow=@TOUCH_DEVNODE@ r
 
 [Install]
 WantedBy=graphical.target

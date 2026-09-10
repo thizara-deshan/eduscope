@@ -37,6 +37,7 @@
 - **Signed-updater gate reclassified (approved 2026-09-10):** F-02a is the host-side helper/client implementation. F-03 through F-08 depend on F-02a and may proceed while firmware calls remain injected-runner-only and labelled `not firmware acceptance`. F-02b is a later physical-device gate beside F-09/F-12; it requires the release-owner interface, trust root, A/B layout, boot-success marker, and automatic rollback, and it must pass before production F-09. The inspected target has one root filesystem and no updater, so F-02b remains open. Fixtures never close it.
 - **Demo/staging install exception (approved 2026-09-10):** F-08 may install on the current single-rootfs Radxa with `--profile demo-staging --acknowledge-open-firmware-acceptance`. This profile skips only updater/A-B preflight, does not create or simulate slots, disables `firmware.apply` and `firmware.rollback` at the helper boundary, and shows `placeholder / firmware acceptance still open` in both panel UI and install output. It produces demo smoke evidence only—never F-02b, F-09, or final Workstream F PASS evidence.
 - **Demo/staging hardware exception (approved 2026-09-10):** F-04 may render with `--profile demo-staging` while final display/passthrough observations and the dedicated recordings volume remain unavailable. It reports `display/passthrough acceptance open` and/or `recordings volume acceptance open`, and permits `/media/eduscope` on the current SD-card root filesystem. Production still rejects every unresolved F-04 field. Demo rendering and a current-boot recording smoke test never satisfy F-04's cold-boot/replug acceptance witness.
+- **Demo/staging kiosk exception (approved 2026-09-10):** F-07 may run with `--profile demo-staging` while the final projector and meeting display are unavailable. It treats the currently connected `HDMI-1` output as the temporary 1280×800 panel, maps the frozen touch device only to that output, and reports `multi-display acceptance open`. Production remains fail-safe and requires exactly one match for each of the three frozen EDID hashes before changing layout. The demo single-display smoke never satisfies F-07's deterministic three-display or two-cold-boot acceptance witness.
 - **STOP before F-12 execution:** D-10/D-11 require an actual campus PostgreSQL 16 host, DNS name, valid TLS certificate, and firewall route. Local Testcontainers do not replace the physical-phone/campus staging witness.
 
 ### Management demo readiness
@@ -1399,6 +1400,8 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
 
   Disable only connected outputs not in the manifest after all three matches. Run `xinput map-to-output <exact touch name> <panel connector>`. On topology mismatch print observed connector/hash pairs, exit 78, and execute zero `xrandr --output`/`xinput` calls.
 
+  For the approved demo/staging exception, `--profile demo-staging` requires exactly one connected output named `HDMI-1`, configures it as `1280x800` at `0x0` and primary, maps the exact manifest touch name to it, and prints `multi-display acceptance open`. Any other active topology fails before mutation. This is demo smoke only and does not close the production witness.
+
 - [ ] **Step 5: Add managed policy, flags, launcher, and unit**
 
   `policies/managed/eduscope.json` is complete:
@@ -1471,7 +1474,8 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
     exit 1
   }
 
-  /opt/eduscope/current/deploy/kiosk/xrandr-layout.sh --manifest "$manifest"
+  readonly profile="${EDUSCOPE_DEPLOYMENT_PROFILE:-production}"
+  /opt/eduscope/current/deploy/kiosk/xrandr-layout.sh --manifest "$manifest" --profile "$profile"
 
   chromium=/usr/bin/chromium
   [[ -x /snap/bin/chromium ]] && chromium=/snap/bin/chromium
@@ -1493,7 +1497,9 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   chromium --headless --disable-gpu --dump-dom http://127.0.0.1/ | rg '<div id="root">'
   ```
 
-  Then cold boot twice. Expected: panel is full-screen on the 1280×800 display, projector/meeting land on their EDIDs regardless of connector enumeration, touch affects only panel, and no first-run/restore/password/download/print UI appears.
+  Then, for production, cold boot twice. Expected: panel is full-screen on the 1280×800 display, projector/meeting land on their EDIDs regardless of connector enumeration, touch affects only panel, and no first-run/restore/password/download/print UI appears.
+
+  On the current demo target, defer the live layout and Chromium checks to F-08 Step 7, because F-08 installs and activates the panel, Nginx, GDM session, and kiosk unit that those checks consume. F-08 runs the layout with `--profile demo-staging`, verifies Chromium on `HDMI-1`, and requires the script to print `multi-display acceptance open`. Record the three-display and two-cold-boot result as `NOT RUN`; the demo smoke does not close that physical acceptance.
 
 - [ ] **Step 7: Run contract regression and commit**
 

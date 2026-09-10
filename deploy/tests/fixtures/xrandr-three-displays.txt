@@ -1,0 +1,12 @@
+HDMI-2 connected 1920x1080+0+0
+	EDID:
+		6d656574696e67
+DP-1 connected 1024x768+0+0
+	EDID:
+		6578747261
+HDMI-1 connected primary 1280x800+0+0
+	EDID:
+		70616e656c
+DP-2 connected 1920x1080+0+0
+	EDID:
+		70726f6a6563746f72

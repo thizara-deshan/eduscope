@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Eduscope
+Comment=Eduscope managed X11 session
+Exec=/opt/eduscope/current/deploy/kiosk/session.sh
+TryExec=/opt/eduscope/current/deploy/kiosk/session.sh
+Type=Application
+DesktopNames=Eduscope
