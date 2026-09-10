@@ -1747,8 +1747,9 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   systemd-analyze security eduscope-helper.service eduscope-pipeline-manager.service eduscope-core-api.service eduscope-stt.service eduscope-slide.service eduscope-question.service eduscope-kiosk.service > "$EVIDENCE_DIR/systemd-security.txt"
   ```
 
-  The deferred F-05 `--live` check records activation timestamps, kills each
-  main PID separately, and applies the restart/degradation matrix specified in
+  The deferred F-05 `--live` check records activation timestamps, sends
+  `SIGKILL` to each main PID separately to exercise `Restart=on-failure`, and
+  applies the restart/degradation matrix specified in
   F-05 Step 7. Expected: `PASS systemd live restart matrix`; the security report
   is captured without an arbitrary score threshold. The panel at
   `http://127.0.0.1/` shows the persistent firmware-acceptance notice; A/B/C and

@@ -34,7 +34,7 @@ PY
     local service=$1 old_pid new_pid deadline
     old_pid=$(systemctl show -p MainPID --value "$service")
     [[ $old_pid =~ ^[1-9][0-9]*$ ]]
-    kill -TERM "$old_pid"
+    kill -KILL "$old_pid"
     deadline=$((SECONDS + 30))
     while (( SECONDS < deadline )); do
       new_pid=$(systemctl show -p MainPID --value "$service")

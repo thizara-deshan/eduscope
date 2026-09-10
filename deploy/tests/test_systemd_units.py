@@ -117,6 +117,7 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("deploymentProfile", verifier)
         self.assertIn("demo-staging", verifier)
         self.assertIn("PASS systemd live restart matrix", verifier)
+        self.assertIn('kill -KILL "$old_pid"', verifier)
 
     def test_repo_owned_direct_exec_programs_are_executable(self):
         prefix = "/opt/eduscope/current/"
