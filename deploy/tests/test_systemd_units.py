@@ -92,6 +92,13 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("DeviceAllow=char-alsa rw", pipeline)
         self.assertNotIn("DeviceAllow=/dev/snd rw", pipeline)
 
+    def test_pipeline_manager_can_access_rk3588_media_devices(self):
+        pipeline = self.read("eduscope-pipeline-manager.service")
+        self.assertIn("DeviceAllow=char-drm rw", pipeline)
+        self.assertIn("DeviceAllow=/dev/mpp_service rw", pipeline)
+        self.assertIn("DeviceAllow=/dev/rga rw", pipeline)
+        self.assertNotIn("DeviceAllow=/dev/dri rw", pipeline)
+
     def test_environment_files_are_scoped(self):
         expected = {
             "eduscope-pipeline-manager.service": {"pipeline.env", "audio.env"},
