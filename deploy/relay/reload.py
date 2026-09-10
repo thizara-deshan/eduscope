@@ -141,22 +141,27 @@ def promote(digest: str, *, candidate_path: Path = CANDIDATE, nginx_path: Path =
     targets = _validated_targets(raw)
     nginx_content, stunnel_content = _render(targets, stunnel_template_path.read_text())
 
-    # Validate complete temporary stunnel content before changing either active file.
-    with tempfile.NamedTemporaryFile("w", dir=stunnel_path.parent, delete=False) as temp:
-        temp.write(stunnel_content)
-        validation_path = temp.name
-    try:
-        runner(("stunnel4", "-test", validation_path))
-    finally:
-        os.unlink(validation_path)
+    has_tls = any(target["requiresTlsBridge"] for target in targets)
+    if has_tls:
+        with tempfile.NamedTemporaryFile("w", dir=stunnel_path.parent, delete=False) as temp:
+            temp.write(stunnel_content)
+            validation_path = temp.name
+        try:
+            runner(("/usr/libexec/eduscope-stunnel-validate", validation_path))
+        finally:
+            os.unlink(validation_path)
 
     old_nginx = nginx_path.read_bytes() if nginx_path.exists() else None
     old_stunnel = stunnel_path.read_bytes() if stunnel_path.exists() else None
     try:
         _atomic_write(nginx_path, nginx_content)
         _atomic_write(stunnel_path, stunnel_content)
+        os.chown(stunnel_path, uid, -1)
         runner(("nginx", "-t"))
-        runner(("systemctl", "reload", "stunnel4.service"))
+        if has_tls:
+            runner(("systemctl", "restart", "eduscope-stunnel.service"))
+        else:
+            runner(("systemctl", "stop", "eduscope-stunnel.service"))
         runner(("systemctl", "reload", "nginx.service"))
     except Exception:
         if old_nginx is None:
@@ -167,8 +172,12 @@ def promote(digest: str, *, candidate_path: Path = CANDIDATE, nginx_path: Path =
             stunnel_path.unlink(missing_ok=True)
         else:
             _atomic_write(stunnel_path, old_stunnel.decode())
+            os.chown(stunnel_path, uid, -1)
         try:
-            runner(("systemctl", "reload", "stunnel4.service"))
+            if old_stunnel is not None and b"[target-" in old_stunnel:
+                runner(("systemctl", "restart", "eduscope-stunnel.service"))
+            else:
+                runner(("systemctl", "stop", "eduscope-stunnel.service"))
             runner(("systemctl", "reload", "nginx.service"))
         except Exception:
             pass

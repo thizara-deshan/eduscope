@@ -18,6 +18,7 @@ class SystemdUnitsTest(unittest.TestCase):
         "eduscope-slide.service",
         "eduscope-question.service",
         "eduscope-kiosk.service",
+        "eduscope-stunnel.service",
     }
 
     def read(self, name):
@@ -29,7 +30,6 @@ class SystemdUnitsTest(unittest.TestCase):
             "eduscope-helper.socket",
             "wait-http.py",
             "nginx.service.d/eduscope.conf",
-            "stunnel4.service.d/eduscope.conf",
         }
         self.assertEqual(expected, {str(path.relative_to(UNIT_DIR)) for path in UNIT_DIR.rglob("*") if path.is_file()})
 
@@ -59,6 +59,10 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertNotIn("Requires=eduscope-pipeline-manager.service", core)
         kiosk = self.read("eduscope-kiosk.service")
         self.assertIn("wait-http.py http://127.0.0.1:5000/healthz 60", kiosk)
+        stunnel = self.read("eduscope-stunnel.service")
+        self.assertIn("ExecStartPre=/usr/libexec/eduscope-stunnel-validate /run/eduscope/relay/stunnel.conf", stunnel)
+        self.assertIn("ExecStart=/usr/bin/stunnel4 /run/eduscope/relay/stunnel.conf", stunnel)
+        self.assertIn("User=eduscope-core", stunnel)
         for name in ("eduscope-stt.service", "eduscope-slide.service"):
             body = self.read(name)
             self.assertIn("Wants=eduscope-pipeline-manager.service", body)

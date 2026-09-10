@@ -1046,18 +1046,17 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   ExecReload=/usr/sbin/nginx -s reload
   ```
 
-  `stunnel4.service.d/eduscope.conf`:
+  `eduscope-stunnel.service` is a dedicated foreground service and does not
+  modify or depend on the distribution's administrator-owned `stunnel4.service`.
+  It is started by relay promotion only when at least one RTMPS target exists:
 
   ```ini
-  [Unit]
-  Requires=eduscope-runtime-config.service
-  Wants=network-online.target
-  After=eduscope-runtime-config.service network-online.target
-
   [Service]
-  ExecStartPre=/usr/bin/stunnel4 -test /etc/stunnel/eduscope.conf
-  ExecReload=
-  ExecReload=/bin/kill -HUP $MAINPID
+  Type=simple
+  User=eduscope-core
+  Group=eduscope
+  ExecStartPre=/usr/libexec/eduscope-stunnel-validate /run/eduscope/relay/stunnel.conf
+  ExecStart=/usr/bin/stunnel4 /run/eduscope/relay/stunnel.conf
   ```
 
   `wait-http.py` is complete:
@@ -1239,8 +1238,8 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
   `stunnel/eduscope.conf.template` is complete; F-06 replaces `@SERVICE_SECTIONS@` with zero or more validated `[target-<id>]` sections and refuses a remaining token:
 
   ```text
-  foreground = no
-  pid = /run/stunnel4/eduscope.pid
+  foreground = yes
+  pid =
   client = yes
   verifyChain = yes
   CAfile = /etc/ssl/certs/ca-certificates.crt
@@ -1263,7 +1262,14 @@ F-02a is the host-side implementation and regression phase in Steps 1–7. The l
 
   `/usr/libexec/eduscope-relay-reload <64hex>` reads only the fixed candidate with `O_NOFOLLOW`, requires core UID/mode 0600, hashes bytes, validates JSON/version/unique ids/URL schemes/key characters, renders same-directory temp files, and allocates stunnel ports `19400..19431` by target order. Direct `rtmp://` targets render `push <ingestUrl>/<escapedKey>;`. RTMPS targets render an Nginx push to the local stunnel port plus `client=yes`, `accept=127.0.0.1:<port>`, `connect=<host>:<port>`, `verifyChain=yes`, `checkHost=<host>`, and system CA paths. Reject URL credentials/fragments/query secrets.
 
-  Validate temps with `nginx -t` and `stunnel4 -test <temp-config>`, promote atomically, then `systemctl reload stunnel4.service` and `systemctl reload nginx.service`. On any failure, restore the prior files and reload them; print only `ok` or a redacted error. No target URL containing a stream key enters stdout/journal.
+  Validate Nginx with `nginx -t`. When RTMPS sections exist, validate the
+  temporary stunnel configuration with `eduscope-stunnel-validate`, which runs
+  stunnel briefly against loopback ephemeral accept ports because Ubuntu's
+  stunnel 5.72 has no `-test` option. Promote atomically, restart the dedicated
+  `eduscope-stunnel.service` when RTMPS sections exist (otherwise stop it), then
+  reload `nginx.service`. On any failure, restore the prior files and service
+  state; print only `ok` or a redacted error. No target URL containing a stream
+  key enters stdout/journal.
 
 - [ ] **Step 6: Run syntax, real-adapter, and record-isolation checks**
 

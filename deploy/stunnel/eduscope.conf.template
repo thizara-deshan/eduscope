@@ -1,5 +1,5 @@
-foreground = no
-pid = /run/stunnel4/eduscope.pid
+foreground = yes
+pid =
 client = yes
 verifyChain = yes
 CAfile = /etc/ssl/certs/ca-certificates.crt

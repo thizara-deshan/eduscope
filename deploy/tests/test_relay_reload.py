@@ -51,7 +51,8 @@ class RelayReloadTest(unittest.TestCase):
             {"id": "plain", "platform": "custom-rtmp", "ingestUrl": "rtmp://relay.invalid/live", "streamKey": "plain-key", "requiresTlsBridge": False},
             {"id": "secure", "platform": "youtube", "ingestUrl": "rtmps://secure.invalid:443/live", "streamKey": "secure-key", "requiresTlsBridge": True},
         ])
-        self.promote(digest)
+        calls = []
+        self.promote(digest, calls.append)
         self.assertEqual(self.nginx.stat().st_mode & 0o777, 0o600)
         self.assertIn("push rtmp://relay.invalid/live/plain-key;", self.nginx.read_text())
         self.assertIn("push rtmp://127.0.0.1:19400/live/secure-key;", self.nginx.read_text())
@@ -60,6 +61,15 @@ class RelayReloadTest(unittest.TestCase):
         self.assertIn("accept = 127.0.0.1:19400", tunnel)
         self.assertIn("connect = secure.invalid:443", tunnel)
         self.assertNotIn("@SERVICE_SECTIONS@", tunnel)
+        self.assertTrue(any(call[0] == "/usr/libexec/eduscope-stunnel-validate" for call in calls))
+        self.assertIn(("systemctl", "restart", "eduscope-stunnel.service"), calls)
+
+    def test_zero_tls_targets_stop_dedicated_stunnel_without_validation(self):
+        calls = []
+        digest = self.write_candidate([])
+        self.promote(digest, calls.append)
+        self.assertNotIn("eduscope-stunnel-validate", " ".join(" ".join(call) for call in calls))
+        self.assertIn(("systemctl", "stop", "eduscope-stunnel.service"), calls)
 
     def test_rejects_symlink_digest_mismatch_and_invalid_secret_url(self):
         digest = self.write_candidate([])
