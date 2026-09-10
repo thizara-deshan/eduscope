@@ -11,6 +11,7 @@ build_hashed_venv() {
   local source_python=$1 target=$2 name=$3
   shift 3
   local bundle="$release_target/python/$name" requirements="$release_target/python/$name/requirements.lock"
+  local -a venv_args=()
   install -d -m 0755 "$bundle/wheels"
   freeze_runtime_requirements "$source_python" "$requirements"
   "$source_python" -m pip wheel --disable-pip-version-check --wheel-dir "$bundle/wheels" --requirement "$requirements"
@@ -19,7 +20,8 @@ build_hashed_venv() {
     "$source_python" -m pip wheel --disable-pip-version-check --no-deps --wheel-dir "$bundle/wheels" "$project"
   done
   (cd "$bundle/wheels" && sha256sum ./*.whl >SHA256SUMS && sha256sum --check SHA256SUMS)
-  python3 -m venv "$target"
+  [[ $name != pipeline ]] || venv_args+=(--system-site-packages)
+  python3 -m venv "${venv_args[@]}" "$target"
   "$target/bin/pip" install --disable-pip-version-check --no-index --find-links "$bundle/wheels" --requirement "$requirements"
   "$target/bin/pip" install --disable-pip-version-check --no-index --no-deps "$bundle"/wheels/eduscope_*.whl
 }

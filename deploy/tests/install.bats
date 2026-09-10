@@ -26,6 +26,10 @@ PY
   run grep -F 'python3 -m venv' "$R/deploy/lib/artifacts.sh"
   [ "$status" -eq 0 ]
 }
+@test "pipeline virtual environment inherits system GStreamer bindings" {
+  grep -Fq '[[ $name != pipeline ]] || venv_args+=(--system-site-packages)' "$R/deploy/lib/artifacts.sh"
+  grep -Fq 'python3 -m venv "${venv_args[@]}" "$target"' "$R/deploy/lib/artifacts.sh"
+}
 @test "native Node addons are rebuilt for the systemd Node runtime" {
   grep -q '/usr/bin/npm.*rebuild.*better-sqlite3' "$R/deploy/lib/artifacts.sh"
 }
