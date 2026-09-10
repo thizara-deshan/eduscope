@@ -1,5 +1,6 @@
 import configparser
 import pathlib
+import stat
 import unittest
 
 
@@ -108,6 +109,22 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("PASS systemd unit graph", verifier)
         self.assertIn("if [[ ${1:-} == --live", verifier)
         self.assertIn("PASS systemd live restart matrix", verifier)
+
+    def test_repo_owned_direct_exec_programs_are_executable(self):
+        prefix = "/opt/eduscope/current/"
+        checked = []
+        for name in self.services:
+            for line in self.read(name).splitlines():
+                if not line.startswith(("ExecStart=", "ExecStartPre=")):
+                    continue
+                program = line.split("=", 1)[1].split()[0]
+                if not program.startswith(prefix):
+                    continue
+                path = ROOT / program.removeprefix(prefix)
+                if path.exists():
+                    checked.append(path)
+                    self.assertTrue(path.stat().st_mode & stat.S_IXUSR, f"direct executable is not mode 100755: {path}")
+        self.assertTrue(checked)
 
 
 if __name__ == "__main__":
