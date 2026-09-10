@@ -11,7 +11,7 @@ Group=root
 RemainAfterExit=yes
 ExecStart=/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/eduscope.conf
 Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production
-ExecStart=/opt/eduscope/current/deploy/runtime/render.py --manifest /etc/eduscope/device-manifest.json --secrets /etc/eduscope/secrets.json --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
+ExecStart=/opt/eduscope/current/deploy/runtime/render.py --manifest /etc/eduscope/device-manifest.json --provisioning /etc/eduscope/provisioning.json --secrets /etc/eduscope/secrets.json --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
 ExecStart=/opt/eduscope/current/deploy/runtime/render-hardware.py --manifest /etc/eduscope/device-manifest.json --runtime-only --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}
 NoNewPrivileges=true
 PrivateTmp=true

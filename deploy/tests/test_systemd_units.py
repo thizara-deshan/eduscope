@@ -50,6 +50,7 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("Before=eduscope-runtime-config.service eduscope-pipeline-manager.service eduscope-core-api.service", mount)
         runtime = self.read("eduscope-runtime-config.service")
         self.assertIn("Requires=media-eduscope.mount", runtime)
+        self.assertIn("render.py --manifest /etc/eduscope/device-manifest.json --provisioning /etc/eduscope/provisioning.json --secrets /etc/eduscope/secrets.json", runtime)
         self.assertIn("render-hardware.py --manifest /etc/eduscope/device-manifest.json --runtime-only --output-root /run/eduscope --profile ${EDUSCOPE_DEPLOYMENT_PROFILE}", runtime)
         core = self.read("eduscope-core-api.service")
         self.assertIn("Requires=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket", core)
