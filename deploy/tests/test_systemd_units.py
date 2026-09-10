@@ -87,6 +87,11 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("MemoryMax=1G", slide)
         self.assertIn("MemoryMax=1G", self.read("eduscope-question.service"))
 
+    def test_pipeline_manager_can_access_alsa_device_nodes(self):
+        pipeline = self.read("eduscope-pipeline-manager.service")
+        self.assertIn("DeviceAllow=char-alsa rw", pipeline)
+        self.assertNotIn("DeviceAllow=/dev/snd rw", pipeline)
+
     def test_environment_files_are_scoped(self):
         expected = {
             "eduscope-pipeline-manager.service": {"pipeline.env", "audio.env"},
