@@ -12,8 +12,12 @@ run usb lsusb -v
 run video v4l2-ctl --list-devices
 run audio-capture arecord -l
 run audio-playback aplay -l
+# Variables expand in the child sh, not this script.
+# shellcheck disable=SC2016
 run alsa-ids sh -c 'for p in /proc/asound/card*/id; do printf "%s " "$p"; cat "$p"; done'
 run displays xrandr --props
+# Variables expand in the child sh, not this script.
+# shellcheck disable=SC2016
 run display-edids sh -c 'for p in /sys/class/drm/card*-*/edid; do test -s "$p" && sha256sum "$p"; done'
 run input udevadm info --export-db
 run gpio sh -c 'command -v gpioinfo >/dev/null && { gpiodetect; gpioinfo; }; find /sys/class/leds -maxdepth 2 -type f -print 2>/dev/null'
