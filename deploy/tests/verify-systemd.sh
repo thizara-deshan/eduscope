@@ -8,9 +8,23 @@ if [[ ${1:-} == --live && $# == 1 ]]; then
   done
   systemctl is-active --quiet eduscope-helper.socket
 
+  profile=$(python3 - <<'PY'
+import json
+from pathlib import Path
+value = json.loads(Path("/run/eduscope/config.json").read_text()).get("deploymentProfile")
+if value not in {"production", "demo-staging"}:
+    raise SystemExit("invalid deployed profile")
+print(value)
+PY
+  )
   mount_source=$(findmnt -n -o SOURCE --target /media/eduscope)
-  expected_uuid=$(findmnt -n -o UUID --target /media/eduscope)
-  [[ -n $expected_uuid && $(readlink -f "$mount_source") == $(readlink -f "/dev/disk/by-uuid/$expected_uuid") ]]
+  if [[ $profile == production ]]; then
+    expected_uuid=$(findmnt -n -o UUID --target /media/eduscope)
+    [[ -n $expected_uuid && $(readlink -f "$mount_source") == $(readlink -f "/dev/disk/by-uuid/$expected_uuid") ]]
+  else
+    root_source=$(findmnt -n -o SOURCE --target /)
+    [[ -d /media/eduscope && $(readlink -f "$mount_source") == $(readlink -f "$root_source") ]]
+  fi
   if findmnt -rn -o TARGET,OPTIONS,SOURCE | awk '$1 != "/media/eduscope" && $2 ~ /(^|,)x-udisks-auth(,|$)/ { found=1 } END { exit found ? 0 : 1 }'; then
     echo 'unexpected removable automount found' >&2
     exit 1

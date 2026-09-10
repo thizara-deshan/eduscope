@@ -108,6 +108,9 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("systemd-analyze verify --root=", verifier)
         self.assertIn("PASS systemd unit graph", verifier)
         self.assertIn("if [[ ${1:-} == --live", verifier)
+        self.assertIn("/run/eduscope/config.json", verifier)
+        self.assertIn("deploymentProfile", verifier)
+        self.assertIn("demo-staging", verifier)
         self.assertIn("PASS systemd live restart matrix", verifier)
 
     def test_repo_owned_direct_exec_programs_are_executable(self):
