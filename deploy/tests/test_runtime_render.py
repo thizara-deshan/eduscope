@@ -39,6 +39,7 @@ class RuntimeRenderTest(unittest.TestCase):
         self.assertNotIn("i" * 32, serialized)
         self.assertIn("CORE_API_RECORDINGS_ROOT=/media/eduscope", files["env/core.env"][0])
         self.assertIn("CORE_API_DEVICE_BOOTSTRAP_PATH=/run/eduscope/device-bootstrap.json", files["env/core.env"][0])
+        self.assertIn("CORE_API_PROVISIONING_PATH=/run/eduscope/provisioning.json", files["env/core.env"][0])
         self.assertIn("EDUSCOPE_PM_RECORDINGS_ROOT=/media/eduscope", files["env/pipeline.env"][0])
         self.assertIn("EDUSCOPE_SLIDE_RECORDINGS_ROOT=/media/eduscope", files["env/slide.env"][0])
         provisioned = json.loads(files["provisioning.json"][0])
