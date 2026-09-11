@@ -41,9 +41,11 @@ describe('device bootstrap', () => {
   });
 
   it('pushes all enabled current bindings at startup', async () => {
-    const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap); const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' });
-    await pushEnabledBindings(core.db, { setPublisherBinding }, { get: () => null });
+    const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap); const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' }); const startPublisher = vi.fn().mockResolvedValue({ commandId: 'y' });
+    await pushEnabledBindings(core.db, { setPublisherBinding, startPublisher }, { get: () => null });
     expect(setPublisherBinding).toHaveBeenCalledTimes(4);
+    expect(startPublisher).toHaveBeenCalledTimes(4);
+    expect(startPublisher.mock.calls.map(([publisherId]) => publisherId)).toEqual(['usb', 'rtsp', 'rtsp2', 'audio']);
     expect(core.db.select().from(sourceBindings).all()).toHaveLength(4); core.close();
   });
 });

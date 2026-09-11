@@ -339,6 +339,13 @@ export class FakePipelineManager {
       return;
     }
 
+    const publisherStartMatch = req.method === 'POST' ? /^\/publishers\/([^/]+)\/start$/.exec(url.pathname) : null;
+    if (publisherStartMatch) {
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ publisherId: publisherStartMatch[1], state: 'starting' }));
+      return;
+    }
+
     if (req.method === 'PUT' && url.pathname === '/audio/controls/mic-lecturer') {
       this.#readJsonBody(req).then((body) => {
         call.body = body;
@@ -392,6 +399,7 @@ export class FakePipelineManager {
     if (req.method === 'POST' && url.pathname === '/consumers/thumbnails/start') {
       this.#readJsonBody(req).then((body) => {
         call.body = body;
+        this.#jpegPreviewEnabled = true;
         res.writeHead(202, { 'content-type': 'application/json' });
         res.end();
       });

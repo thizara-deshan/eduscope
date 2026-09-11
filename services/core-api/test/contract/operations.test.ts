@@ -185,6 +185,15 @@ describe('B-38 exact REST ownership gate', () => {
     expect(success.headers['content-type']).toContain('image/jpeg');
     expect(success.headers['cache-control']).toBe('no-store');
 
+    pm.setJpegPreviewEnabled(false);
+    const recovered = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sources/lecturer-cam/preview.jpg',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(recovered.statusCode).toBe(200);
+    expect(pm.calls.some((call) => call.method === 'POST' && call.path === '/consumers/thumbnails/start')).toBe(true);
+
     const refused = await app.inject({
       method: 'GET',
       url: '/api/v1/sources/mic-room/preview.jpg',

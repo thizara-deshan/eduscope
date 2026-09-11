@@ -132,6 +132,10 @@ export class PipelineManagerClient {
     return this.#request<PmPublisherCommandAccepted>('PUT', `/publishers/${publisherId}/binding`, body);
   }
 
+  async startPublisher(publisherId: PmPublisherId): Promise<PmPublisherCommandAccepted> {
+    return this.#request<PmPublisherCommandAccepted>('POST', `/publishers/${publisherId}/start`);
+  }
+
   /** B-36 (pipeline-manager.md §3.2 `POST /consumers/thumbnails/start`): enables the preview capability. Absent `sources` means no role restriction — actual media flows only once an `offer` arrives. */
   async startThumbnails(sources?: readonly string[]): Promise<void> {
     await this.#request('POST', '/consumers/thumbnails/start', sources !== undefined ? { sources } : {});

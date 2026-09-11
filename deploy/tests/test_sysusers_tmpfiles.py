@@ -33,6 +33,7 @@ d /run/eduscope-public 0755 root root -
 d /run/eduscope/env 0750 root eduscope -
 d /run/eduscope/helper 0700 root root -
 d /run/eduscope/pipeline-manager 0750 eduscope-pipeline eduscope -
+d /run/eduscope/previews 0750 eduscope-pipeline eduscope -
 d /run/eduscope/relay 0710 eduscope-core eduscope -
 d /var/lib/eduscope 0750 eduscope-core eduscope-media -
 d /var/lib/eduscope/secrets 0700 eduscope-core eduscope-core -

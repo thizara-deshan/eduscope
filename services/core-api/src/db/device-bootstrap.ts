@@ -50,7 +50,10 @@ const publishers: Record<string, PmPublisherId> = { presentation: 'usb', 'lectur
 
 export async function pushEnabledBindings(
   db: DrizzleDb,
-  pm: { setPublisherBinding(id: PmPublisherId, body: { address: string; credentials?: { username: string; password: string } }): Promise<PmPublisherCommandAccepted> },
+  pm: {
+    setPublisherBinding(id: PmPublisherId, body: { address: string; credentials?: { username: string; password: string } }): Promise<PmPublisherCommandAccepted>;
+    startPublisher(id: PmPublisherId): Promise<PmPublisherCommandAccepted>;
+  },
   secrets: { get(ref: string): string | null },
 ): Promise<void> {
   const bindings = db.select().from(sourceBindings).where(eq(sourceBindings.enabled, true)).all();
@@ -69,5 +72,6 @@ export async function pushEnabledBindings(
       }
     }
     await pm.setPublisherBinding(publisher, { address: physical.address, ...(credentials ? { credentials } : {}) });
+    await pm.startPublisher(publisher);
   }
 }
