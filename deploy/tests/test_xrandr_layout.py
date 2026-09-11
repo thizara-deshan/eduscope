@@ -74,7 +74,7 @@ class XrandrLayoutTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("multi-display acceptance open", result.stdout)
         self.assertEqual([
-            "--output <HDMI-1> <--auto> <--pos> <0x0> <--primary> <--output> <DP-2> <--auto> <--right-of> <HDMI-1>",
+            "--output <HDMI-1> <--mode> <1920x1080> <--pos> <0x0> <--primary> <--output> <DP-2> <--mode> <1920x1080> <--pos> <1920x0>",
             "map-to-output <HID 27c0:0818> <HDMI-1>",
         ], self.calls.read_text().splitlines())
 
