@@ -146,6 +146,14 @@ class ProcessSupervisor:
                 "--roles",
                 json.dumps([role.value for role in spec.resilient_roles]),
             ]
+        elif (
+            spec.placement is not None
+            and tuple(argv[:3]) == ("gst-launch-1.0", "-e", "-m")
+            and self._popen is subprocess.Popen
+        ):
+            from ..display import worker_argv
+
+            argv = worker_argv(argv, spec.placement)
         popen = self._popen(
             argv,
             shell=False,
