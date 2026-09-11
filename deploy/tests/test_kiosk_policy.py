@@ -53,6 +53,7 @@ class KioskPolicyTest(unittest.TestCase):
         launcher = (KIOSK / "launcher.sh").read_text()
         self.assertIn("attempt<120", launcher)
         self.assertIn("EDUSCOPE_DEPLOYMENT_PROFILE:-production", launcher)
+        self.assertIn('/usr/bin/xhost +SI:localuser:eduscope-pipeline', launcher)
         self.assertIn('exec "$chromium" "${flags[@]}"', launcher)
         unit = (ROOT / "deploy/systemd/eduscope-kiosk.service").read_text()
         for value in ("User=eduscope-kiosk", "After=display-manager.service", "Restart=on-failure", "DeviceAllow=@TOUCH_DEVNODE@ r"):

@@ -94,6 +94,7 @@ class SystemdUnitsTest(unittest.TestCase):
 
     def test_pipeline_manager_can_access_rk3588_media_devices(self):
         pipeline = self.read("eduscope-pipeline-manager.service")
+        self.assertIn("Environment=DISPLAY=:0", pipeline)
         self.assertIn("DeviceAllow=char-drm rw", pipeline)
         self.assertIn("DeviceAllow=/dev/mpp_service rw", pipeline)
         self.assertIn("DeviceAllow=/dev/rga rw", pipeline)
