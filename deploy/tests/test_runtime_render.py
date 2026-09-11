@@ -50,6 +50,19 @@ class RuntimeRenderTest(unittest.TestCase):
         self.assertTrue(files)
         self.assertFalse((self.root / "out").exists())
 
+    def test_allows_private_http_llm_only_for_demo_staging(self):
+        module = self.module()
+        manifest = json.loads(MANIFEST.read_text())
+        manifest["integrations"]["llmEndpoint"] = "http://192.168.8.103:5000"
+        files = module.render(manifest, self.provisioning_values, self.secret_values, "demo-staging")
+        self.assertEqual(json.loads(files["provisioning.json"][0])["llmEndpoint"], "http://192.168.8.103:5000")
+        with self.assertRaisesRegex(ValueError, "production requires HTTPS"):
+            module.render(manifest, self.provisioning_values, self.secret_values, "production")
+
+        manifest["integrations"]["llmEndpoint"] = "http://8.8.8.8:5000"
+        with self.assertRaisesRegex(ValueError, "private IP"):
+            module.render(manifest, self.provisioning_values, self.secret_values, "demo-staging")
+
     def test_public_config_is_written_to_a_separate_public_root(self):
         module = self.module()
         runtime = self.root / "runtime"

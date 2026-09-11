@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import ipaddress
 import json
 import os
 import pathlib
@@ -7,6 +8,7 @@ import grp
 import secrets as random_secrets
 import stat
 import sys
+from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator
 
@@ -92,7 +94,24 @@ def _env(lines):
     return ''.join(f"{key}={value}\n" for key, value in lines.items())
 
 
+def _validate_llm_endpoint(endpoint, profile):
+    if endpoint is None:
+        return
+    parsed = urlsplit(endpoint)
+    if parsed.scheme == 'https':
+        return
+    if profile != 'demo-staging':
+        raise ValueError('production requires HTTPS for llmEndpoint')
+    try:
+        private_host = ipaddress.ip_address(parsed.hostname or '').is_private
+    except ValueError:
+        private_host = False
+    if parsed.scheme != 'http' or not private_host:
+        raise ValueError('demo-staging HTTP llmEndpoint must use a private IP address')
+
+
 def render(manifest, provisioning, secrets, profile):
+    _validate_llm_endpoint(manifest['integrations']['llmEndpoint'], profile)
     quiz_origin = manifest['integrations']['quizPublicOrigin'] or 'https://quiz.campus.invalid'
     public = {"apiBaseUrl": "/api/v1", "quizBaseUrl": quiz_origin, "environment": "production", "adapters": {"default": "real", "overrides": {}}, "deploymentProfile": profile, "notices": [] if profile == 'production' else ["placeholder / firmware acceptance still open"]}
     bootstrap = {"version": 1, "wiredInterface": manifest['network']['wiredInterface'], "inputs": {"presentation": {"kind": "v4l2", "address": "/dev/eduscope/pc-capture"}, "lecturer-cam": {"kind": "rtsp", "address": provisioning['rtsp']['lecturer-cam']}, "students-cam": {"kind": "rtsp", "address": provisioning['rtsp']['students-cam']}, "mic-lecturer": {"kind": "alsa", "address": "eduscope_mic"}}, "bootstrapAdmin": {**provisioning['bootstrapAdmin'], "passwordFile": "/etc/eduscope/bootstrap-admin.password"}}
