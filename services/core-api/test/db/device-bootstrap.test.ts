@@ -10,7 +10,7 @@ import { networkConfigs, physicalInputs, sourceBindings, users } from '../../src
 import { UlidGenerator } from '../../src/lib/ids.js';
 
 const now = new Date('2026-01-01T00:00:00Z');
-const bootstrap = { version: 1 as const, wiredInterface: 'enP4p65s0', inputs: { presentation: { kind: 'v4l2' as const, address: '/dev/eduscope/pc-capture' }, 'lecturer-cam': { kind: 'rtsp' as const, address: 'rtsp://10.20.30.41/stream1' }, 'students-cam': { kind: 'rtsp' as const, address: 'rtsp://10.20.30.42/stream1' }, 'mic-lecturer': { kind: 'alsa' as const, address: 'eduscope_mic' } }, bootstrapAdmin: { username: 'device-admin', displayName: 'Device Administrator', passwordFile: '/etc/eduscope/bootstrap-admin.password' } };
+const bootstrap = { version: 1 as const, wiredInterface: 'enP4p65s0', inputs: { presentation: { kind: 'v4l2' as const, address: '/dev/eduscope/pc-capture' }, 'lecturer-cam': { kind: 'rtsp' as const, address: 'rtsp://10.20.30.41/stream1' }, 'students-cam': { kind: 'rtsp' as const, address: 'rtsp://10.20.30.42/stream1' }, 'mic-lecturer': { kind: 'alsa' as const, address: 'eduscope_mic' }, 'mic-room': { kind: 'alsa' as const, address: 'hw:CARD=UMS,DEV=0' } }, bootstrapAdmin: { username: 'device-admin', displayName: 'Device Administrator', passwordFile: '/etc/eduscope/bootstrap-admin.password' } };
 
 describe('device bootstrap', () => {
   const dirs: string[] = [];
@@ -43,9 +43,9 @@ describe('device bootstrap', () => {
   it('pushes all enabled current bindings at startup', async () => {
     const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap); const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' }); const startPublisher = vi.fn().mockResolvedValue({ commandId: 'y' });
     await pushEnabledBindings(core.db, { setPublisherBinding, startPublisher }, { get: () => null });
-    expect(setPublisherBinding).toHaveBeenCalledTimes(4);
-    expect(startPublisher).toHaveBeenCalledTimes(4);
-    expect(startPublisher.mock.calls.map(([publisherId]) => publisherId)).toEqual(['usb', 'rtsp', 'rtsp2', 'audio']);
-    expect(core.db.select().from(sourceBindings).all()).toHaveLength(4); core.close();
+    expect(setPublisherBinding).toHaveBeenCalledTimes(5);
+    expect(startPublisher).toHaveBeenCalledTimes(5);
+    expect(startPublisher.mock.calls.map(([publisherId]) => publisherId)).toEqual(['usb', 'rtsp', 'rtsp2', 'audio', 'audio']);
+    expect(core.db.select().from(sourceBindings).all()).toHaveLength(5); core.close();
   });
 });

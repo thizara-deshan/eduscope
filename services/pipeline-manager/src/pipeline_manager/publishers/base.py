@@ -149,6 +149,7 @@ class PublisherController:
         # INV-AC-1 lifted: UMS exposes no writable ALSA mixer, so its named
         # GStreamer fader is persisted here and applied on publisher rebuild.
         self.room_audio_volume = 1.0
+        self.room_audio_device: str | None = None
 
     def bind(self, binding: "PublisherBinding | str") -> None:
         """A binding change or manual retry resets the restart budget. Accepts

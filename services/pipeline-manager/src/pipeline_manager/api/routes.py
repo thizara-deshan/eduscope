@@ -94,6 +94,7 @@ class PublisherCredentialsBody(BaseModel):
 class PublisherBindingBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     address: str = Field(min_length=1, max_length=2048)
+    roleId: SourceRole | None = None
     credentials: PublisherCredentialsBody | None = None
     devicePath: str | None = Field(default=None, max_length=1024)
 
@@ -231,6 +232,10 @@ async def bind_publisher(publisher_id: str, body: PublisherBindingBody, request:
     except ValueError:
         raise DomainProblem("consumer_not_found", "Unknown publisher", 404, {"publisherId": publisher_id}) from None
     controller = request.app.state.publishers[pid]
+    if pid is PublisherId.AUDIO and body.roleId is SourceRole.MIC_ROOM:
+        controller.room_audio_device = body.address
+        controller.restart_budget.reset()
+        return PublisherCommandAccepted(publisherId=publisher_id, state=controller.current_state().value)
     binding = PublisherBinding(
         address=body.address,
         username=body.credentials.username if body.credentials else None,

@@ -154,13 +154,13 @@ describe('preview signaling broker (events.md §3)', () => {
   });
 
   describe('offer/answer/ice negotiation', () => {
-    it('rejects an offer for a role with no enabled binding (source-unbound)', async () => {
+    it('rejects an offer for a bound audio role that is not online (source-offline)', async () => {
       testApp = await startTestApp();
       const ws = await connect(testApp.app, testApp.lecturerToken);
       const messages = collectMessages(ws);
       ws.send(JSON.stringify({ type: 'offer', negotiationId: '01ARZ3NDEKTSV4RRFFQ69G5FA1', roleId: 'mic-room', sdp: 'v=0...' }));
       await waitFor(() => messages.length >= 1);
-      expect(messages[0]).toEqual({ type: 'error', negotiationId: '01ARZ3NDEKTSV4RRFFQ69G5FA1', code: 'source-unbound', message: expect.any(String) });
+      expect(messages[0]).toEqual({ type: 'error', negotiationId: '01ARZ3NDEKTSV4RRFFQ69G5FA1', code: 'source-offline', message: expect.any(String) });
       expect(testApp.pm.calls.some((call) => call.path === '/consumers/thumbnails/offer')).toBe(false);
       ws.close();
     });

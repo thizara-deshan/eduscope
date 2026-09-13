@@ -311,7 +311,7 @@ describe('POST /recording/start (R-01) and GET /recording/state', () => {
     expect(session.deviceId).toBe('device-1');
     expect(session.ownerUserId).toBe(ctx.userId);
     expect(session.sourceSnapshot.presentation).toEqual({ inputId: expect.any(String), address: '/dev/video0' });
-    expect(session.sourceSnapshot['mic-room']).toEqual({ inputId: null, address: null });
+    expect(session.sourceSnapshot['mic-room']).toEqual({ inputId: expect.any(String), address: 'hw:CARD=UMS,DEV=0' });
 
     expect(recording.sessionId).toBe(session.id);
     expect(recording.state).toBe('capturing');

@@ -19,7 +19,7 @@ const SOURCE_ROLES = [
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'CAM 1', requiredForStart: false, provisionable: true },
   { id: 'students-cam', medium: 'video', displayLabel: 'CAM 2', requiredForStart: false, provisionable: true },
   { id: 'mic-lecturer', medium: 'audio', displayLabel: 'Lecturer Mic', requiredForStart: false, provisionable: true },
-  { id: 'mic-room', medium: 'audio', displayLabel: 'Room Mic', requiredForStart: false, provisionable: false },
+  { id: 'mic-room', medium: 'audio', displayLabel: 'Room Mic', requiredForStart: false, provisionable: true },
 ] as const;
 
 const CHANNEL_CONFIGS = [
@@ -35,12 +35,13 @@ const CHANNEL_CONFIGS = [
   { channelId: 'streaming', alwaysOn: false, enabledByDefault: false, presetId: 'pc-only', ratioA: null, ratioB: null },
 ] as const;
 
-/** Provisionable roles only (INV-SR-2 — `mic-room` has no `SourceBinding` in V1). */
+/** Default physical inputs for every provisionable source role. */
 const PHYSICAL_INPUT_SKELETONS = [
   { roleId: 'presentation', kind: 'v4l2', address: '/dev/video0' },
   { roleId: 'lecturer-cam', kind: 'rtsp', address: 'rtsp://192.168.1.101/stream1' },
   { roleId: 'students-cam', kind: 'rtsp', address: 'rtsp://192.168.1.102/stream1' },
   { roleId: 'mic-lecturer', kind: 'alsa', address: 'hw:0,0' },
+  { roleId: 'mic-room', kind: 'alsa', address: 'hw:CARD=UMS,DEV=0' },
 ] as const;
 
 /** AD-2 (INV-NC-1: wired only, no Wi-Fi fields exist) — the device's one known wired interface; `net.apply`'s `interfaceName ∈ known ifaces` allowlist (design/core-api.md §8.1) is exactly this seeded row set. */

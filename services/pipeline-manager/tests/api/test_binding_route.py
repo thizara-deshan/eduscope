@@ -66,6 +66,25 @@ async def test_bind_stores_structured_binding_and_resets_budget(app, client, aut
 
 
 @pytest.mark.asyncio
+async def test_room_mic_binding_updates_second_audio_branch_without_overwriting_lecturer(
+    app, client, auth_headers
+) -> None:
+    controller = app.state.publishers[PublisherId.AUDIO]
+    controller.bind(PublisherBinding(address="eduscope_mic"))
+
+    response = await client.put(
+        "/publishers/audio/binding",
+        headers=auth_headers,
+        json={"roleId": "mic-room", "address": "hw:CARD=UMS,DEV=0"},
+    )
+
+    assert response.status_code == 202
+    assert isinstance(controller.binding, PublisherBinding)
+    assert controller.binding.address == "eduscope_mic"
+    assert controller.room_audio_device == "hw:CARD=UMS,DEV=0"
+
+
+@pytest.mark.asyncio
 async def test_bind_rejects_extra_fields(client, auth_headers) -> None:
     response = await client.put(
         "/publishers/rtsp/binding",

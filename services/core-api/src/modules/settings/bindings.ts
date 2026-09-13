@@ -11,12 +11,13 @@ import type { PipelineManagerClient } from '../recording/pm/client.js';
 import type { PmPublisherId } from '../recording/pm/types.js';
 import type { SourceExecutor } from '../sources/status.js';
 
-/** pipeline-manager.md §1.1 — the inverse of `sources/status.ts#PM_PUBLISHER_TO_ROLE`; `mic-room` has no publisher (INV-SR-2, A-08 amended). */
+/** pipeline-manager publisher responsible for each provisionable role. */
 export const ROLE_TO_PM_PUBLISHER: Partial<Record<SourceRoleId, PmPublisherId>> = {
   presentation: 'usb',
   'lecturer-cam': 'rtsp',
   'students-cam': 'rtsp2',
   'mic-lecturer': 'audio',
+  'mic-room': 'audio',
 };
 
 export interface BindingsLogger {
@@ -80,7 +81,7 @@ async function pushBindingToPm(deps: BindingsDeps, roleId: SourceRoleId, input: 
   }
 
   try {
-    await deps.pm.setPublisherBinding(publisherId, { address: input.address, ...(credentials ? { credentials } : {}) });
+    await deps.pm.setPublisherBinding(publisherId, { roleId, address: input.address, ...(credentials ? { credentials } : {}) });
   } catch (error) {
     deps.logger?.warn('binding push to pipeline-manager failed', {
       roleId,
@@ -157,15 +158,11 @@ export interface SourceBindingPatch {
   enabled: boolean;
 }
 
-/** `updateSourceBinding` (HL-09 `cmd.admin.set_binding` — a provisioning act). Admin-only; `mic-room` stays permanently unbound (INV-SR-2). */
+/** `updateSourceBinding` (HL-09 `cmd.admin.set_binding` — a provisioning act). Admin-only. */
 export async function updateSourceBinding(deps: BindingsDeps, roleId: string, patch: SourceBindingPatch, actor: AuthContext): Promise<SourceBinding> {
   if (actor.role !== 'admin') {
     throw new ProblemError(403, 'not-authorized', 'Only an admin may change a source binding');
   }
-  if (roleId === 'mic-room') {
-    throw new ProblemError(422, 'config.invalid', 'mic-room cannot be bound in V1 (INV-SR-2)');
-  }
-
   const current = deps.db.select().from(sourceBindings).where(eq(sourceBindings.roleId, roleId)).get();
   if (!current) {
     throw new ProblemError(422, 'config.invalid', 'Unknown source role', { meta: { roleId } });

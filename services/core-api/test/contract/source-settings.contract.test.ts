@@ -133,18 +133,17 @@ describe('source settings contract (openapi.yaml tag: sources — listSourceRole
     expect(() => zUpdateSourceBindingResponse.parse(response.json())).not.toThrow();
   });
 
-  it('updateSourceBinding: 422 parses zProblem for mic-room', async () => {
+  it('updateSourceBinding: 200 parses the response for mic-room', async () => {
     testApp = await startTestApp();
-    const input = testApp.app.db.select().from(physicalInputs).where(eq(physicalInputs.kind, 'alsa')).get()!;
+    const input = testApp.app.db.select().from(physicalInputs).where(eq(physicalInputs.address, 'hw:CARD=UMS,DEV=0')).get()!;
     const response = await testApp.app.inject({
       method: 'PUT',
       url: '/api/v1/sources/bindings/mic-room',
       headers: { authorization: `Bearer ${testApp.token}` },
       payload: { physicalInputId: input.id, enabled: true },
     });
-    expect(response.statusCode).toBe(422);
-    const problem = zProblem.parse(response.json());
-    expect(problem.code).toBe('config.invalid');
+    expect(response.statusCode).toBe(200);
+    expect(() => zUpdateSourceBindingResponse.parse(response.json())).not.toThrow();
   });
 
   it('updateSourceBinding: 409 parses zProblem for a physical input already bound to another role', async () => {

@@ -9,12 +9,13 @@
     "inputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["presentation", "lecturer-cam", "students-cam", "mic-lecturer"],
+      "required": ["presentation", "lecturer-cam", "students-cam", "mic-lecturer", "mic-room"],
       "properties": {
         "presentation": {"$ref": "#/$defs/input"},
         "lecturer-cam": {"$ref": "#/$defs/input"},
         "students-cam": {"$ref": "#/$defs/input"},
-        "mic-lecturer": {"$ref": "#/$defs/input"}
+        "mic-lecturer": {"$ref": "#/$defs/input"},
+        "mic-room": {"$ref": "#/$defs/input"}
       }
     },
     "bootstrapAdmin": {

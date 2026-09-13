@@ -11,7 +11,7 @@ const input = z.object({ kind: z.enum(['v4l2', 'rtsp', 'alsa']), address: z.stri
 const schema = z.object({
   version: z.literal(1),
   wiredInterface: z.string().min(1),
-  inputs: z.object({ presentation: input, 'lecturer-cam': input, 'students-cam': input, 'mic-lecturer': input }).strict(),
+  inputs: z.object({ presentation: input, 'lecturer-cam': input, 'students-cam': input, 'mic-lecturer': input, 'mic-room': input }).strict(),
   bootstrapAdmin: z.object({ username: z.string().min(1), displayName: z.string().min(1), passwordFile: z.string().min(1) }).strict(),
 }).strict();
 
@@ -46,12 +46,12 @@ export async function seedBootstrapAdmin(
   core.db.insert(users).values({ id: ids.next(now), username: admin.username, displayName: admin.displayName, role: 'admin', source: 'local', externalId: null, passwordHash, mustResetPassword: true, disabled: false, lastLoginAt: null, createdAt: now.toISOString(), createdBy: null, importBatchId: null }).run();
 }
 
-const publishers: Record<string, PmPublisherId> = { presentation: 'usb', 'lecturer-cam': 'rtsp', 'students-cam': 'rtsp2', 'mic-lecturer': 'audio' };
+const publishers: Record<string, PmPublisherId> = { presentation: 'usb', 'lecturer-cam': 'rtsp', 'students-cam': 'rtsp2', 'mic-lecturer': 'audio', 'mic-room': 'audio' };
 
 export async function pushEnabledBindings(
   db: DrizzleDb,
   pm: {
-    setPublisherBinding(id: PmPublisherId, body: { address: string; credentials?: { username: string; password: string } }): Promise<PmPublisherCommandAccepted>;
+    setPublisherBinding(id: PmPublisherId, body: { roleId?: string; address: string; credentials?: { username: string; password: string } }): Promise<PmPublisherCommandAccepted>;
     startPublisher(id: PmPublisherId): Promise<PmPublisherCommandAccepted>;
   },
   secrets: { get(ref: string): string | null },
@@ -71,7 +71,7 @@ export async function pushEnabledBindings(
         if (typeof parsed.username === 'string' && typeof parsed.password === 'string') credentials = { username: parsed.username, password: parsed.password };
       }
     }
-    await pm.setPublisherBinding(publisher, { address: physical.address, ...(credentials ? { credentials } : {}) });
+    await pm.setPublisherBinding(publisher, { roleId: binding.roleId, address: physical.address, ...(credentials ? { credentials } : {}) });
     await pm.startPublisher(publisher);
   }
 }

@@ -132,7 +132,7 @@ describe('sources status contract (openapi.yaml tag: sources — getSourcesStatu
     await stopTestApp(testApp);
   });
 
-  it('getSourcesStatus: 200 parses zGetSourcesStatusResponse, five seeded roles, mic-room permanently unbound', async () => {
+  it('getSourcesStatus: 200 parses zGetSourcesStatusResponse with five bound roles', async () => {
     testApp = await startTestApp();
 
     const response = await getStatus(testApp);
@@ -140,7 +140,7 @@ describe('sources status contract (openapi.yaml tag: sources — getSourcesStatu
     expect(response.statusCode).toBe(200);
     const parsed = zGetSourcesStatusResponse.parse(response.body);
     expect(parsed.items).toHaveLength(5);
-    expect(findRole(parsed.items, 'mic-room')?.state).toBe('unbound');
+    expect(findRole(parsed.items, 'mic-room')?.state).toBe('unknown');
   });
 
   it('REST/WS convergence: a pm.status.resynced observation updates both the REST snapshot and an emitted sources.status event, unplug/replug converges honestly', async () => {

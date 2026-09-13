@@ -103,42 +103,42 @@ describe('source/input/binding settings (openapi.yaml tag: sources)', () => {
     await stopTestApp(testApp);
   });
 
-  it('listSourceRoles: exactly the five seeded roles, mic-room not provisionable', async () => {
+  it('listSourceRoles: exactly the five seeded provisionable roles', async () => {
     testApp = await startTestApp();
     const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/sources/roles', headers: { authorization: `Bearer ${testApp.lecturerToken}` } });
     expect(response.statusCode).toBe(200);
     const items = (response.json() as { items: Array<{ id: string; provisionable: boolean }> }).items;
     expect(items).toHaveLength(5);
-    expect(items.find((role) => role.id === 'mic-room')?.provisionable).toBe(false);
+    expect(items.find((role) => role.id === 'mic-room')?.provisionable).toBe(true);
   });
 
-  it('listPhysicalInputs: the four seeded skeletons', async () => {
+  it('listPhysicalInputs: the five seeded skeletons', async () => {
     testApp = await startTestApp();
     const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/sources/inputs', headers: { authorization: `Bearer ${testApp.lecturerToken}` } });
     expect(response.statusCode).toBe(200);
-    expect((response.json() as { items: unknown[] }).items).toHaveLength(4);
+    expect((response.json() as { items: unknown[] }).items).toHaveLength(5);
   });
 
-  it('listSourceBindings: at most one binding per role, mic-room absent', async () => {
+  it('listSourceBindings: one binding per role, including mic-room', async () => {
     testApp = await startTestApp();
     const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/sources/bindings', headers: { authorization: `Bearer ${testApp.lecturerToken}` } });
     expect(response.statusCode).toBe(200);
     const items = (response.json() as { items: Array<{ roleId: string }> }).items;
-    expect(items).toHaveLength(4);
-    expect(items.some((binding) => binding.roleId === 'mic-room')).toBe(false);
+    expect(items).toHaveLength(5);
+    expect(items.some((binding) => binding.roleId === 'mic-room')).toBe(true);
   });
 
-  it('updateSourceBinding: mic-room is permanently refused (INV-SR-2)', async () => {
+  it('updateSourceBinding: mic-room can be rebound', async () => {
     testApp = await startTestApp();
-    const input = testApp.app.db.select().from(physicalInputs).where(eq(physicalInputs.kind, 'alsa')).get()!;
+    const input = testApp.app.db.select().from(physicalInputs).where(eq(physicalInputs.address, 'hw:CARD=UMS,DEV=0')).get()!;
     const response = await testApp.app.inject({
       method: 'PUT',
       url: '/api/v1/sources/bindings/mic-room',
       headers: { authorization: `Bearer ${testApp.adminToken}` },
       payload: { physicalInputId: input.id, enabled: true },
     });
-    expect(response.statusCode).toBe(422);
-    expect((response.json() as { code: string }).code).toBe('config.invalid');
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as { roleId: string }).roleId).toBe('mic-room');
   });
 
   it('updateSourceBinding: a physical input can be bound to only one role', async () => {

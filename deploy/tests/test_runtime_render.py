@@ -45,6 +45,8 @@ class RuntimeRenderTest(unittest.TestCase):
         provisioned = json.loads(files["provisioning.json"][0])
         self.assertEqual(provisioned["hallCode"], "F1301")
         self.assertNotIn("rtsp", provisioned)
+        bootstrap = json.loads(files["device-bootstrap.json"][0])
+        self.assertEqual(bootstrap["inputs"]["mic-room"], {"kind": "alsa", "address": "hw:CARD=UMS,DEV=0"})
 
     def test_check_validates_without_writing(self):
         files = self.rendered()

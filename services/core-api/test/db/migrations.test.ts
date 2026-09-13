@@ -79,10 +79,10 @@ describe('migrations', () => {
       expect(rows).toHaveLength(3);
     });
 
-    it('seeds exactly 4 physical-input skeletons and bindings (mic-room excluded, INV-SR-2)', () => {
+    it('seeds exactly 5 physical-input skeletons and bindings', () => {
       seed(core, clock.now(), ids);
-      expect(core.db.select().from(physicalInputs).all()).toHaveLength(4);
-      expect(core.db.select().from(sourceBindings).all()).toHaveLength(4);
+      expect(core.db.select().from(physicalInputs).all()).toHaveLength(5);
+      expect(core.db.select().from(sourceBindings).all()).toHaveLength(5);
     });
 
     it('seeds exactly 1 retention policy', () => {
@@ -105,8 +105,8 @@ describe('migrations', () => {
       expect(core.db.select().from(sourceRoles).all()).toHaveLength(5);
       expect(core.db.select().from(layoutPresets).all()).toHaveLength(7);
       expect(core.db.select().from(channelConfigs).all()).toHaveLength(3);
-      expect(core.db.select().from(physicalInputs).all()).toHaveLength(4);
-      expect(core.db.select().from(sourceBindings).all()).toHaveLength(4);
+      expect(core.db.select().from(physicalInputs).all()).toHaveLength(5);
+      expect(core.db.select().from(sourceBindings).all()).toHaveLength(5);
       expect(core.db.select().from(retentionPolicy).all()).toHaveLength(1);
       expect(core.db.select().from(encodingProfiles).all()).toHaveLength(1);
     });
