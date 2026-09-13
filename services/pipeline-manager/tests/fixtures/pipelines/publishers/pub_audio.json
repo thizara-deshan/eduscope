@@ -10,5 +10,5 @@
   "queue", "max-size-time=200000000", "!", "mix.",
   "audiomixer", "name=mix", "latency=200000000", "!", "audioconvert", "!", "audioresample", "!",
   "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved", "!", "queue", "max-size-time=200000000", "!",
-  "shmsink", "socket-path=/tmp/audio.sock", "shm-size=4000000", "wait-for-connection=false", "sync=false"
+  "shmsink", "socket-path=/tmp/audio.sock", "shm-size=4000000", "perms=0660", "wait-for-connection=false", "sync=false"
 ]

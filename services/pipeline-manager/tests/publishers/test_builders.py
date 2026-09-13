@@ -143,6 +143,7 @@ class TestAudioPublisher:
         spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "shm-size=4000000" in spec.argv
         assert "socket-path=/tmp/audio.sock" in spec.argv
+        assert "perms=0660" in spec.argv
 
     def test_s16le_48khz_stereo(self) -> None:
         spec = build_audio_publisher("hw:1,0", "hw:2,0")

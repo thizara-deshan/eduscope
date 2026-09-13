@@ -38,6 +38,7 @@ def build_audio_publisher(
         "shmsink",
         f"socket-path={socket}",
         f"shm-size={ring}",
+        "perms=0660",
         "wait-for-connection=false",
         "sync=false",
     )
