@@ -11,6 +11,7 @@ from pipeline_manager.audio.levels import (
     MIN_SAMPLE_PERIOD_SECONDS,
     AudioLevelSampler,
     GstLevelMeterTap,
+    _parse_latest_rms,
     _rms_db_to_linear,
     build_level_tap_argv,
 )
@@ -169,6 +170,21 @@ def test_rms_db_to_linear_conversion(db: float, expected) -> None:
 
 def test_rms_db_to_linear_clamps_above_zero_db() -> None:
     assert _rms_db_to_linear(20.0) == 1.0  # a post-clip signal never reports > 1.0
+
+
+@pytest.mark.parametrize(
+    "line,expected_db",
+    [
+        (b"level, rms=(float){ -20.0, -21.0 };", -20.0),
+        (b"level, rms=(double){ -12.5, -13.0 };", -12.5),
+        (b"level, rms=< (double)-6.0, (double)-6.5 >;", -6.0),
+        # The serialization emitted by GStreamer on the production hardware.
+        (b"level, rms=(GValueArray)< -55.769339481943973, -55.697036148670939 >;", -55.769339481943973),
+        (b"level, peak=(float){ -1.0 };", None),
+    ],
+)
+def test_parse_latest_rms_handles_both_forms(line: bytes, expected_db: float | None) -> None:
+    assert _parse_latest_rms(line) == expected_db
 
 
 @dataclass

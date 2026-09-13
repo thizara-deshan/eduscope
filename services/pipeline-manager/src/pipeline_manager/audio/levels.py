@@ -90,8 +90,23 @@ class AudioLevelSampler:
                 listener(sample)
 
 
-_LEVEL_RMS_PATTERN = re.compile(rb"rms=\(float\)\{\s*(-?[0-9.]+)")
+_NUM = rb"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|-?inf"
+# GStreamer serializes level RMS as GstValueList `{ ... }`, GstValueArray
+# `< ... >`, or a scalar depending on the installed version/plugins.  An
+# optional type annotation can name a scalar type or the container itself.
+_RMS_LIST = re.compile(rb"rms=(?:\([^)]*\))?\s*[{<]([^}>]*)[}>]")
+_RMS_SCALAR = re.compile(rb"rms=(?:\([^)]*\))?\s*(" + _NUM + rb")")
 LEVEL_TAP_INTERVAL_NS = 100_000_000  # matches MIN_SAMPLE_PERIOD_SECONDS (10 Hz)
+
+
+def _parse_latest_rms(line: bytes) -> float | None:
+    """Return first-channel RMS dBFS from a ``gst-launch -m`` level line."""
+    match = _RMS_LIST.search(line)
+    if match:
+        numbers = re.findall(_NUM, match.group(1))
+        return float(numbers[0]) if numbers else None
+    scalar_match = _RMS_SCALAR.search(line)
+    return float(scalar_match.group(1)) if scalar_match else None
 
 
 def _rms_db_to_linear(db: float) -> float:
@@ -159,9 +174,9 @@ class GstLevelMeterTap:
             line = await process.stdout.readline()
             if not line:
                 return
-            match = _LEVEL_RMS_PATTERN.search(line)
-            if match:
-                self._latest_rms = _rms_db_to_linear(float(match.group(1)))
+            db = _parse_latest_rms(line)
+            if db is not None:
+                self._latest_rms = _rms_db_to_linear(db)
 
     async def stop(self) -> None:
         if self._reader_task is not None:
