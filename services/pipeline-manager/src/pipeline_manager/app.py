@@ -420,7 +420,11 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         meter = GstLevelMeterTap(PUBLISHER_SOCKETS[PublisherId.AUDIO])
         await meter.start()
         app.state.audio_meter = meter
-        app.state.audio_sampler = AudioLevelSampler(read_rms=meter.read_rms)
+        sampler = AudioLevelSampler(read_rms=meter.read_rms)
+        sampler.add_listener(
+            lambda sample: app.state.publishers[PublisherId.AUDIO].observe_telemetry(rms=sample.rms)
+        )
+        app.state.audio_sampler = sampler
 
     app.state.start_audio_meter = _start_real_audio_meter
     return app

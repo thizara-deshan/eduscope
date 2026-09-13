@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pipeline_manager.app import create_production_app
@@ -7,6 +9,7 @@ from pipeline_manager.audio.control import real_amixer_exec
 from pipeline_manager.audio.levels import AudioLevelSampler
 from pipeline_manager.config import Settings
 from pipeline_manager.hardware.watchdog import real_v4l2_probe
+from pipeline_manager.models import PublisherId
 from pipeline_manager.publishers.coordinator import start_publisher as real_start_publisher
 from pipeline_manager.publishers.coordinator import stop_publisher as real_stop_publisher
 from pipeline_manager.supervisor.recovery import real_proc_scanner
@@ -60,8 +63,11 @@ async def test_start_audio_meter_replaces_the_sampler_with_a_real_meter_backed_o
     app = _app()
 
     class FakeStdout:
+        def __init__(self) -> None:
+            self.lines = [b"level, rms=(GValueArray)< -12.0, -13.0 >;\n"]
+
         async def readline(self) -> bytes:
-            return b""
+            return self.lines.pop(0) if self.lines else b""
 
     class FakeProcess:
         stdout = FakeStdout()
@@ -84,5 +90,12 @@ async def test_start_audio_meter_replaces_the_sampler_with_a_real_meter_backed_o
     assert app.state.audio_sampler is not original_sampler
     assert isinstance(app.state.audio_sampler, AudioLevelSampler)
     assert app.state.audio_meter is not None
+
+    async with app.state.audio_sampler:
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if app.state.publishers[PublisherId.AUDIO].health.rms is not None:
+                break
+    assert app.state.publishers[PublisherId.AUDIO].health.rms == pytest.approx(10 ** (-12.0 / 20.0))
 
     await app.state.audio_meter.stop()
