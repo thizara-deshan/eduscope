@@ -130,6 +130,10 @@ class ProcessSupervisor:
         self._max_raw_lines = max_raw_lines
         self._runtime_dir = runtime_dir
         self.processes: dict[str, ManagedProcess] = {}
+        self._raw_line_listeners: list[Callable[[str], None]] = []
+
+    def add_raw_line_listener(self, listener: Callable[[str], None]) -> None:
+        self._raw_line_listeners.append(listener)
 
     async def start(self, spec: PipelineSpec, identity: str) -> ManagedProcess:
         argv = list(spec.argv)
@@ -228,6 +232,9 @@ class ProcessSupervisor:
             process.raw_lines.append(text)
             if len(process.raw_lines) > self._max_raw_lines:
                 del process.raw_lines[: len(process.raw_lines) - self._max_raw_lines]
+            for listener in self._raw_line_listeners:
+                with suppress(Exception):
+                    listener(text)
             kind = classify_line(text)
             if kind is not None:
                 asyncio.run_coroutine_threadsafe(

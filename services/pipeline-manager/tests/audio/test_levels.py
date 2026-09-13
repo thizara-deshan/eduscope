@@ -101,6 +101,18 @@ async def test_role_is_mic_lecturer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sampler_can_emit_mic_room_role() -> None:
+    fake = FakeAsyncClock()
+    sampler = AudioLevelSampler(
+        read_rms=lambda: 0.2, role=SourceRole.MIC_ROOM,
+        clock=fake.clock, sleep=fake.sleep,
+    )
+    async with sampler:
+        await asyncio.sleep(0)
+    assert sampler.emitted[0].role_id is SourceRole.MIC_ROOM
+
+
+@pytest.mark.asyncio
 async def test_does_not_open_a_second_capture_device() -> None:
     """The sampler only ever calls the injected read_rms tap — proven by the
     fact its constructor takes no device/card argument at all."""
@@ -234,6 +246,20 @@ async def test_meter_tap_parses_rms_from_level_bus_lines() -> None:
     await tap.stop()
     assert process.terminated is True
     assert process.waited is True
+
+
+def test_meter_tap_maps_named_publisher_levels_to_roles() -> None:
+    tap = GstLevelMeterTap("/tmp/audio.sock")
+    tap.observe_line(
+        b'Got message from element "lvl_mic_lecturer" (element): '
+        b'level, rms=(GValueArray)< -12.0, -13.0 >;'
+    )
+    tap.observe_line(
+        b'/GstPipeline:pipeline0/GstLevel:lvl_mic_room: '
+        b'level, rms=(double){ -20.0, -21.0 };'
+    )
+    assert tap.read_rms(SourceRole.MIC_LECTURER) == _rms_db_to_linear(-12.0)
+    assert tap.read_rms(SourceRole.MIC_ROOM) == _rms_db_to_linear(-20.0)
 
 
 @pytest.mark.asyncio

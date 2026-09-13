@@ -24,7 +24,7 @@ from .consumers.thumbnails import RoleNotPreviewable, ThumbnailController
 from .hardware.helper_client import HelperClient
 from .hardware.led import LedController
 from .hardware.watchdog import CaptureCardWatchdog, ProbeResult, real_v4l2_probe, run_watchdog_loop
-from .models import ConsumerState, PublisherId
+from .models import ConsumerState, PublisherId, SourceRole
 from .pipelines.builder import UnsupportedPipeline
 from .pipelines.layouts import InvalidRatio, PresetChannelMismatch
 from .pipelines.live import InvalidStreamKey
@@ -247,7 +247,8 @@ async def _run_shutdown(app: FastAPI) -> None:
     # otherwise the sampler's background task, and a real meter tap's
     # subprocess, leak past process lifetime.
     state.audio_subscriptions.clear()
-    await state.audio_sampler.drain()
+    for sampler in state.audio_samplers.values():
+        await sampler.drain()
     meter = getattr(state, "audio_meter", None)
     if meter is not None:
         await meter.stop()
@@ -375,7 +376,12 @@ def create_app(settings: Settings | None = None, *, popen=None, runtime_dir=None
         return ExecResult(returncode=1, stderr="amixer not available on this host")
 
     app.state.audio_exec = _default_audio_exec
-    app.state.audio_sampler = AudioLevelSampler(read_rms=lambda: 0.0)
+    app.state.audio_samplers = {
+        role: AudioLevelSampler(read_rms=lambda: 0.0, role=role)
+        for role in (SourceRole.MIC_LECTURER, SourceRole.MIC_ROOM)
+    }
+    # Transitional alias for callers that only need the lecturer sampler.
+    app.state.audio_sampler = app.state.audio_samplers[SourceRole.MIC_LECTURER]
     app.state.audio_subscriptions = {}
     app.state.audio_meter = None
     app.state.start_audio_meter = _noop_start_audio_meter
@@ -419,13 +425,19 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
 
     async def _start_real_audio_meter() -> None:
         meter = GstLevelMeterTap(PUBLISHER_SOCKETS[PublisherId.AUDIO])
-        await meter.start()
+        app.state.supervisor.add_raw_line_listener(meter.observe_line)
         app.state.audio_meter = meter
-        sampler = AudioLevelSampler(read_rms=meter.read_rms)
-        sampler.add_listener(
+        samplers = {
+            role: AudioLevelSampler(
+                read_rms=lambda r=role: meter.read_rms(r), role=role,
+            )
+            for role in (SourceRole.MIC_LECTURER, SourceRole.MIC_ROOM)
+        }
+        samplers[SourceRole.MIC_LECTURER].add_listener(
             lambda sample: app.state.publishers[PublisherId.AUDIO].observe_telemetry(rms=sample.rms)
         )
-        app.state.audio_sampler = sampler
+        app.state.audio_samplers = samplers
+        app.state.audio_sampler = samplers[SourceRole.MIC_LECTURER]
 
     app.state.start_audio_meter = _start_real_audio_meter
     return app

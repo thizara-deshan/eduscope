@@ -9,7 +9,7 @@ from pipeline_manager.audio.control import real_amixer_exec
 from pipeline_manager.audio.levels import AudioLevelSampler
 from pipeline_manager.config import Settings
 from pipeline_manager.hardware.watchdog import real_v4l2_probe
-from pipeline_manager.models import PublisherId
+from pipeline_manager.models import PublisherId, SourceRole
 from pipeline_manager.publishers.coordinator import start_publisher as real_start_publisher
 from pipeline_manager.publishers.coordinator import stop_publisher as real_stop_publisher
 from pipeline_manager.supervisor.recovery import real_proc_scanner
@@ -62,36 +62,18 @@ async def test_start_audio_meter_replaces_the_sampler_with_a_real_meter_backed_o
     proven here with a fake subprocess spawn so the test stays hermetic."""
     app = _app()
 
-    class FakeStdout:
-        def __init__(self) -> None:
-            self.lines = [b"level, rms=(GValueArray)< -12.0, -13.0 >;\n"]
-
-        async def readline(self) -> bytes:
-            return self.lines.pop(0) if self.lines else b""
-
-    class FakeProcess:
-        stdout = FakeStdout()
-
-        def terminate(self) -> None:
-            pass
-
-        async def wait(self) -> int:
-            return 0
-
-    async def fake_create_subprocess_exec(*argv, **kwargs):
-        assert "alsasrc" not in argv  # never a second ALSA capture device
-        return FakeProcess()
-
-    monkeypatch.setattr("asyncio.create_subprocess_exec", fake_create_subprocess_exec)
-
     original_sampler = app.state.audio_sampler
     await app.state.start_audio_meter()
 
     assert app.state.audio_sampler is not original_sampler
     assert isinstance(app.state.audio_sampler, AudioLevelSampler)
+    assert set(app.state.audio_samplers) == {SourceRole.MIC_LECTURER, SourceRole.MIC_ROOM}
     assert app.state.audio_meter is not None
+    app.state.audio_meter.observe_line(
+        b'from element "lvl_mic_lecturer": level, rms=(GValueArray)< -12.0, -13.0 >;'
+    )
 
-    async with app.state.audio_sampler:
+    async with app.state.audio_samplers[SourceRole.MIC_LECTURER]:
         for _ in range(20):
             await asyncio.sleep(0)
             if app.state.publishers[PublisherId.AUDIO].health.rms is not None:

@@ -125,7 +125,8 @@ async def test_shutdown_drains_open_audio_subscriptions_and_stops_the_meter() ->
     sampler's background task, and a real meter tap's subprocess must be
     stopped."""
     app = _app()
-    await app.state.audio_sampler.__aenter__()
+    for sampler in app.state.audio_samplers.values():
+        await sampler.__aenter__()
     app.state.audio_subscriptions["sub-1"] = True
 
     stopped = []
@@ -140,5 +141,5 @@ async def test_shutdown_drains_open_audio_subscriptions_and_stops_the_meter() ->
     await _run_shutdown(app)
 
     assert app.state.audio_subscriptions == {}
-    assert app.state.audio_sampler.subscriber_count == 0
+    assert all(sampler.subscriber_count == 0 for sampler in app.state.audio_samplers.values())
     assert stopped == [1]

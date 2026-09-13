@@ -500,7 +500,8 @@ async def put_audio_control(body: AudioControlBody, request: Request):
 async def create_audio_level_subscription(request: Request) -> dict:
     state = request.app.state
     sub_id = state.new_id()
-    await state.audio_sampler.__aenter__()
+    for sampler in state.audio_samplers.values():
+        await sampler.__aenter__()
     state.audio_subscriptions[sub_id] = True
     return {"subscriptionId": sub_id}
 
@@ -509,7 +510,8 @@ async def create_audio_level_subscription(request: Request) -> dict:
 async def delete_audio_level_subscription(subscription_id: str, request: Request) -> Response:
     state = request.app.state
     if state.audio_subscriptions.pop(subscription_id, None):
-        await state.audio_sampler.__aexit__(None, None, None)
+        for sampler in state.audio_samplers.values():
+            await sampler.__aexit__(None, None, None)
     return Response(status_code=204)
 
 

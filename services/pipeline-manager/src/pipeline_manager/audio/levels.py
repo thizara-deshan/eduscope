@@ -96,6 +96,13 @@ _NUM = rb"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|-?inf"
 # optional type annotation can name a scalar type or the container itself.
 _RMS_LIST = re.compile(rb"rms=(?:\([^)]*\))?\s*[{<]([^}>]*)[}>]")
 _RMS_SCALAR = re.compile(rb"rms=(?:\([^)]*\))?\s*(" + _NUM + rb")")
+_LEVEL_ELEMENT = re.compile(
+    rb'(?:GstLevel:|from element ["\'])(lvl_mic_(?:lecturer|room))'
+)
+_ELEMENT_ROLES = {
+    b"lvl_mic_lecturer": SourceRole.MIC_LECTURER,
+    b"lvl_mic_room": SourceRole.MIC_ROOM,
+}
 LEVEL_TAP_INTERVAL_NS = 100_000_000  # matches MIN_SAMPLE_PERIOD_SECONDS (10 Hz)
 LEVEL_TAP_RECONNECT_SECONDS = 0.5
 
@@ -153,7 +160,10 @@ class GstLevelMeterTap:
         self._reconnect_delay = reconnect_delay
         self._process: "asyncio.subprocess.Process | None" = None
         self._reader_task: asyncio.Task | None = None
-        self._latest_rms = 0.0
+        self._latest_rms = {
+            SourceRole.MIC_LECTURER: 0.0,
+            SourceRole.MIC_ROOM: 0.0,
+        }
         self._stopping = False
 
     @staticmethod
@@ -162,8 +172,19 @@ class GstLevelMeterTap:
             *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
         )
 
-    def read_rms(self) -> float:
-        return self._latest_rms
+    def read_rms(self, role: SourceRole = SourceRole.MIC_LECTURER) -> float:
+        return self._latest_rms[role]
+
+    def observe_line(self, line: bytes | str) -> None:
+        """Consume a publisher ``gst-launch -m`` line and retain role RMS."""
+        encoded = line.encode() if isinstance(line, str) else line
+        db = _parse_latest_rms(encoded)
+        if db is None:
+            return
+        element = _LEVEL_ELEMENT.search(encoded)
+        role = _ELEMENT_ROLES.get(element.group(1)) if element else SourceRole.MIC_LECTURER
+        if role is not None:
+            self._latest_rms[role] = _rms_db_to_linear(db)
 
     async def start(self) -> None:
         if self._process is not None:
@@ -178,9 +199,7 @@ class GstLevelMeterTap:
             assert process is not None and process.stdout is not None
             line = await process.stdout.readline()
             if line:
-                db = _parse_latest_rms(line)
-                if db is not None:
-                    self._latest_rms = _rms_db_to_linear(db)
+                self.observe_line(line)
                 continue
 
             # A shm reader gets EOF when core-api rebinds/restarts the audio
