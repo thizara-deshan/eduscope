@@ -292,15 +292,15 @@ path and the **source inventory**, which are gated to lecturer-only today.
   `updateSourceBinding` — INV-SR-2/A-08 lifted)
 - Test: the vitest suites next to each file (`*.test.ts`) — bindings, device-bootstrap, seeds/gate
 
-- [ ] **Step 1: Read** each file's current test to see the fixture shape, then write
+- [x] **Step 1: Read** each file's current test to see the fixture shape, then write
   failing tests: mic-room is provisionable, has a binding, maps to the `audio`
   publisher, and `updateSourceBinding('mic-room', …)` succeeds.
-- [ ] **Step 2: Run, confirm fail** (`pnpm --filter @eduscope/core-api test`).
-- [ ] **Step 3: Implement** the seed/schema/bootstrap/binding edits. If a Drizzle
+- [x] **Step 2: Run, confirm fail** (`pnpm --filter @eduscope/core-api test`).
+- [x] **Step 3: Implement** the seed/schema/bootstrap/binding edits. If a Drizzle
   migration is needed for the source-role/binding rows, add one under
   `services/core-api/migrations/` following the numbered pattern.
-- [ ] **Step 4: Run, confirm pass.**
-- [ ] **Step 5: Commit** — `feat(sources): bind and provision mic-room (INV-SR-2/A-08 lifted)`.
+- [x] **Step 4: Run, confirm pass.**
+- [x] **Step 5: Commit** — `feat(sources): bind and provision mic-room (INV-SR-2/A-08 lifted)`.
 
 ### Task 2.2: Allow mic-room audio control through core-api
 
@@ -312,13 +312,13 @@ path and the **source inventory**, which are gated to lecturer-only today.
   `/audio/controls/mic-lecturer`) and `pm/types.ts:52` docstring
 - Test: `audio-routes.test.ts`, `pm/client.test.ts`
 
-- [ ] **Step 1: Write failing tests** — an audio-control request for `mic-room`
+- [x] **Step 1: Write failing tests** — an audio-control request for `mic-room`
   reaches PM at `/audio/controls/mic-room` and returns the readback result; a
   request for an unknown role is still rejected.
-- [ ] **Step 2: Run, confirm fail.**
-- [ ] **Step 3: Implement** — accept both roles, route by role id.
-- [ ] **Step 4: Run, confirm pass.**
-- [ ] **Step 5: Commit** — `feat(audio): route mic-room controls to pipeline-manager (LP-9/LP-14 lifted)`.
+- [x] **Step 2: Run, confirm fail.**
+- [x] **Step 3: Implement** — accept both roles, route by role id.
+- [x] **Step 4: Run, confirm pass.**
+- [x] **Step 5: Commit** — `feat(audio): route mic-room controls to pipeline-manager (LP-9/LP-14 lifted)`.
 
 > **CHECKPOINT 2 — review core-api.** Confirm `pnpm --filter @eduscope/core-api test`
 > and `pnpm --filter @eduscope/shared test` green, and the OpenAPI/contract checks
