@@ -171,3 +171,8 @@ class TestAudioPublisher:
         assert "name=lvl_mic_lecturer" in spec.argv
         assert "name=lvl_mic_room" in spec.argv
         assert spec.argv.count("provide-clock=false") == 2
+
+    def test_room_software_fader_is_configurable(self) -> None:
+        spec = build_audio_publisher("hw:BOMGE,0", "hw:UMS,0", room_volume=0.4)
+        room = spec.argv.index("name=vol_mic_room")
+        assert spec.argv[room + 1] == "volume=0.4"

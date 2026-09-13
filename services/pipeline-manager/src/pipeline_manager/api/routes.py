@@ -476,17 +476,48 @@ async def stop_consumer(consumer_id: str, request: Request) -> CommandAccepted:
 # ── audio ────────────────────────────────────────────────────────────────
 
 
-@router.put("/audio/controls/mic-lecturer")
-async def put_audio_control(body: AudioControlBody, request: Request):
+async def _put_audio_control(role: SourceRole, body: AudioControlBody, request: Request):
     from ..audio.control import apply_audio_control
 
     state = request.app.state
     result = await apply_audio_control(
-        SourceRole.MIC_LECTURER, body.gain, body.muted,
-        card=state.settings.mic_alsa_card, control=state.settings.mic_alsa_control,
+        role, body.gain, body.muted,
+        card=(state.settings.mic_alsa_card if role is SourceRole.MIC_LECTURER else state.settings.room_mic_alsa_card),
+        control=(state.settings.mic_alsa_control if role is SourceRole.MIC_LECTURER else state.settings.room_mic_alsa_control),
         mixer_min=state.settings.mic_mixer_min, mixer_max=state.settings.mic_mixer_max,
         exec_file=state.audio_exec,
     )
+    return {
+        "roleId": result.role_id.value,
+        "appliedGain": result.applied_gain,
+        "appliedMuted": result.applied_muted,
+        "appliedState": result.applied_state,
+        "lastError": result.last_error,
+    }
+
+
+@router.put("/audio/controls/mic-lecturer")
+async def put_lecturer_audio_control(body: AudioControlBody, request: Request):
+    return await _put_audio_control(SourceRole.MIC_LECTURER, body, request)
+
+
+@router.put("/audio/controls/mic-room")
+async def put_room_audio_control(body: AudioControlBody, request: Request):
+    from ..audio.control import apply_room_software_control
+
+    state = request.app.state
+    controller = state.publishers[PublisherId.AUDIO]
+    result = apply_room_software_control(
+        body.gain, body.muted,
+        set_volume=lambda value: setattr(controller, "room_audio_volume", value),
+    )
+    # gst-launch has no external property-control channel. Rebuild the one
+    # audio publisher so its named post-fader volume takes effect; downstream
+    # consumers remain bound to the frozen /tmp/audio.sock contract.
+    if controller.pid is not None:
+        async with state.publisher_locks[PublisherId.AUDIO]:
+            await state.stop_publisher(controller)
+            await state.start_publisher(controller)
     return {
         "roleId": result.role_id.value,
         "appliedGain": result.applied_gain,

@@ -5,7 +5,9 @@ from ..pipelines.builder import PipelineBuilder, PipelineSpec
 from .base import PUBLISHER_RING_BYTES, PUBLISHER_SOCKETS
 
 
-def build_audio_publisher(lecturer_device: str, room_device: str) -> PipelineSpec:
+def build_audio_publisher(
+    lecturer_device: str, room_device: str, *, room_volume: float = 1.0
+) -> PipelineSpec:
     """Mix both USB microphones into the frozen S16LE 48 kHz stereo shm.
 
     The USB devices have independent clocks. ``provide-clock=false`` keeps
@@ -18,11 +20,14 @@ def build_audio_publisher(lecturer_device: str, room_device: str) -> PipelineSpe
     ring = PUBLISHER_RING_BYTES[PublisherId.AUDIO]
     builder = PipelineBuilder()
     caps = "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved"
-    for device, suffix in ((lecturer_device, "mic_lecturer"), (room_device, "mic_room")):
+    for device, suffix, volume in (
+        (lecturer_device, "mic_lecturer", 1.0),
+        (room_device, "mic_room", room_volume),
+    ):
         builder.add(
             "alsasrc", f"device={device}", "do-timestamp=true", "provide-clock=false", "!",
             "audioconvert", "!", "audioresample", "!", caps, "!",
-            "volume", f"name=vol_{suffix}", "volume=1.0", "!",
+            "volume", f"name=vol_{suffix}", f"volume={volume}", "!",
             "level", f"name=lvl_{suffix}", "interval=100000000", "post-messages=true", "!",
             "queue", "max-size-time=200000000", "!", "mix.",
         )

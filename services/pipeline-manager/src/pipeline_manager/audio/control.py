@@ -33,6 +33,7 @@ class ExecResult:
 
 ExecFn = Callable[[Sequence[str]], Awaitable[ExecResult]]
 LogFn = Callable[[dict], None]
+SoftwareVolumeFn = Callable[[float], None]
 
 
 async def real_amixer_exec(argv: Sequence[str]) -> ExecResult:
@@ -79,13 +80,13 @@ async def apply_audio_control(
     exec_file: ExecFn,
     log: LogFn | None = None,
 ) -> AudioControlResult:
-    """Argv-only mixer apply/readback. Only `mic-lecturer` is accepted; gain
+    """Argv-only mixer apply/readback for both microphone roles. Gain
     0..100 maps through the configured mixer min/max; applied state comes
     from a follow-up `sget`, never an echo of the request. Device identifiers
     stay out of the returned (public) error; `log`, if given, gets the full
     structured context for journald.
     """
-    if role is not SourceRole.MIC_LECTURER:
+    if role not in (SourceRole.MIC_LECTURER, SourceRole.MIC_ROOM):
         raise UnsupportedAudioRole(f"{role.value} has no audio control")
     if not (0 <= gain <= 100):
         raise InvalidGain("gain must be within 0..100")
@@ -120,4 +121,24 @@ async def apply_audio_control(
 
     return AudioControlResult(
         role_id=role, applied_gain=applied_gain, applied_muted=applied_muted, applied_state="applied"
+    )
+
+
+def apply_room_software_control(
+    gain: int, muted: bool, *, set_volume: SoftwareVolumeFn
+) -> AudioControlResult:
+    """Apply the UMS room mic's post-capture software fader.
+
+    This hardware exposes only a read-only channel-map ALSA control, so the
+    named GStreamer ``volume`` element is the authoritative room control.
+    The caller rebuilds the publisher with this value when it is running.
+    """
+    if not (0 <= gain <= 100):
+        raise InvalidGain("gain must be within 0..100")
+    set_volume(0.0 if muted else gain / 100.0)
+    return AudioControlResult(
+        role_id=SourceRole.MIC_ROOM,
+        applied_gain=gain,
+        applied_muted=muted,
+        applied_state="applied",
     )

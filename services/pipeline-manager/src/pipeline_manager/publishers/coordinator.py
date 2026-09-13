@@ -63,7 +63,9 @@ def select_publisher_spec(
         return build_rtsp_publisher(controller.publisher_id, address, credentials)
 
     if controller.publisher_id is PublisherId.AUDIO:
-        return build_audio_publisher(address, room_audio_device)
+        return build_audio_publisher(
+            address, room_audio_device, room_volume=controller.room_audio_volume
+        )
 
     raise UnsupportedPipeline(f"no publisher builder for {controller.publisher_id.value}")  # pragma: no cover - exhaustive over PublisherId
 

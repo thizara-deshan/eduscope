@@ -100,6 +100,13 @@ async def test_audio_control_route(client, auth_headers) -> None:
 
 
 @pytest.mark.asyncio
+async def test_room_audio_control_route(client, auth_headers) -> None:
+    response = await client.put("/audio/controls/mic-room", headers=auth_headers, json={"gain": 50, "muted": False})
+    assert response.status_code == 200
+    assert response.json()["roleId"] == "mic-room"
+
+
+@pytest.mark.asyncio
 async def test_audio_level_subscription_create_and_delete(client, auth_headers) -> None:
     created = await client.post("/audio/levels/subscriptions", headers=auth_headers)
     assert created.status_code == 201

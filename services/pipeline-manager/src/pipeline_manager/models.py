@@ -140,7 +140,7 @@ class InternalEvent(BaseModel):
 
 
 class AudioControlRequest(BaseModel):
-    """mic-lecturer only in v1 (LP-9) — the role is the route path, not a body field."""
+    """Per-mic control (LP-9 lifted); role is the route path, not a body field."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -13,6 +13,7 @@ from pipeline_manager.audio.control import (
     InvalidGain,
     UnsupportedAudioRole,
     apply_audio_control,
+    apply_room_software_control,
     real_amixer_exec,
 )
 from pipeline_manager.models import SourceRole
@@ -38,13 +39,27 @@ def _sget(percent: int, on: bool) -> str:
 
 
 @pytest.mark.asyncio
-async def test_only_mic_lecturer_is_accepted() -> None:
-    exec_fn = FakeExec([])
-    with pytest.raises(UnsupportedAudioRole):
-        await apply_audio_control(
-            SourceRole.MIC_ROOM, 50, False, card=CARD, control=CONTROL, exec_file=exec_fn
-        )
-    assert exec_fn.calls == []
+async def test_mic_room_is_accepted_for_a_valid_card_control() -> None:
+    exec_fn = FakeExec([ExecResult(0), ExecResult(0, stdout=_sget(50, True))])
+    result = await apply_audio_control(
+        SourceRole.MIC_ROOM, 50, False, card=CARD, control=CONTROL, exec_file=exec_fn
+    )
+    assert result.role_id is SourceRole.MIC_ROOM
+    assert result.applied_state == "applied"
+
+
+def test_room_software_control_sets_post_fader_volume() -> None:
+    applied = []
+    result = apply_room_software_control(40, False, set_volume=applied.append)
+    assert applied == [0.4]
+    assert result.applied_state == "applied"
+
+
+def test_room_software_control_mute_sets_zero_volume() -> None:
+    applied = []
+    result = apply_room_software_control(75, True, set_volume=applied.append)
+    assert applied == [0.0]
+    assert result.applied_muted is True
 
 
 @pytest.mark.parametrize("gain", [-1, 101])

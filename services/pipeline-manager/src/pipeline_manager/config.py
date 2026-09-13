@@ -24,8 +24,6 @@ class Settings(BaseSettings):
     mic_alsa_card: str = "1"
     mic_alsa_control: str = "Mic"
     room_mic_alsa_device: str = "hw:CARD=UMS,DEV=0"
-    room_mic_alsa_card: str = "UMS"
-    room_mic_alsa_control: str = "Room Mic"
     mic_mixer_min: int = 0
     mic_mixer_max: int = 100
     hdmi2_alsa_device: str = "hw:2,0"
