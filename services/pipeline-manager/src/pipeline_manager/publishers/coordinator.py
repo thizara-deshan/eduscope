@@ -37,7 +37,9 @@ class PublisherNotBound(RuntimeError):
         self.publisher_id = publisher_id
 
 
-def select_publisher_spec(controller: PublisherController) -> PipelineSpec:
+def select_publisher_spec(
+    controller: PublisherController, *, room_audio_device: str = "hw:CARD=UMS,DEV=0"
+) -> PipelineSpec:
     """Choose the USB/RTSP/audio builder for `controller`'s current binding
     (Tier-1, pure) — the one decision point `start_publisher` needs before it
     can hand argv to the supervisor. `address` is the generic "where to find
@@ -61,7 +63,7 @@ def select_publisher_spec(controller: PublisherController) -> PipelineSpec:
         return build_rtsp_publisher(controller.publisher_id, address, credentials)
 
     if controller.publisher_id is PublisherId.AUDIO:
-        return build_audio_publisher(address)
+        return build_audio_publisher(address, room_audio_device)
 
     raise UnsupportedPipeline(f"no publisher builder for {controller.publisher_id.value}")  # pragma: no cover - exhaustive over PublisherId
 
@@ -85,6 +87,7 @@ async def start_publisher(
     supervisor: ProcessSupervisor,
     confirmer: HealthConfirmer,
     events,
+    room_audio_device: str = "hw:CARD=UMS,DEV=0",
 ) -> None:
     """Bind -> build -> spawn -> confirm -> mark online -> publish (A-REV-001).
 
@@ -99,7 +102,7 @@ async def start_publisher(
     controller.requested_stop = False
     try:
         _remove_stale_socket(controller)
-        spec = select_publisher_spec(controller)
+        spec = select_publisher_spec(controller, room_audio_device=room_audio_device)
         process = await supervisor.start(spec, controller.identity)
         await confirmer.confirm(process, is_record=False)
     except Exception as exc:
@@ -110,11 +113,16 @@ async def start_publisher(
     event = controller.mark_online(process.pid)
     await events.publish("evt.pm.publisher.running", _event_payload(event))
     controller.exit_task = asyncio.create_task(
-        _watch_and_restart(controller, process, supervisor=supervisor, confirmer=confirmer, events=events)
+        _watch_and_restart(
+            controller, process, supervisor=supervisor, confirmer=confirmer,
+            events=events, room_audio_device=room_audio_device,
+        )
     )
 
 
-async def _watch_and_restart(controller, process, *, supervisor, confirmer, events) -> None:
+async def _watch_and_restart(
+    controller, process, *, supervisor, confirmer, events, room_audio_device: str
+) -> None:
     """Own the device-lifetime publisher after its initial confirmation.
 
     A requested stop cancels this task.  An unexpected exit affects only this
@@ -142,7 +150,7 @@ async def _watch_and_restart(controller, process, *, supervisor, confirmer, even
 
             try:
                 _remove_stale_socket(controller)
-                spec = select_publisher_spec(controller)
+                spec = select_publisher_spec(controller, room_audio_device=room_audio_device)
                 current = await supervisor.start(spec, controller.identity)
                 await confirmer.confirm(current, is_record=False)
             except Exception as exc:

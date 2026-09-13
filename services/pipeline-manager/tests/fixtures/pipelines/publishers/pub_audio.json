@@ -1,7 +1,14 @@
 [
   "gst-launch-1.0", "-e", "-m",
-  "alsasrc", "device=hw:UMS,0", "do-timestamp=true", "!",
-  "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved", "!",
-  "queue", "max-size-time=200000000", "!",
+  "alsasrc", "device=hw:BOMGE,0", "do-timestamp=true", "provide-clock=false", "!",
+  "audioconvert", "!", "audioresample", "!", "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved", "!",
+  "volume", "name=vol_mic_lecturer", "volume=1.0", "!", "level", "name=lvl_mic_lecturer", "interval=100000000", "post-messages=true", "!",
+  "queue", "max-size-time=200000000", "!", "mix.",
+  "alsasrc", "device=hw:UMS,0", "do-timestamp=true", "provide-clock=false", "!",
+  "audioconvert", "!", "audioresample", "!", "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved", "!",
+  "volume", "name=vol_mic_room", "volume=1.0", "!", "level", "name=lvl_mic_room", "interval=100000000", "post-messages=true", "!",
+  "queue", "max-size-time=200000000", "!", "mix.",
+  "audiomixer", "name=mix", "latency=200000000", "!", "audioconvert", "!", "audioresample", "!",
+  "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved", "!", "queue", "max-size-time=200000000", "!",
   "shmsink", "socket-path=/tmp/audio.sock", "shm-size=4000000", "wait-for-connection=false", "sync=false"
 ]

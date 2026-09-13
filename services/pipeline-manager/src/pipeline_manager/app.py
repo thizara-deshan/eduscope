@@ -405,6 +405,7 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
         supervisor=app.state.supervisor,
         confirmer=app.state.confirmer,
         events=app.state.events,
+        room_audio_device=settings.room_mic_alsa_device,
     )
     app.state.stop_publisher = partial(
         real_stop_publisher,

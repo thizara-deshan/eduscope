@@ -135,31 +135,39 @@ class TestRtspPublisher:
 
 class TestAudioPublisher:
     def test_matches_oracle(self) -> None:
-        """A-REV-018: byte-for-byte against `scripts/bash/pub_audio.sh`."""
-        spec = build_audio_publisher("hw:UMS,0")
+        """A-REV-018: byte-for-byte two-mic oracle from the two-mic plan."""
+        spec = build_audio_publisher("hw:BOMGE,0", "hw:UMS,0")
         assert list(spec.argv) == _golden("pub_audio.json")
 
     def test_exact_ring_and_socket(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "shm-size=4000000" in spec.argv
         assert "socket-path=/tmp/audio.sock" in spec.argv
 
     def test_s16le_48khz_stereo(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved" in spec.argv
 
     def test_do_timestamp(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "do-timestamp=true" in spec.argv
 
     def test_time_bounded_queue(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "max-size-time=200000000" in spec.argv
 
     def test_sync_false(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "sync=false" in spec.argv
 
     def test_wait_for_connection_false(self) -> None:
-        spec = build_audio_publisher("hw:1,0")
+        spec = build_audio_publisher("hw:1,0", "hw:2,0")
         assert "wait-for-connection=false" in spec.argv
+
+    def test_two_post_fader_metered_sources_feed_one_mixer(self) -> None:
+        spec = build_audio_publisher("hw:BOMGE,0", "hw:UMS,0")
+        assert spec.argv.count("mix.") == 2
+        assert "audiomixer" in spec.argv
+        assert "name=lvl_mic_lecturer" in spec.argv
+        assert "name=lvl_mic_room" in spec.argv
+        assert spec.argv.count("provide-clock=false") == 2
