@@ -92,6 +92,11 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("DeviceAllow=char-alsa rw", pipeline)
         self.assertNotIn("DeviceAllow=/dev/snd rw", pipeline)
 
+    def test_pipeline_manager_creates_shm_sockets_for_media_consumers(self):
+        pipeline = self.read("eduscope-pipeline-manager.service")
+        self.assertIn("Group=eduscope-media", pipeline)
+        self.assertIn("SupplementaryGroups=eduscope eduscope-pipeline video audio render", pipeline)
+
     def test_pipeline_manager_can_access_rk3588_media_devices(self):
         pipeline = self.read("eduscope-pipeline-manager.service")
         self.assertIn("Environment=DISPLAY=:0", pipeline)

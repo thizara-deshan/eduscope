@@ -7,8 +7,8 @@ After=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socke
 [Service]
 Type=simple
 User=eduscope-pipeline
-Group=eduscope-pipeline
-SupplementaryGroups=eduscope eduscope-media video audio render
+Group=eduscope-media
+SupplementaryGroups=eduscope eduscope-pipeline video audio render
 Environment=DISPLAY=:0
 EnvironmentFile=/run/eduscope/env/pipeline.env
 EnvironmentFile=/run/eduscope/env/audio.env
