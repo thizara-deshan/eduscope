@@ -62,7 +62,7 @@ export type Problem = {
 export type SessionRevokedReason = 'expired' | 'logout' | 'takeover' | 'admin';
 
 /**
- * Canonical vocabulary (domain model §4.5). mic-room reserved, unbound in V1 (INV-SR-2).
+ * Canonical vocabulary (domain model §4.5); both microphone roles are provisionable (INV-SR-2 lifted).
  */
 export type SourceRoleId = 'presentation' | 'lecturer-cam' | 'students-cam' | 'mic-lecturer' | 'mic-room';
 
@@ -412,7 +412,7 @@ export type SourceRole = {
      */
     requiredForStart: boolean;
     /**
-     * mic-room = false (A-08 amended).
+     * Whether administrators may bind the role; true for all five roles.
      */
     provisionable: boolean;
 };
@@ -1741,7 +1741,7 @@ export type ListSourceRolesData = {
 
 export type ListSourceRolesResponses = {
     /**
-     * The five roles; mic-room is not provisionable in V1 (DM-11).
+     * The five provisionable roles, including both microphone inputs (DM-11, A-08 lifted).
      */
     200: {
         items: Array<SourceRole>;
@@ -1898,7 +1898,7 @@ export type ListAudioControlsData = {
 
 export type ListAudioControlsResponses = {
     /**
-     * mic-lecturer only in V1; appliedState is the truth the UI must show (INV-AC-1).
+     * mic-lecturer and mic-room controls; appliedState is the truth the UI must show (INV-AC-1).
      */
     200: {
         items: Array<AudioControl>;

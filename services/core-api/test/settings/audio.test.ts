@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyInstance } from 'fastify';
 import type { AudioControlPayload } from '@eduscope/shared';
+import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
-import { storageVolumes, users } from '../../src/db/schema.js';
+import { audioControls, storageVolumes, users } from '../../src/db/schema.js';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
 import { FakeClock } from '../fakes/clock.js';
@@ -146,16 +147,15 @@ describe('audio controls (openapi.yaml tag: sources — listAudioControls, updat
     await stopTestApp(testApp);
   });
 
-  it('listAudioControls: exactly one row, mic-lecturer', async () => {
+  it('listAudioControls: lecturer and room rows', async () => {
     testApp = await startTestApp();
     const response = await testApp.app.inject({ method: 'GET', url: '/api/v1/audio/controls', headers: { authorization: `Bearer ${testApp.lecturerToken}` } });
     expect(response.statusCode).toBe(200);
     const items = (response.json() as { items: Array<{ roleId: string }> }).items;
-    expect(items).toHaveLength(1);
-    expect(items[0]!.roleId).toBe('mic-lecturer');
+    expect(items.map((item) => item.roleId).sort()).toEqual(['mic-lecturer', 'mic-room']);
   });
 
-  it('updateAudioControl: other roles are not mutable', async () => {
+  it('updateAudioControl: mic-room reaches its role-specific PM route', async () => {
     testApp = await startTestApp();
     const response = await testApp.app.inject({
       method: 'PUT',
@@ -163,8 +163,8 @@ describe('audio controls (openapi.yaml tag: sources — listAudioControls, updat
       headers: { authorization: `Bearer ${testApp.adminToken}` },
       payload: { gain: 50 },
     });
-    expect(response.statusCode).toBe(422);
-    expect((response.json() as { code: string }).code).toBe('config.invalid');
+    expect(response.statusCode).toBe(202);
+    await waitFor(() => testApp.pm.calls.some((call) => call.path === '/audio/controls/mic-room'));
   });
 
   it('updateAudioControl: gain must be within 0-100', async () => {
@@ -267,7 +267,10 @@ describe('audio controls (openapi.yaml tag: sources — listAudioControls, updat
       headers: { authorization: `Bearer ${testApp.adminToken}` },
       payload: { gain: 40, muted: false },
     });
-    await waitFor(() => testApp.pm.calls.some((call) => call.path === '/audio/controls/mic-lecturer'));
+    await waitFor(() => {
+      const row = testApp.app.db.select().from(audioControls).where(eq(audioControls.roleId, 'mic-lecturer')).get();
+      return row?.appliedState === 'applied' && row.gain === 40;
+    });
 
     const events: AudioControlPayload[] = [];
     testApp.app.bus.subscribe('audio.control', (payload) => events.push(payload));

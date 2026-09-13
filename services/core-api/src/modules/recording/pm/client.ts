@@ -51,6 +51,7 @@ export interface StartMeetingConsumerBody {
 
 /** HL-09 (`cmd.admin.set_binding`): pipeline-manager.md §3.2 `PUT /publishers/{id}/binding` — credentials arrive separate from the address, never interpolated into it. */
 export interface SetPublisherBindingBody {
+  roleId?: 'presentation' | 'lecturer-cam' | 'students-cam' | 'mic-lecturer' | 'mic-room';
   address: string;
   credentials?: { username: string; password: string };
   devicePath?: string;
@@ -173,9 +174,9 @@ export class PipelineManagerClient {
     await this.#request('DELETE', `/consumers/thumbnails/${negotiationId}`);
   }
 
-  /** `mic-lecturer` only in V1 (INV-AC-1) — the readback is the truth; a mixer failure is `appliedState:'failed'` in a `200`, not a thrown Problem. */
-  async setAudioControl(gain: number, muted: boolean): Promise<PmAudioControlResult> {
-    return this.#request<PmAudioControlResult>('PUT', '/audio/controls/mic-lecturer', { gain, muted });
+  /** The readback is the truth; a mixer failure is `appliedState:'failed'` in a `200`, not a thrown Problem. */
+  async setAudioControl(roleId: 'mic-lecturer' | 'mic-room', gain: number, muted: boolean): Promise<PmAudioControlResult> {
+    return this.#request<PmAudioControlResult>('PUT', `/audio/controls/${roleId}`, { gain, muted });
   }
 
   async createAudioLevelSubscription(): Promise<string> {

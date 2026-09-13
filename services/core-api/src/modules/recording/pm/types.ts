@@ -49,7 +49,7 @@ export interface PmPublisherCommandAccepted {
   state: string;
 }
 
-/** `PUT /audio/controls/mic-lecturer` (pipeline-manager.md §3.2) — always `200`; a mixer failure is `appliedState:'failed'`, never a thrown Problem (INV-AC-1, B-55's placebo). */
+/** `PUT /audio/controls/{mic-lecturer|mic-room}` — always `200`; a mixer failure is `appliedState:'failed'`, never a thrown Problem (INV-AC-1, B-55's placebo). */
 export interface PmAudioControlResult {
   roleId: string;
   appliedGain: number | null;

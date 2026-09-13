@@ -376,7 +376,7 @@ paths:
       summary: Seeded SourceRole vocabulary (closed set, INV-SR-1)
       responses:
         '200':
-          description: The five roles; mic-room is not provisionable in V1 (DM-11).
+          description: The five provisionable roles, including both microphone inputs (DM-11, A-08 lifted).
           content:
             application/json:
               schema:
@@ -489,7 +489,7 @@ paths:
       operationId: updateSourceBinding
       summary: HL-09 cmd.admin.set_binding — a provisioning act
       x-required-role: admin
-      description: mic-room must stay unbound in V1 (INV-SR-2) — binding it answers 422.
+      description: All five source roles, including mic-room, can be bound by an administrator (INV-SR-2 lifted).
       parameters: [{ $ref: '#/components/parameters/roleId' }]
       requestBody:
         required: true
@@ -512,7 +512,7 @@ paths:
       summary: AudioControl state — the verifiably effective mic control (LP-9)
       responses:
         '200':
-          description: mic-lecturer only in V1; appliedState is the truth the UI must show (INV-AC-1).
+          description: mic-lecturer and mic-room controls; appliedState is the truth the UI must show (INV-AC-1).
           content:
             application/json:
               schema:
@@ -527,7 +527,7 @@ paths:
     put:
       tags: [sources]
       operationId: updateAudioControl
-      summary: Set gain/mute; applied to real hardware, result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
+      summary: Set lecturer or room mic gain/mute; result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
       description: |
         Room Controls master mute writes the same `muted` field — one control,
         one truth (LP-14, [D-10]). 202 because application to the ALSA path is
@@ -1918,7 +1918,7 @@ components:
     SourceRoleId:
       type: string
       enum: [presentation, lecturer-cam, students-cam, mic-lecturer, mic-room]
-      description: Canonical vocabulary (domain model §4.5). mic-room reserved, unbound in V1 (INV-SR-2).
+      description: Canonical vocabulary (domain model §4.5); both microphone roles are provisionable (INV-SR-2 lifted).
     ChannelId:
       type: string
       enum: [local, meeting, streaming]
@@ -2327,7 +2327,7 @@ components:
         medium: { type: string, enum: [video, audio] }
         displayLabel: { type: string, maxLength: 32 }
         requiredForStart: { type: boolean, description: false for all in V1 (A-08). }
-        provisionable: { type: boolean, description: mic-room = false (A-08 amended). }
+        provisionable: { type: boolean, description: Whether administrators may bind the role; true for all five roles. }
 
     SourceStatus:
       type: object

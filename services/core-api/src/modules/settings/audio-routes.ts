@@ -12,12 +12,14 @@ import type { DomainBus } from '../../lib/domain-bus.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import type { PipelineManagerClient } from '../recording/pm/client.js';
 
-/** LP-9/LP-14 — only `mic-lecturer` is mutable in V1 (openapi.yaml updateAudioControl summary). */
-const MUTABLE_ROLE_ID = 'mic-lecturer';
+/** LP-9/LP-14 lifted: both physical microphone faders are mutable. */
+const MUTABLE_ROLE_IDS = ['mic-lecturer', 'mic-room'] as const;
+type MutableAudioRoleId = typeof MUTABLE_ROLE_IDS[number];
+const MUTABLE_ROLE_ID_SET = new Set<string>(MUTABLE_ROLE_IDS);
 const NON_TERMINAL_STATES = ['starting', 'recording', 'paused', 'stopping', 'finalizing'] as const;
 
-function defaultRow(): AudioControl {
-  return { roleId: MUTABLE_ROLE_ID, gain: 0, muted: false, appliedState: 'pending', lastAppliedAt: null, lastError: null };
+function defaultRow(roleId: MutableAudioRoleId): AudioControl {
+  return { roleId, gain: 0, muted: false, appliedState: 'pending', lastAppliedAt: null, lastError: null };
 }
 
 function toPayload(row: typeof audioControls.$inferSelect): AudioControl {
@@ -31,9 +33,9 @@ function toPayload(row: typeof audioControls.$inferSelect): AudioControl {
   };
 }
 
-export function getAudioControlSnapshot(db: DrizzleDb): AudioControl {
-  const row = db.select().from(audioControls).where(eq(audioControls.roleId, MUTABLE_ROLE_ID)).get();
-  return row ? toPayload(row) : defaultRow();
+export function getAudioControlSnapshot(db: DrizzleDb, roleId: MutableAudioRoleId = 'mic-lecturer'): AudioControl {
+  const row = db.select().from(audioControls).where(eq(audioControls.roleId, roleId)).get();
+  return row ? toPayload(row) : defaultRow(roleId);
 }
 
 /** CG-15: guarded only while a session is non-terminal — no session, no owner to protect (openapi.yaml updateAudioControl description). */
@@ -66,13 +68,14 @@ export interface AudioSettingsDeps {
  */
 async function applyAudioControl(
   deps: AudioSettingsDeps,
+  roleId: MutableAudioRoleId,
   requestedGain: number,
   requestedMuted: boolean,
   previous: { gain: number; muted: boolean; lastAppliedAt: string | null },
 ): Promise<void> {
   let result: { appliedState: 'applied' | 'failed'; appliedGain: number | null; appliedMuted: number | boolean | null; lastError: string | null };
   try {
-    result = await deps.pm.setAudioControl(requestedGain, requestedMuted);
+    result = await deps.pm.setAudioControl(roleId, requestedGain, requestedMuted);
   } catch (error) {
     result = { appliedState: 'failed', appliedGain: null, appliedMuted: null, lastError: error instanceof Error ? error.message : String(error) };
   }
@@ -88,7 +91,7 @@ async function applyAudioControl(
         lastAppliedAt: nowIso,
         lastError: null,
       })
-      .where(eq(audioControls.roleId, MUTABLE_ROLE_ID))
+      .where(eq(audioControls.roleId, roleId))
       .run();
   } else {
     deps.db
@@ -100,11 +103,11 @@ async function applyAudioControl(
         lastAppliedAt: previous.lastAppliedAt,
         lastError: result.lastError,
       })
-      .where(eq(audioControls.roleId, MUTABLE_ROLE_ID))
+      .where(eq(audioControls.roleId, roleId))
       .run();
   }
 
-  const updated = deps.db.select().from(audioControls).where(eq(audioControls.roleId, MUTABLE_ROLE_ID)).get()!;
+  const updated = deps.db.select().from(audioControls).where(eq(audioControls.roleId, roleId)).get()!;
   deps.bus.publish('audio.control', toPayload(updated));
 }
 
@@ -114,7 +117,7 @@ export function registerAudioSettingsRoutes(app: FastifyInstance, authService: A
     '/api/v1/audio/controls',
     { config: { operationId: 'listAudioControls' }, preHandler: requireAuth(authService, 'listAudioControls') },
     async (_request, reply) => {
-      reply.code(200).send({ items: [getAudioControlSnapshot(deps.db)] });
+      reply.code(200).send({ items: MUTABLE_ROLE_IDS.map((roleId) => getAudioControlSnapshot(deps.db, roleId)) });
     },
   );
 
@@ -126,12 +129,13 @@ export function registerAudioSettingsRoutes(app: FastifyInstance, authService: A
       const patch = parseBody(zAudioControlUpdate, request.body);
       const actor = request.authContext!;
 
-      if (roleId !== MUTABLE_ROLE_ID) {
-        throw new ProblemError(422, 'config.invalid', `${roleId} is not mutable in V1`);
+      if (!MUTABLE_ROLE_ID_SET.has(roleId)) {
+        throw new ProblemError(422, 'config.invalid', `${roleId} is not a mutable audio role`);
       }
+      const mutableRoleId = roleId as MutableAudioRoleId;
       assertOwnerOrAdminWhileActive(deps.db, actor);
 
-      const current = deps.db.select().from(audioControls).where(eq(audioControls.roleId, MUTABLE_ROLE_ID)).get();
+      const current = deps.db.select().from(audioControls).where(eq(audioControls.roleId, mutableRoleId)).get();
       const previous = { gain: current?.gain ?? 0, muted: current?.muted ?? false, lastAppliedAt: current?.lastAppliedAt ?? null };
       const requestedGain = patch.gain ?? previous.gain;
       const requestedMuted = patch.muted ?? previous.muted;
@@ -142,18 +146,18 @@ export function registerAudioSettingsRoutes(app: FastifyInstance, authService: A
         deps.db
           .update(audioControls)
           .set({ gain: requestedGain, muted: requestedMuted, appliedState: 'pending', updatedBy: actor.userId })
-          .where(eq(audioControls.roleId, MUTABLE_ROLE_ID))
+          .where(eq(audioControls.roleId, mutableRoleId))
           .run();
       } else {
         deps.db
           .insert(audioControls)
-          .values({ roleId: MUTABLE_ROLE_ID, gain: requestedGain, muted: requestedMuted, appliedState: 'pending', updatedBy: actor.userId })
+          .values({ roleId: mutableRoleId, gain: requestedGain, muted: requestedMuted, appliedState: 'pending', updatedBy: actor.userId })
           .run();
       }
 
       reply.code(202).send({ commandId: deps.ids.next(now), acceptedAt: nowIso, resolveBySec: TIMERS['T-CMD-RESOLVE'] / 1000 });
 
-      void applyAudioControl(deps, requestedGain, requestedMuted, previous).catch((error: unknown) => {
+      void applyAudioControl(deps, mutableRoleId, requestedGain, requestedMuted, previous).catch((error: unknown) => {
         deps.logger?.warn('audio control apply failed unexpectedly', { error: error instanceof Error ? error.message : String(error) });
       });
     },
