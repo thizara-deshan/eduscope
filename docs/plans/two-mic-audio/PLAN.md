@@ -163,7 +163,7 @@ git commit -m "fix(audio): parse both GstValueList and GstValueArray rms forms (
 
 - [x] **Step 1:** Deploy/run pipeline-manager + core-api + panel on the device with
   the audio publisher live. Open the panel, speak into the lecturer mic.
-- [ ] **Step 2:** Confirm the lecturer bar moves. If it does, Phase 0 is done. If it
+- [x] **Step 2:** Confirm the lecturer bar moves. If it does, Phase 0 is done. If it
   still doesn't, return to Task 0.1 — the cause is socket/subscription, not parsing.
 
 > **CHECKPOINT 0 — do not proceed to Phase 1 until the single lecturer meter is
@@ -192,23 +192,23 @@ Model the element graph on `reference/pub_audio.py:build_pipeline` — two
 feeding `audiomixer name=mix latency=200000000 ! … ! shmsink socket-path=<socket>`.
 Keep it a single argv the supervisor can spawn.
 
-- [ ] **Step 1: Read** the current `build_audio_publisher` and the `PipelineBuilder`
+- [x] **Step 1: Read** the current `build_audio_publisher` and the `PipelineBuilder`
   API (`pipelines/builder.py`) so the new argv uses the same builder calls.
-- [ ] **Step 2: Regenerate the golden fixture** — the argv is changing on purpose
+- [x] **Step 2: Regenerate the golden fixture** — the argv is changing on purpose
   (A-REV-018). Update `pub_audio.json` to the new two-mic argv, and update the test's
   docstring to cite this plan. Write the new expected argv into the test first (TDD):
   assert the built argv contains `mix.` twice, `audiomixer`, `level name=lvl_mic_lecturer`,
   `level name=lvl_mic_room`, and the exact socket + caps.
-- [ ] **Step 3: Run it, confirm it fails**
+- [x] **Step 3: Run it, confirm it fails**
   Run: `cd services/pipeline-manager && python -m pytest tests/publishers/test_builders.py -k audio -v`
-- [ ] **Step 4: Implement** the two-source mixing argv in `build_audio_publisher`
+- [x] **Step 4: Implement** the two-source mixing argv in `build_audio_publisher`
   (both device args, both `volume`+named `level`, one `audiomixer`, one `shmsink`).
   Preserve `do-timestamp=true`, `provide-clock=false`, `latency=200000000`, and the
   `queue max-size-time=200000000` backpressure (they fix the dual-USB clock drift —
   see the block comment in `reference/pub_audio.py:build_pipeline`).
-- [ ] **Step 5: Run tests, confirm pass.** Also run the whole publishers suite to
+- [x] **Step 5: Run tests, confirm pass.** Also run the whole publishers suite to
   catch fixture consumers: `python -m pytest tests/publishers -v`.
-- [ ] **Step 6: Commit** — `feat(audio): mix lecturer+room mics into one shm socket with per-mic level taps (A-REV-018)`.
+- [x] **Step 6: Commit** — `feat(audio): mix lecturer+room mics into one shm socket with per-mic level taps (A-REV-018)`.
 
 ### Task 1.2: Two role-keyed level samplers reading the two named meters
 
@@ -227,18 +227,18 @@ Keep it a single argv the supervisor can spawn.
   (one sampler per role), each constructed with `role=<role>` and
   `read_rms=lambda r=role: meter.read_rms(r)`.
 
-- [ ] **Step 1: Write failing tests** — (a) the meter maps `lvl_mic_lecturer` /
+- [x] **Step 1: Write failing tests** — (a) the meter maps `lvl_mic_lecturer` /
   `lvl_mic_room` lines to per-role RMS; (b) `AudioLevelSampler(role=MIC_ROOM)` emits
   `AudioLevelSample(role_id=MIC_ROOM, ...)`. Reuse the fake-clock/fake-sleep style
   already in the existing sampler tests.
-- [ ] **Step 2: Run, confirm fail.**
-- [ ] **Step 3: Implement** — extend `_parse_latest_rms` usage to also capture the
+- [x] **Step 2: Run, confirm fail.**
+- [x] **Step 3: Implement** — extend `_parse_latest_rms` usage to also capture the
   element name (regex on `GstLevel:(\w+)`), store `self._latest_rms: dict[str,float]`,
   and map element-name → role. Update `create_production_app` to create both samplers
   and store them in a dict; update the subscription refcount to start/stop the right
   sampler(s).
-- [ ] **Step 4: Run, confirm pass** (`pytest tests/audio -v`).
-- [ ] **Step 5: Commit** — `feat(audio): per-role level samplers for lecturer+room (A-REV-012)`.
+- [x] **Step 4: Run, confirm pass** (`pytest tests/audio -v`).
+- [x] **Step 5: Commit** — `feat(audio): per-role level samplers for lecturer+room (A-REV-012)`.
 
 ### Task 1.3: Accept mic-room in the audio control + route
 
@@ -257,15 +257,15 @@ element already in the Task 1.1 graph (like `reference/pub_audio.py`'s faders).
 Recommend **A** for consistency with the existing control model; use **B** only if
 the room mic has no ALSA mixer control. Record which you chose in the commit.
 
-- [ ] **Step 1: Write failing tests** — `apply_audio_control(role=MIC_ROOM, …)`
+- [x] **Step 1: Write failing tests** — `apply_audio_control(role=MIC_ROOM, …)`
   returns `applied_state="applied"` for a valid card/control; the route
   `PUT /audio/controls/mic-room` returns 200. Keep the existing lecturer tests green.
-- [ ] **Step 2: Run, confirm fail.**
-- [ ] **Step 3: Implement** — accept both roles; map each role to its configured
+- [x] **Step 2: Run, confirm fail.**
+- [x] **Step 3: Implement** — accept both roles; map each role to its configured
   `card`/`control` (add room-mic card/control to `config.py` / Settings; read the
   current lecturer config there and mirror it). Update the route.
-- [ ] **Step 4: Run, confirm pass** (`pytest tests/audio tests/api -v`).
-- [ ] **Step 5: Commit** — `feat(audio): allow mic-room gain/mute control (LP-9/INV-AC-1 lifted)`.
+- [x] **Step 4: Run, confirm pass** (`pytest tests/audio tests/api -v`).
+- [x] **Step 5: Commit** — `feat(audio): allow mic-room gain/mute control (LP-9/INV-AC-1 lifted)`.
 
 > **CHECKPOINT 1 — review pipeline-manager.** Confirm: full pipeline-manager suite
 > green (`python -m pytest`), the single mixed socket still carries valid audio, and
