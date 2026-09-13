@@ -178,6 +178,15 @@ export class PipelineManagerClient {
     return this.#request<PmAudioControlResult>('PUT', '/audio/controls/mic-lecturer', { gain, muted });
   }
 
+  async createAudioLevelSubscription(): Promise<string> {
+    const result = await this.#request<{ subscriptionId: string }>('POST', '/audio/levels/subscriptions');
+    return result.subscriptionId;
+  }
+
+  async deleteAudioLevelSubscription(subscriptionId: string): Promise<void> {
+    await this.#request('DELETE', `/audio/levels/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  }
+
   /** Q-31/Q-34/Q-35/Q-36 (pipeline-manager.md §3.2 `POST /consumers/projector`): HDMI-out #1 slides↔question switch; not a restart (A-22). */
   async setProjectorConsumer(body: PmProjectorRequest): Promise<PmCommandAccepted> {
     return this.#request<PmCommandAccepted>('POST', '/consumers/projector', body);

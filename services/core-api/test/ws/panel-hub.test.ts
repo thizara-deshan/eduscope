@@ -345,12 +345,14 @@ describe('panel WS hub (events.md §1/§2)', () => {
       });
       await waitFor(() => frames.length >= 13);
       expect(testApp.app.bus.listenerCount('audio.levels')).toBe(1);
+      await waitFor(() => testApp.pm.calls.some((call) => call.method === 'POST' && call.path === '/audio/levels/subscriptions'));
 
       testApp.app.bus.publish('audio.levels', { roleId: 'presentation', rms: 0.5 });
       await waitFor(() => frames.some((f) => f.event === 'audio.levels'));
 
       ws.close();
       await waitFor(() => testApp.app.bus.listenerCount('audio.levels') === 0);
+      await waitFor(() => testApp.pm.calls.some((call) => call.method === 'DELETE' && call.path.startsWith('/audio/levels/subscriptions/')));
     });
   });
 

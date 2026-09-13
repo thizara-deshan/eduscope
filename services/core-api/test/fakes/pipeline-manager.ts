@@ -68,6 +68,7 @@ export class FakePipelineManager {
   #snapshotIdCounter = 0;
   #liveIdCounter = 0;
   #meetingIdCounter = 0;
+  #audioLevelSubscriptionCounter = 0;
   #offline = false;
   #nextThumbnailOfferResponse: QueuedResponse | null = null;
   readonly #openNegotiations = new Set<string>();
@@ -360,6 +361,19 @@ export class FakePipelineManager {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ roleId: 'mic-lecturer', appliedGain: gain, appliedMuted: muted, appliedState: 'applied', lastError: null }));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/audio/levels/subscriptions') {
+      this.#audioLevelSubscriptionCounter += 1;
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ subscriptionId: `audio-levels:${this.#audioLevelSubscriptionCounter}` }));
+      return;
+    }
+
+    if (req.method === 'DELETE' && /^\/audio\/levels\/subscriptions\/[^/]+$/.test(url.pathname)) {
+      res.writeHead(204);
+      res.end();
       return;
     }
 

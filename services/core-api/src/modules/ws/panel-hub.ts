@@ -57,6 +57,10 @@ export interface PanelHubDeps {
   channels: { listStatuses(): ChannelStatePayload[] };
   sources: { getStatus(): PayloadFor<'sources.status'>[] };
   audio?: { snapshot(): PayloadFor<'audio.control'> };
+  audioLevels: {
+    createAudioLevelSubscription(): Promise<string>;
+    deleteAudioLevelSubscription(subscriptionId: string): Promise<void>;
+  };
   storage: { snapshot(): PayloadFor<'storage.status'> };
   health: { snapshot(): PayloadFor<'device.health'> };
   countdown: { snapshot(): PayloadFor<'ai.countdown'> };
@@ -122,6 +126,8 @@ export class PanelHub implements LifecycleComponent {
   readonly #connections = new Set<PanelConnection>();
   #unsubs: Unsubscribe[] = [];
   #audioUnsub: Unsubscribe | null = null;
+  #audioPmSubscriptionId: string | null = null;
+  #audioPmSync: Promise<void> = Promise.resolve();
   #stopped = false;
 
   constructor(deps: PanelHubDeps) {
@@ -140,6 +146,7 @@ export class PanelHub implements LifecycleComponent {
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs = [];
     this.#unsubscribeAudio();
+    await this.#audioPmSync;
     for (const conn of this.#connections) conn.socket.close(1001, 'server is shutting down');
     this.#connections.clear();
   }
@@ -187,11 +194,29 @@ export class PanelHub implements LifecycleComponent {
   #subscribeAudio(): void {
     if (this.#audioUnsub) return;
     this.#audioUnsub = this.#deps.bus.subscribe('audio.levels', (payload) => this.publish('audio.levels', payload));
+    this.#syncAudioPmSubscription();
   }
 
   #unsubscribeAudio(): void {
     this.#audioUnsub?.();
     this.#audioUnsub = null;
+    this.#syncAudioPmSubscription();
+  }
+
+  #syncAudioPmSubscription(): void {
+    this.#audioPmSync = this.#audioPmSync.then(async () => {
+      if (this.#audioUnsub !== null && this.#audioPmSubscriptionId === null) {
+        this.#audioPmSubscriptionId = await this.#deps.audioLevels.createAudioLevelSubscription();
+      } else if (this.#audioUnsub === null && this.#audioPmSubscriptionId !== null) {
+        const subscriptionId = this.#audioPmSubscriptionId;
+        this.#audioPmSubscriptionId = null;
+        await this.#deps.audioLevels.deleteAudioLevelSubscription(subscriptionId);
+      }
+    }).catch((error: unknown) => {
+      this.#deps.logger?.warn('pipeline-manager audio level subscription sync failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   /** On-subscribe snapshot (events.md §1): recording, channel.state x3, sources.status x role, storage, health, countdown, current ai.set, open quiz.publication, quiz.session, every uncleared alert — then live deltas. */

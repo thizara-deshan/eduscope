@@ -796,6 +796,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     channels: channelExecutor,
     sources: sourceExecutor,
     audio: { snapshot: () => getAudioControlSnapshot(app.db) },
+    audioLevels: pmClient,
     storage: storageProbe,
     health: healthAggregator,
     countdown: aiCountdown,
