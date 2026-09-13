@@ -65,19 +65,19 @@ before adding a second mic, so you have one working meter to pattern-match again
 **Files:** none (diagnosis only). Run on the device (or a box with the audio
 publisher running and `/tmp/audio.sock` present).
 
-- [ ] **Step 1:** Confirm the publisher + socket are alive:
+- [x] **Step 1:** Confirm the publisher + socket are alive:
   `pgrep -af gst` and `ls -l /tmp/audio.sock`. If the socket is missing, the audio
   publisher isn't running — start it and re-check before touching code.
-- [ ] **Step 2:** Confirm `panel-hub.ts#subscribeAudio` actually POSTs to PM. Read
+- [x] **Step 2:** Confirm `panel-hub.ts#subscribeAudio` actually POSTs to PM. Read
   `services/core-api/src/modules/ws/panel-hub.ts:187` (`#subscribeAudio`) and verify
   it issues `POST /audio/levels/subscriptions` to pipeline-manager (not a stub). If
   it is a stub / no-op, that is the bug — fix it to call the PM client and jump to
   Task 0.3.
-- [ ] **Step 3:** Reproduce the raw meter output the parser must handle. Run the tap
+- [x] **Step 3:** Reproduce the raw meter output the parser must handle. Run the tap
   argv by hand and capture one `level` line verbatim:
   `gst-launch-1.0 -m shmsrc socket-path=/tmp/audio.sock is-live=true do-timestamp=true ! audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved ! level interval=100000000 ! fakesink sync=false`
   Copy an actual `level, ... rms=(...)` line into the commit message for Task 0.2.
-- [ ] **Step 4:** Decide the cause: (a) socket/publisher down, (b) subscription not
+- [x] **Step 4:** Decide the cause: (a) socket/publisher down, (b) subscription not
   opened, or (c) `rms=` serialised in a form the current regex misses. (c) is the
   most common silent failure — the current regex only matches `rms=(float){ ... }`.
 
@@ -95,7 +95,7 @@ forms the `level` element emits — `rms=(double){ -18.5, -19.2 }` (GstValueList
 `rms=< (double)-18.5, (double)-19.2 >` (GstValueArray) — plus an optional type
 prefix. The monorepo currently handles only the first with a `float` prefix.
 
-- [ ] **Step 1: Write the failing test** — feed both serialisations to the parser:
+- [x] **Step 1: Write the failing test** — feed both serialisations to the parser:
 
 ```python
 # tests/audio/test_levels.py
@@ -112,11 +112,11 @@ def test_parse_latest_rms_handles_both_forms(line, expected_db):
     assert _parse_latest_rms(line) == expected_db
 ```
 
-- [ ] **Step 2: Run it, confirm it fails**
+- [x] **Step 2: Run it, confirm it fails**
   Run: `cd services/pipeline-manager && python -m pytest tests/audio/test_levels.py -k parse_latest_rms -v`
   Expected: FAIL (`_parse_latest_rms` not defined).
 
-- [ ] **Step 3: Implement** — extract a parser that accepts both forms and wire it
+- [x] **Step 3: Implement** — extract a parser that accepts both forms and wire it
   into `_read_loop`. Replace the single-form regex:
 
 ```python
@@ -148,11 +148,11 @@ def _parse_latest_rms(line: bytes) -> float | None:
                 self._latest_rms = _rms_db_to_linear(db)
 ```
 
-- [ ] **Step 4: Run tests, confirm pass**
+- [x] **Step 4: Run tests, confirm pass**
   Run: `cd services/pipeline-manager && python -m pytest tests/audio/test_levels.py -v`
   Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/pipeline-manager/src/pipeline_manager/audio/levels.py services/pipeline-manager/tests/audio/test_levels.py
@@ -161,7 +161,7 @@ git commit -m "fix(audio): parse both GstValueList and GstValueArray rms forms (
 
 ### Task 0.3: Verify the lecturer meter moves on hardware
 
-- [ ] **Step 1:** Deploy/run pipeline-manager + core-api + panel on the device with
+- [x] **Step 1:** Deploy/run pipeline-manager + core-api + panel on the device with
   the audio publisher live. Open the panel, speak into the lecturer mic.
 - [ ] **Step 2:** Confirm the lecturer bar moves. If it does, Phase 0 is done. If it
   still doesn't, return to Task 0.1 — the cause is socket/subscription, not parsing.
