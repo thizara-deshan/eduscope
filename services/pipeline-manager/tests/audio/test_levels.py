@@ -253,6 +253,33 @@ async def test_meter_tap_start_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_meter_tap_reconnects_when_audio_publisher_replaces_socket() -> None:
+    """Core may rebind/restart the publisher after PM startup.  The shm reader
+    reaches EOF when that happens and must attach to the replacement socket."""
+    first = FakeProcess(stdout=FakeStdout(lines=[]))
+    second = FakeProcess(
+        stdout=FakeStdout(lines=[b"level, rms=(GValueArray)< -20.0, -21.0 >;\n"])
+    )
+    processes = [first, second]
+    spawn_calls = []
+
+    async def fake_spawn(argv):
+        spawn_calls.append(argv)
+        return processes[min(len(spawn_calls) - 1, 1)]
+
+    tap = GstLevelMeterTap("/tmp/audio.sock", spawn=fake_spawn, reconnect_delay=0)
+    await tap.start()
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if tap.read_rms() != 0.0:
+            break
+
+    assert len(spawn_calls) >= 2
+    assert tap.read_rms() == _rms_db_to_linear(-20.0)
+    await tap.stop()
+
+
+@pytest.mark.asyncio
 async def test_meter_tap_stop_without_start_does_not_raise() -> None:
     tap = GstLevelMeterTap("/tmp/audio.sock", spawn=lambda argv: None)
     await tap.stop()

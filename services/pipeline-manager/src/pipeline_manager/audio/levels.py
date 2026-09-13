@@ -97,6 +97,7 @@ _NUM = rb"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|-?inf"
 _RMS_LIST = re.compile(rb"rms=(?:\([^)]*\))?\s*[{<]([^}>]*)[}>]")
 _RMS_SCALAR = re.compile(rb"rms=(?:\([^)]*\))?\s*(" + _NUM + rb")")
 LEVEL_TAP_INTERVAL_NS = 100_000_000  # matches MIN_SAMPLE_PERIOD_SECONDS (10 Hz)
+LEVEL_TAP_RECONNECT_SECONDS = 0.5
 
 
 def _parse_latest_rms(line: bytes) -> float | None:
@@ -145,12 +146,15 @@ class GstLevelMeterTap:
         socket_path: str,
         *,
         spawn: Callable[[Sequence[str]], Awaitable["asyncio.subprocess.Process"]] | None = None,
+        reconnect_delay: float = LEVEL_TAP_RECONNECT_SECONDS,
     ) -> None:
         self._argv = build_level_tap_argv(socket_path)
         self._spawn = spawn or self._default_spawn
+        self._reconnect_delay = reconnect_delay
         self._process: "asyncio.subprocess.Process | None" = None
         self._reader_task: asyncio.Task | None = None
         self._latest_rms = 0.0
+        self._stopping = False
 
     @staticmethod
     async def _default_spawn(argv: Sequence[str]) -> "asyncio.subprocess.Process":
@@ -164,21 +168,34 @@ class GstLevelMeterTap:
     async def start(self) -> None:
         if self._process is not None:
             return
+        self._stopping = False
         self._process = await self._spawn(self._argv)
         self._reader_task = asyncio.ensure_future(self._read_loop())
 
     async def _read_loop(self) -> None:
-        process = self._process
-        assert process is not None and process.stdout is not None
-        while True:
+        while not self._stopping:
+            process = self._process
+            assert process is not None and process.stdout is not None
             line = await process.stdout.readline()
-            if not line:
+            if line:
+                db = _parse_latest_rms(line)
+                if db is not None:
+                    self._latest_rms = _rms_db_to_linear(db)
+                continue
+
+            # A shm reader gets EOF when core-api rebinds/restarts the audio
+            # publisher and replaces /tmp/audio.sock. Keep the meter attached
+            # across that normal startup/recovery race instead of silently
+            # leaving the panel flat until pipeline-manager itself restarts.
+            await process.wait()
+            if self._stopping:
                 return
-            db = _parse_latest_rms(line)
-            if db is not None:
-                self._latest_rms = _rms_db_to_linear(db)
+            await asyncio.sleep(self._reconnect_delay)
+            if not self._stopping:
+                self._process = await self._spawn(self._argv)
 
     async def stop(self) -> None:
+        self._stopping = True
         if self._reader_task is not None:
             self._reader_task.cancel()
             with suppress(asyncio.CancelledError):
