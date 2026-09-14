@@ -387,10 +387,10 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 
 ### Task 4.1: Full monorepo test pass
 
-- [ ] `python -m pytest` in `services/pipeline-manager` — green.
-- [ ] `pnpm -w test` (or the workstream-F command you normally run) — green,
+- [x] `python -m pytest` in `services/pipeline-manager` — green.
+- [x] `pnpm -w test` (or the workstream-F command you normally run) — green,
   including shared contract/OpenAPI checks.
-- [ ] Lint/typecheck as the repo defines (`pnpm -w lint`, `tsc`).
+- [x] Lint/typecheck as the repo defines (`pnpm -w lint`, `tsc`).
 
 ### Task 4.2: Hardware verification
 
