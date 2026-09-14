@@ -4,6 +4,7 @@ import type { IdGenerator } from '../lib/ids.js';
 import type { CoreDatabase } from './client.js';
 import type { DeviceBootstrap } from './device-bootstrap.js';
 import {
+  audioControls,
   channelConfigs,
   encodingProfiles,
   networkConfigs,
@@ -57,6 +58,24 @@ export function seed(core: CoreDatabase, now: Date, ids: IdGenerator, bootstrap?
 
   for (const role of SOURCE_ROLES) {
     core.db.insert(sourceRoles).values(role).onConflictDoNothing().run();
+  }
+
+  // Upgraded installations can predate the room-mic control projection.
+  // Preserve saved values while supplying the publisher's initial state.
+  for (const roleId of ['mic-lecturer', 'mic-room'] as const) {
+    core.db
+      .insert(audioControls)
+      .values({
+        roleId,
+        gain: 100,
+        muted: false,
+        appliedState: 'applied',
+        lastAppliedAt: nowIso,
+        lastError: null,
+        updatedBy: null,
+      })
+      .onConflictDoNothing()
+      .run();
   }
 
   for (const preset of LAYOUT_PRESETS) {

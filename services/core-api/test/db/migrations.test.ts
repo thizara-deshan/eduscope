@@ -1,12 +1,14 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { UlidGenerator } from '../../src/lib/ids.js';
 import { openDatabase, type CoreDatabase } from '../../src/db/client.js';
 import { migrate } from '../../src/db/migrate.js';
 import { seed } from '../../src/db/seeds.js';
 import {
+  audioControls,
   channelConfigs,
   encodingProfiles,
   layoutPresets,
@@ -85,6 +87,18 @@ describe('migrations', () => {
       expect(core.db.select().from(sourceBindings).all()).toHaveLength(5);
     });
 
+    it('seeds both microphone controls without replacing saved settings', () => {
+      seed(core, clock.now(), ids);
+      core.db.update(audioControls).set({ gain: 77 }).where(eq(audioControls.roleId, 'mic-lecturer')).run();
+
+      seed(core, clock.now(), ids);
+
+      const rows = core.db.select().from(audioControls).all();
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.roleId === 'mic-lecturer')?.gain).toBe(77);
+      expect(rows.find((row) => row.roleId === 'mic-room')?.gain).toBe(100);
+    });
+
     it('seeds exactly 1 retention policy', () => {
       seed(core, clock.now(), ids);
       const rows = core.db.select().from(retentionPolicy).all();
@@ -107,6 +121,7 @@ describe('migrations', () => {
       expect(core.db.select().from(channelConfigs).all()).toHaveLength(3);
       expect(core.db.select().from(physicalInputs).all()).toHaveLength(5);
       expect(core.db.select().from(sourceBindings).all()).toHaveLength(5);
+      expect(core.db.select().from(audioControls).all()).toHaveLength(2);
       expect(core.db.select().from(retentionPolicy).all()).toHaveLength(1);
       expect(core.db.select().from(encodingProfiles).all()).toHaveLength(1);
     });
