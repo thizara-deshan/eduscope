@@ -1,0 +1,14 @@
+[Unit]
+Description=Eduscope Chromium kiosk in the edus graphical session
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=EDUSCOPE_DEPLOYMENT_PROFILE=production
+ExecStart=/opt/eduscope/current/deploy/kiosk/user-launcher.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

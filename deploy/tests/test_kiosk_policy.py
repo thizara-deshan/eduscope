@@ -14,8 +14,8 @@ class KioskPolicyTest(unittest.TestCase):
         parser.read(KIOSK / "gdm-custom.conf")
         self.assertEqual("false", parser["daemon"]["WaylandEnable"])
         self.assertEqual("true", parser["daemon"]["AutomaticLoginEnable"])
-        self.assertEqual("eduscope-kiosk", parser["daemon"]["AutomaticLogin"])
-        self.assertEqual("eduscope.desktop", parser["daemon"]["DefaultSession"])
+        self.assertEqual("edus", parser["daemon"]["AutomaticLogin"])
+        self.assertEqual("ubuntu-xorg.desktop", parser["daemon"]["DefaultSession"])
         self.assertEqual("true", parser["security"]["DisallowTCP"])
 
     def test_session_and_dconf_are_locked_down(self):
@@ -55,9 +55,14 @@ class KioskPolicyTest(unittest.TestCase):
         self.assertIn("EDUSCOPE_DEPLOYMENT_PROFILE:-production", launcher)
         self.assertIn('/usr/bin/xhost +SI:localuser:eduscope-pipeline', launcher)
         self.assertIn('exec "$chromium" "${flags[@]}"', launcher)
-        unit = (ROOT / "deploy/systemd/eduscope-kiosk.service").read_text()
-        for value in ("User=eduscope-kiosk", "After=display-manager.service", "Restart=on-failure", "DeviceAllow=@TOUCH_DEVNODE@ r"):
+        unit = (KIOSK / "eduscope-kiosk-browser.service").read_text()
+        for value in ("After=graphical-session.target", "Restart=on-failure", "user-launcher.sh"):
             self.assertIn(value, unit)
+
+    def test_user_launcher_grants_only_pipeline_display_access_and_uses_dedicated_profile(self):
+        launcher = (KIOSK / "user-launcher.sh").read_text()
+        self.assertIn("xhost +SI:localuser:eduscope-pipeline", launcher)
+        self.assertIn("snap/chromium/common/edus-kiosk", launcher)
 
 
 if __name__ == "__main__":

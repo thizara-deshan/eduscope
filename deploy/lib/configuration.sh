@@ -31,7 +31,7 @@ PY
 
 install_provisioning_and_secrets() {
   fail_stage configuration
-  owned_install_as 0640 root eduscope-kiosk "$manifest" /etc/eduscope/device-manifest.json
+  owned_install_as 0640 root edus "$manifest" /etc/eduscope/device-manifest.json
   owned_install 0640 "$provisioning" /etc/eduscope/provisioning.json
   owned_install 0640 "$secrets" /etc/eduscope/secrets.json
   owned_install_as 0640 root eduscope-core "$(dirname "$secrets")/bootstrap-admin.password" /etc/eduscope/bootstrap-admin.password
@@ -86,6 +86,11 @@ install_proxy_and_kiosk_configuration() {
   chown root:root /run/eduscope/relay/nginx-push.conf
   chmod 0600 /run/eduscope/relay/nginx-push.conf
   owned_install 0644 "$release/deploy/kiosk/eduscope.desktop" /usr/share/xsessions/eduscope.desktop
+  local user_kiosk_unit=/etc/systemd/user/eduscope-kiosk-browser.service
+  owned_install 0644 "$release/deploy/kiosk/eduscope-kiosk-browser.service" "$user_kiosk_unit"
+  if [[ $EDUSCOPE_INSTALL_PROFILE == demo-staging ]]; then
+    sed -i 's/EDUSCOPE_DEPLOYMENT_PROFILE=production/EDUSCOPE_DEPLOYMENT_PROFILE=demo-staging/' "$user_kiosk_unit"
+  fi
   owned_install 0644 "$release/deploy/kiosk/dconf/profile/user" /etc/dconf/profile/user
   owned_install 0644 "$release/deploy/kiosk/dconf/db/local.d/00-eduscope" /etc/dconf/db/local.d/00-eduscope
   owned_install 0644 "$release/deploy/kiosk/dconf/db/local.d/locks/eduscope" /etc/dconf/db/local.d/locks/eduscope

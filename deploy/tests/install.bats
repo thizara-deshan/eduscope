@@ -44,12 +44,9 @@ PY
 @test "bootstrap password is readable only by core" {
   grep -Fq 'owned_install_as 0640 root eduscope-core' "$R/deploy/lib/configuration.sh"
 }
-@test "device manifest is readable by kiosk and demo unit carries its profile" {
-  grep -Fq 'owned_install_as 0640 root eduscope-kiosk "$manifest"' "$R/deploy/lib/configuration.sh"
-  out="$BATS_TEST_TMPDIR/eduscope-kiosk.service"
-  run bash -c "source '$R/deploy/lib/configuration.sh'; render_unit '$R/deploy/systemd/eduscope-kiosk.service' '$out' demo-staging 976"
-  [ "$status" -eq 0 ]
-  grep -Fq 'Environment=EDUSCOPE_DEPLOYMENT_PROFILE=demo-staging' "$out"
+@test "device manifest is readable by the edus graphical owner and user kiosk carries its profile" {
+  grep -Fq 'owned_install_as 0640 root edus "$manifest"' "$R/deploy/lib/configuration.sh"
+  grep -Fq 'EDUSCOPE_DEPLOYMENT_PROFILE=demo-staging' "$R/deploy/lib/configuration.sh"
 }
 @test "kiosk runtime directory is recreated by tmpfiles" {
   grep -Fq '/etc/tmpfiles.d/eduscope-kiosk.conf' "$R/deploy/lib/configuration.sh"
@@ -57,8 +54,8 @@ PY
 }
 @test "live smoke activates GDM and waits for kiosk Xauthority" {
   grep -Fq 'systemctl restart gdm3.service' "$R/deploy/lib/verify.sh"
-  grep -Fq '/run/user/$(id -u eduscope-kiosk)/gdm/Xauthority' "$R/deploy/lib/verify.sh"
-  grep -Fq 'runuser -u eduscope-kiosk' "$R/deploy/lib/verify.sh"
+  grep -Fq 'kiosk_uid=$(id -u edus)' "$R/deploy/lib/verify.sh"
+  grep -Fq 'runuser -u edus' "$R/deploy/lib/verify.sh"
   grep -Fq 'xdpyinfo -display :0' "$R/deploy/lib/verify.sh"
   grep -Fq 'sleep 10' "$R/deploy/lib/verify.sh"
 }

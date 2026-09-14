@@ -23,24 +23,32 @@ if config.get('deploymentProfile') != sys.argv[1]:
     raise SystemExit('deployed profile mismatch')
 PY
   systemctl restart gdm3.service
-  local kiosk_xauthority deadline
-  kiosk_xauthority="/run/user/$(id -u eduscope-kiosk)/gdm/Xauthority"
+  local kiosk_xauthority kiosk_uid deadline
+  kiosk_uid=$(id -u edus)
+  kiosk_xauthority="/run/user/$kiosk_uid/gdm/Xauthority"
   deadline=$((SECONDS + 60))
   while [[ ! -r $kiosk_xauthority && $SECONDS -lt $deadline ]]; do
     sleep 1
   done
-  [[ -r $kiosk_xauthority ]] || { echo 'kiosk Xauthority unavailable after 60 seconds' >&2; return 1; }
+  [[ -r $kiosk_xauthority ]] || { echo 'edus Xauthority unavailable after 60 seconds' >&2; return 1; }
   deadline=$((SECONDS + 60))
-  while ! runuser -u eduscope-kiosk -- env DISPLAY=:0 XAUTHORITY="$kiosk_xauthority" \
+  while ! runuser -u edus -- env DISPLAY=:0 XAUTHORITY="$kiosk_xauthority" \
     xdpyinfo -display :0 >/dev/null 2>&1; do
     (( SECONDS < deadline )) || { echo 'kiosk X11 display unavailable after 60 seconds' >&2; return 1; }
     sleep 1
   done
-  runuser -u eduscope-kiosk -- env DISPLAY=:0 XAUTHORITY="$kiosk_xauthority" \
+  runuser -u edus -- env DISPLAY=:0 XAUTHORITY="$kiosk_xauthority" \
     "$release/deploy/kiosk/xrandr-layout.sh" --manifest /etc/eduscope/device-manifest.json \
     --profile "$EDUSCOPE_INSTALL_PROFILE"
-  systemctl restart eduscope-kiosk.service
+  runuser -u edus -- env XDG_RUNTIME_DIR="/run/user/$kiosk_uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$kiosk_uid/bus" \
+    systemctl --user import-environment DISPLAY XAUTHORITY
+  runuser -u edus -- env XDG_RUNTIME_DIR="/run/user/$kiosk_uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$kiosk_uid/bus" \
+    systemctl --user restart eduscope-kiosk-browser.service
   sleep 10
-  systemctl is-active --quiet eduscope-kiosk.service
+  runuser -u edus -- env XDG_RUNTIME_DIR="/run/user/$kiosk_uid" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$kiosk_uid/bus" \
+    systemctl --user is-active --quiet eduscope-kiosk-browser.service
 }
 mark_install_success(){ fail_stage success;[[ $EDUSCOPE_INSTALL_DRY_RUN == false ]]||{ echo "DRY RUN COMPLETE profile=$EDUSCOPE_INSTALL_PROFILE";return;};install -d -m 0700 "$rollback_dir";printf '%s\n' "$release_id">"$rollback_dir/SUCCESS";[[ $EDUSCOPE_INSTALL_PROFILE == production ]]&&echo 'PASS install verified profile=production'||echo 'PASS demo smoke profile=demo-staging placeholder / firmware acceptance still open'; }

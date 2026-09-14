@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import os
+from pathlib import Path
 import signal
 import sys
 
@@ -29,6 +31,13 @@ class _XSetWindowAttributes(ctypes.Structure):
     ]
 
 
+def candidate_displays(configured: str | None, socket_dir: Path = Path("/tmp/.X11-unix")) -> list[str]:
+    candidates = [configured] if configured else []
+    if socket_dir.is_dir():
+        candidates.extend(f":{entry.name[1:]}" for entry in sorted(socket_dir.glob("X*")) if entry.name[1:].isdigit())
+    return list(dict.fromkeys(candidates))
+
+
 def _create_window(x: int, y: int, width: int, height: int):
     x11 = ctypes.CDLL("libX11.so.6")
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
@@ -44,9 +53,16 @@ def _create_window(x: int, y: int, width: int, height: int):
     x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
     x11.XDestroyWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
     x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
-    display = x11.XOpenDisplay(None)
+    display = None
+    selected = None
+    for name in candidate_displays(os.environ.get("DISPLAY")):
+        display = x11.XOpenDisplay(name.encode())
+        if display:
+            selected = name
+            break
     if not display:
-        raise RuntimeError("cannot open X display")
+        raise RuntimeError("cannot open an authorized X display")
+    os.environ["DISPLAY"] = selected
     window = x11.XCreateSimpleWindow(display, x11.XDefaultRootWindow(display), x, y, width, height, 0, 0, 0)
     attributes = _XSetWindowAttributes()
     attributes.override_redirect = 1
