@@ -28,6 +28,25 @@ const statuses = (states: SourceHealthState[] = ['offline', 'degraded', 'online'
   { roleId: 'presentation', state: states[2]!, detail: null, since: '2026-08-05T10:00:00Z', inputId: null },
   { roleId: 'mic-room', state: 'unbound', detail: null, since: '2026-08-05T10:00:00Z', inputId: null },
 ];
+const localChannel = [{
+  config: {
+    channelId: 'local', alwaysOn: true, enabledByDefault: true, presetId: 'fifty-fifty',
+    ratioA: 50, ratioB: 50, streamTargetIds: null, updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  status: {
+    channelId: 'local', state: 'on', presetId: 'fifty-fifty', ratioA: 50, ratioB: 50, reason: null,
+  },
+}];
+const presets = [{
+  id: 'fifty-fifty', displayName: 'PC + CAM 1', description: 'PC and lecturer camera',
+  allowedChannels: ['local'], kind: 'composite', canvas: { width: 1920, height: 1080 },
+  tiles: [
+    { roleId: 'presentation', x: 0, y: 0, w: 960, h: 1080, z: 0 },
+    { roleId: 'lecturer-cam', x: 960, y: 0, w: 960, h: 1080, z: 0 },
+  ],
+  parametric: true, outputs: [], passthroughEligible: false,
+  requiredRoles: ['presentation', 'lecturer-cam'],
+}];
 
 function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } = {}) {
   useWsStore.getState().reset();
@@ -41,6 +60,8 @@ function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } 
   const client = {
     listSourceRoles: vi.fn(options.pending ? never : () => Promise.resolve(roles)),
     getSourcesStatus: vi.fn(options.pending ? never : () => Promise.resolve(statuses(options.states))),
+    listChannels: vi.fn(options.pending ? never : () => Promise.resolve(localChannel)),
+    listLayoutPresets: vi.fn(options.pending ? never : () => Promise.resolve(presets)),
     openPreview,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
@@ -85,6 +106,15 @@ describe('SourcesBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
     expect(screen.getByRole('switch', { name: 'Lecturer Mic' })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'PC Mic' })).toBeInTheDocument();
+  });
+
+  it('shows the configured active local layout between source previews and microphones', async () => {
+    renderBar();
+    fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
+    const active = await screen.findByTestId('active-layout');
+    expect(active).toHaveTextContent('Active layout');
+    await waitFor(() => expect(active.querySelector('[data-testid="layout-preview"]'))
+      .toHaveAttribute('data-kind', 'composite'));
   });
 
   it('renders pending-query tiles as unknown rather than empty boxes', () => {

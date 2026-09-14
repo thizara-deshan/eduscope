@@ -58,18 +58,18 @@
 .us-sources {
   display: flex;
   align-items: center;
-  gap: var(--sp-8);
+  gap: var(--sp-5);
   padding: 0 var(--sp-8) var(--sp-6);
 }
 
 .us-sources__tiles {
   display: flex;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
 }
 
 .us-srctile {
   position: relative;
-  width: var(--srctile-w);
+  width: 124px;
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--border);
@@ -77,6 +77,40 @@
   aspect-ratio: 16 / 9;
   background: var(--surface-2);
 }
+
+.us-sources__active {
+  position: relative;
+  width: 136px;
+  flex: 0 0 136px;
+  overflow: hidden;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  aspect-ratio: 16 / 9;
+  background: var(--surface-3);
+}
+
+.us-sources__active .us-lp { border-radius: 0; }
+
+.us-sources__active .us-lp__label {
+  padding: 2px var(--sp-2);
+  font-size: 8px;
+}
+
+.us-sources__activelabel {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  z-index: 2;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-xs);
+  color: var(--on-ink);
+  background: color-mix(in srgb, var(--ink) 78%, transparent);
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.us-sources__activeempty { width: 100%; height: 100%; }
 
 .us-srctile__fill {
   position: absolute;
@@ -157,7 +191,7 @@
 
 .us-srcmic__identity {
   display: flex;
-  width: 150px;
+  width: 112px;
   min-width: 0;
   flex-direction: column;
 }
@@ -184,7 +218,7 @@
 .us-srcmic__meter {
   --level: 0;
   display: grid;
-  width: 160px;
+  width: 112px;
   height: var(--sp-7);
   grid-template-columns: repeat(20, 1fr);
   gap: var(--sp-1);
@@ -194,31 +228,6 @@
   border-radius: var(--radius-pill);
   background: var(--success);
   opacity: clamp(0.2, calc((var(--level) - var(--threshold)) * 100), 1);
-}
-
-.us-srcmic__gain {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.us-stepper {
-  display: inline-grid;
-  width: var(--tap-min);
-  height: var(--tap-min);
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: var(--surface-2);
-  font-size: var(--fs-xl);
-}
-
-.us-srcmic__pct {
-  min-width: var(--tap-min);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
 }
 
 .us-previewroot {

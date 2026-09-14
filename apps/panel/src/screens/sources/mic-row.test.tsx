@@ -65,16 +65,13 @@ describe('MicRow', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'PC Mic' }));
     expect(updateAudioControl).toHaveBeenCalledWith('mic-room', { muted: true });
   });
-  it('renders applied live truth and issues mute and ±5 gain requests', () => {
+  it('renders applied live truth and issues mute without gain controls', () => {
     const { updateAudioControl } = renderMic();
     expect(screen.getByRole('switch', { name: 'Lecturer Mic' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByText('Live')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Lecturer Mic' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Decrease Lecturer Mic level' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Increase Lecturer Mic level' }));
     expect(updateAudioControl).toHaveBeenNthCalledWith(1, 'mic-lecturer', { muted: true });
-    expect(updateAudioControl).toHaveBeenNthCalledWith(2, 'mic-lecturer', { gain: 45 });
-    expect(updateAudioControl).toHaveBeenNthCalledWith(3, 'mic-lecturer', { gain: 55 });
+    expect(screen.queryByLabelText(/gain|increase|decrease/i)).not.toBeInTheDocument();
   });
 
   it('renders applied muted truth', () => {

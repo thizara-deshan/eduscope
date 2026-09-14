@@ -184,6 +184,9 @@ realTest.describe('S-10 real JPEG preview acceptance', () => {
       await page.getByRole('button', { name: 'Show sources' }).click();
       await realExpect(page.getByTestId('source-tile')).toHaveCount(3);
       await realExpect(page.getByTestId('source-tile-preview')).toHaveCount(3, { timeout: 10_000 });
+      const activeLayout = page.getByTestId('active-layout');
+      await realExpect(activeLayout).toBeVisible();
+      await realExpect(activeLayout.locator('.us-lp__image')).toHaveCount(2);
 
       for (const [role, label] of Object.entries(REAL_PREVIEW_LABELS)) {
         await realStack.control('core.pm.status', { status: {

@@ -23,14 +23,17 @@ interface FrameProps {
   readonly label: string;
   readonly compact?: boolean | undefined;
   readonly style?: CSSProperties | undefined;
+  readonly frame?: string | undefined;
 }
 
 /** The existing PC/camera visual vocabulary (prototype `outputs/LayoutPreview.tsx`), driven by role id rather than a preset switch. */
-function Frame({ roleId, label, compact, style }: FrameProps): JSX.Element {
+function Frame({ roleId, label, compact, style, frame }: FrameProps): JSX.Element {
   const kind = ROLE_KIND[roleId] ?? 'cam';
   return (
     <div className={`us-lp__tile us-lp__tile--${kind}`} style={style}>
-      {kind === 'cam' ? (
+      {frame ? (
+        <img className="us-lp__image" src={frame} alt="" data-role={roleId} />
+      ) : kind === 'cam' ? (
         <div className="us-lp__cam">
           <div className="us-lp__silhouette" />
         </div>
@@ -58,6 +61,8 @@ export interface LayoutPreviewProps {
   readonly compact?: boolean;
   /** Large renders the detailed per-channel output preview. */
   readonly large?: boolean;
+  /** Optional live JPEG frames keyed by source role. */
+  readonly frames?: Partial<Record<SourceRoleId, string>>;
 }
 
 function tileStyle(tile: Tile, canvas: { readonly width: number; readonly height: number }): CSSProperties {
@@ -81,7 +86,7 @@ function fileCount(output: OutputSpec, index: number): string {
  * as percentages of `canvas`; `multi-file` renders one labelled frame per
  * `outputs` entry, never overlapping full-canvas tiles.
  */
-export function LayoutPreview({ preset, compact, large }: LayoutPreviewProps): JSX.Element {
+export function LayoutPreview({ preset, compact, large, frames }: LayoutPreviewProps): JSX.Element {
   const classes = ['us-lp', compact && 'us-lp--compact', large && 'us-lp--large'].filter(Boolean).join(' ');
 
   if (preset.kind === 'multi-file') {
@@ -94,6 +99,7 @@ export function LayoutPreview({ preset, compact, large }: LayoutPreviewProps): J
               roleId={output.roleIds[0] ?? 'presentation'}
               label={fileCount(output, index)}
               compact={compact}
+              frame={frames?.[output.roleIds[0] ?? 'presentation']}
             />
           ))}
         </div>
@@ -111,6 +117,7 @@ export function LayoutPreview({ preset, compact, large }: LayoutPreviewProps): J
             label={labelFor(tile.roleId)}
             compact={compact}
             style={tileStyle(tile, preset.canvas)}
+            frame={frames?.[tile.roleId]}
           />
         ))}
       </div>

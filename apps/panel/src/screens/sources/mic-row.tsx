@@ -17,7 +17,6 @@ export function MicRow({ roleId, displayName }: { readonly roleId: SourceRoleId;
         : control?.muted
           ? "Still muted — the change didn't apply."
           : "Still live — the mute didn't apply.");
-  const gain = control?.gain;
   const stateId = `us-${roleId}-state`;
 
   return (
@@ -30,23 +29,6 @@ export function MicRow({ roleId, displayName }: { readonly roleId: SourceRoleId;
         ) : null}
       </div>
       <LevelMeter roleId={roleId} displayName={displayName} active={state !== 'offline'} />
-      <div className="us-srcmic__gain" aria-label={`${displayName} gain`}>
-        <button
-          type="button"
-          className="us-stepper"
-          aria-label={`Decrease ${displayName} level`}
-          disabled={disabled || gain === undefined || gain <= 0}
-          onClick={() => audio.setGain(Math.max(0, (gain ?? 0) - 5))}
-        >−</button>
-        <span className="us-srcmic__pct">{gain === undefined ? '—' : `${gain}%`}</span>
-        <button
-          type="button"
-          className="us-stepper"
-          aria-label={`Increase ${displayName} level`}
-          disabled={disabled || gain === undefined || gain >= 100}
-          onClick={() => audio.setGain(Math.min(100, (gain ?? 0) + 5))}
-        >+</button>
-      </div>
       <ToggleSwitch
         checked={control ? !control.muted : undefined}
         label={displayName}

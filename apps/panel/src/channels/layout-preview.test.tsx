@@ -50,6 +50,17 @@ describe('LayoutPreview', () => {
     expect(screen.getByText('Lecturer Camera')).toBeInTheDocument();
   });
 
+  it('paints supplied live JPEG frames into their matching layout tiles', () => {
+    const { container } = render(
+      <LayoutPreview
+        preset={composite}
+        frames={{ presentation: 'blob:pc-frame', 'lecturer-cam': 'blob:cam-frame' }}
+      />,
+    );
+    expect(container.querySelector('img[data-role="presentation"]')).toHaveAttribute('src', 'blob:pc-frame');
+    expect(container.querySelector('img[data-role="lecturer-cam"]')).toHaveAttribute('src', 'blob:cam-frame');
+  });
+
   it('renders a multi-file preset as one labelled frame per output, not overlapping full-canvas tiles', () => {
     render(<LayoutPreview preset={multiFile} />);
     const preview = screen.getByTestId('layout-preview');

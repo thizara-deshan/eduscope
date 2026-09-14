@@ -1,6 +1,5 @@
 import type { SourceRoleId, SourcesStatusPayload } from '@eduscope/shared';
 import { useIsStale } from '../../store/selectors.js';
-import { usePreview } from './use-preview.js';
 import './sources.css';
 
 const HEALTH_WORDS: Record<SourcesStatusPayload['state'], string> = {
@@ -53,14 +52,4 @@ export function SourceTile({
       <span className="us-srctile__live" aria-hidden="true" />
     </button>
   );
-}
-
-export function PreviewSourceTile(
-  props: Omit<Parameters<typeof SourceTile>[0], 'previewFrame'>,
-): JSX.Element | null {
-  const preview = usePreview(props.roleId);
-  const previewFrame = preview.state.kind === 'live' || preview.state.kind === 'stale'
-    ? preview.state.frame
-    : undefined;
-  return <SourceTile {...props} {...(previewFrame ? { previewFrame } : {})} />;
 }
