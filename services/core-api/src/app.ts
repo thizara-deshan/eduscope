@@ -795,7 +795,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     recording: recordingExecutor,
     channels: channelExecutor,
     sources: sourceExecutor,
-    audio: { snapshot: () => getAudioControlSnapshot(app.db) },
+    audio: {
+      snapshots: () => [
+        getAudioControlSnapshot(app.db, 'mic-lecturer'),
+        getAudioControlSnapshot(app.db, 'mic-room'),
+      ],
+    },
     audioLevels: pmClient,
     storage: storageProbe,
     health: healthAggregator,

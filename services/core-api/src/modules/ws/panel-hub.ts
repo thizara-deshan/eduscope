@@ -56,7 +56,7 @@ export interface PanelHubDeps {
   recording: { getState(): RecordingStatePayload };
   channels: { listStatuses(): ChannelStatePayload[] };
   sources: { getStatus(): PayloadFor<'sources.status'>[] };
-  audio?: { snapshot(): PayloadFor<'audio.control'> };
+  audio?: { snapshots(): PayloadFor<'audio.control'>[] };
   audioLevels: {
     createAudioLevelSubscription(): Promise<string>;
     deleteAudioLevelSubscription(subscriptionId: string): Promise<void>;
@@ -232,7 +232,11 @@ export class PanelHub implements LifecycleComponent {
     for (const status of this.#deps.sources.getStatus()) {
       this.#deliverTo(conn, 'sources.status', status);
     }
-    if (this.#deps.audio) this.#deliverTo(conn, 'audio.control', this.#deps.audio.snapshot());
+    if (this.#deps.audio) {
+      for (const control of this.#deps.audio.snapshots()) {
+        this.#deliverTo(conn, 'audio.control', control);
+      }
+    }
 
     this.#deliverTo(conn, 'storage.status', this.#deps.storage.snapshot());
     this.#deliverTo(conn, 'device.health', this.#deps.health.snapshot());

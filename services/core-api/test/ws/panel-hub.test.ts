@@ -155,10 +155,10 @@ describe('panel WS hub (events.md §1/§2)', () => {
       const ws = await connect(testApp.app, testApp.lecturerToken);
       const frames = collectFrames(ws);
 
-      // recording.state(1) + channel.state x3 + sources.status x5 + audio.control(1) + storage/health/countdown/quiz = 14
-      await waitFor(() => frames.length >= 14);
+      // recording.state(1) + channel.state x3 + sources.status x5 + audio.control x2 + storage/health/countdown/quiz = 15
+      await waitFor(() => frames.length >= 15);
       await delay(30);
-      expect(frames.length).toBe(14);
+      expect(frames.length).toBe(15);
 
       expect(frames[0]!.event).toBe('recording.state');
       expect(frames[0]!.payload).toMatchObject({ state: 'idle', sessionId: null });
@@ -172,10 +172,13 @@ describe('panel WS hub (events.md §1/§2)', () => {
       expect(sourceFrames.length).toBe(5);
 
       expect(frames[9]!.event).toBe('audio.control');
-      expect(frames[10]!.event).toBe('storage.status');
-      expect(frames[11]!.event).toBe('device.health');
-      expect(frames[12]!.event).toBe('ai.countdown');
-      expect(frames[13]!.event).toBe('quiz.session');
+      expect(frames[9]!.payload).toMatchObject({ roleId: 'mic-lecturer' });
+      expect(frames[10]!.event).toBe('audio.control');
+      expect(frames[10]!.payload).toMatchObject({ roleId: 'mic-room' });
+      expect(frames[11]!.event).toBe('storage.status');
+      expect(frames[12]!.event).toBe('device.health');
+      expect(frames[13]!.event).toBe('ai.countdown');
+      expect(frames[14]!.event).toBe('quiz.session');
 
       // No current ai.set / open quiz.publication (no session yet) and no alert on a fresh device.
       expect(frames.some((f) => f.event === 'ai.set')).toBe(false);
