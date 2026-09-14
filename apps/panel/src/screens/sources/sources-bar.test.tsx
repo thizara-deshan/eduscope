@@ -20,7 +20,7 @@ const roles: SourceRole[] = [
   { id: 'students-cam', medium: 'video', displayLabel: 'Students Camera', requiredForStart: false, provisionable: true },
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'Lecturer Camera', requiredForStart: true, provisionable: true },
   { id: 'presentation', medium: 'video', displayLabel: 'Presentation', requiredForStart: true, provisionable: true },
-  { id: 'mic-room', medium: 'audio', displayLabel: 'Room Mic', requiredForStart: false, provisionable: false },
+  { id: 'mic-room', medium: 'audio', displayLabel: 'PC Mic', requiredForStart: false, provisionable: false },
 ];
 const statuses = (states: SourceHealthState[] = ['offline', 'degraded', 'online']): SourceStatus[] => [
   { roleId: 'students-cam', state: states[0]!, detail: null, since: '2026-08-05T10:00:00Z', inputId: null },
@@ -80,11 +80,11 @@ describe('SourcesBar', () => {
       .toEqual([...VIDEO_ROLE_ORDER]);
   });
 
-  it('renders lecturer and room microphone rows', () => {
+  it('renders lecturer and PC microphone rows', () => {
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
     expect(screen.getByRole('switch', { name: 'Lecturer Mic' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Room Mic' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'PC Mic' })).toBeInTheDocument();
   });
 
   it('renders pending-query tiles as unknown rather than empty boxes', () => {

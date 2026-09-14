@@ -60,9 +60,9 @@ function renderMic(options: {
 
 describe('MicRow', () => {
   it('binds the room label, meter, and controls to mic-room', () => {
-    const { updateAudioControl } = renderMic({ roleId: 'mic-room', displayName: 'Room Mic' });
-    expect(screen.getByRole('meter', { name: 'Room Mic level' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('switch', { name: 'Room Mic' }));
+    const { updateAudioControl } = renderMic({ roleId: 'mic-room', displayName: 'PC Mic' });
+    expect(screen.getByRole('meter', { name: 'PC Mic level' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'PC Mic' }));
     expect(updateAudioControl).toHaveBeenCalledWith('mic-room', { muted: true });
   });
   it('renders applied live truth and issues mute and ±5 gain requests', () => {

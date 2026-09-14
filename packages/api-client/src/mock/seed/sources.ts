@@ -35,7 +35,7 @@ export function createSourcesSeed(
       { id: 'lecturer-cam', medium: 'video', displayLabel: 'Lecturer Camera', requiredForStart: true, provisionable: true },
       { id: 'students-cam', medium: 'video', displayLabel: 'Students Camera', requiredForStart: false, provisionable: true },
       { id: 'mic-lecturer', medium: 'audio', displayLabel: 'Lecturer Mic', requiredForStart: true, provisionable: true },
-      { id: 'mic-room', medium: 'audio', displayLabel: 'Room Mic', requiredForStart: false, provisionable: false },
+      { id: 'mic-room', medium: 'audio', displayLabel: 'PC Mic', requiredForStart: false, provisionable: false },
     ] as const
   ).map((row) => validated(zSourceRole, row));
 

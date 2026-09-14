@@ -38,7 +38,7 @@ const SOURCE_SUBJECTS: Record<SourceRoleId, string> = {
   'lecturer-cam': 'CAM 1',
   'students-cam': 'CAM 2',
   'mic-lecturer': 'Microphone',
-  'mic-room': 'Room microphone',
+  'mic-room': 'PC microphone',
 };
 
 const SOURCE_ATTENTION_SENTENCES: Record<SourceRoleId, string> = {
@@ -46,7 +46,7 @@ const SOURCE_ATTENTION_SENTENCES: Record<SourceRoleId, string> = {
   'lecturer-cam': 'CAM 1 is reconnecting.',
   'students-cam': 'CAM 2 is reconnecting.',
   'mic-lecturer': 'The microphone is reconnecting.',
-  'mic-room': 'The room microphone is reconnecting.',
+  'mic-room': 'The PC microphone is reconnecting.',
 };
 
 const SOURCE_PROBLEM_SENTENCES: Record<SourceRoleId, string> = {
@@ -54,7 +54,7 @@ const SOURCE_PROBLEM_SENTENCES: Record<SourceRoleId, string> = {
   'lecturer-cam': 'CAM 1 has no signal.',
   'students-cam': 'CAM 2 has no signal.',
   'mic-lecturer': MIC_OFFLINE_SENTENCE,
-  'mic-room': 'The room microphone has no signal.',
+  'mic-room': 'The PC microphone has no signal.',
 };
 
 const CHANNEL_SUBJECTS: Record<ChannelId, string> = {

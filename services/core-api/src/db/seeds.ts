@@ -20,7 +20,7 @@ const SOURCE_ROLES = [
   { id: 'lecturer-cam', medium: 'video', displayLabel: 'CAM 1', requiredForStart: false, provisionable: true },
   { id: 'students-cam', medium: 'video', displayLabel: 'CAM 2', requiredForStart: false, provisionable: true },
   { id: 'mic-lecturer', medium: 'audio', displayLabel: 'Lecturer Mic', requiredForStart: false, provisionable: true },
-  { id: 'mic-room', medium: 'audio', displayLabel: 'Room Mic', requiredForStart: false, provisionable: true },
+  { id: 'mic-room', medium: 'audio', displayLabel: 'PC Mic', requiredForStart: false, provisionable: true },
 ] as const;
 
 const CHANNEL_CONFIGS = [
@@ -59,6 +59,7 @@ export function seed(core: CoreDatabase, now: Date, ids: IdGenerator, bootstrap?
   for (const role of SOURCE_ROLES) {
     core.db.insert(sourceRoles).values(role).onConflictDoNothing().run();
   }
+  core.db.update(sourceRoles).set({ displayLabel: 'PC Mic' }).where(eq(sourceRoles.id, 'mic-room')).run();
 
   // Upgraded installations can predate the room-mic control projection.
   // Preserve saved values while supplying the publisher's initial state.

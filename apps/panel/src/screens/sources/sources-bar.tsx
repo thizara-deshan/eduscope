@@ -89,7 +89,7 @@ export function SourcesBar(): JSX.Element {
           <div className="us-sources__divider" aria-hidden="true" />
           <div className="us-sources__mics">
             <MicRow roleId="mic-lecturer" displayName="Lecturer Mic" />
-            <MicRow roleId="mic-room" displayName="Room Mic" />
+            <MicRow roleId="mic-room" displayName="PC Mic" />
           </div>
         </div>
       ) : null}

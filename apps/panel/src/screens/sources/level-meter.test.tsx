@@ -42,8 +42,8 @@ describe('LevelMeter', () => {
     expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0');
   });
 
-  it('uses the supplied room microphone accessible name', () => {
-    render(<LevelMeter roleId="mic-room" displayName="Room Mic" />);
-    expect(screen.getByRole('meter', { name: 'Room Mic level' })).toBeInTheDocument();
+  it('uses the supplied PC microphone accessible name', () => {
+    render(<LevelMeter roleId="mic-room" displayName="PC Mic" />);
+    expect(screen.getByRole('meter', { name: 'PC Mic level' })).toBeInTheDocument();
   });
 });

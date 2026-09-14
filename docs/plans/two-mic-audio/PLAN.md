@@ -6,7 +6,7 @@
 > together. This plan touches three subsystems; each phase is a natural review gate.
 
 **Goal:** Make the Eduscope **production React panel** (`apps/panel`) show **two
-microphones** — "Lecturer Mic" and "Room Mic" — each with a **live VU meter** and
+microphones** — "Lecturer Mic" and "PC Mic" — each with a **live VU meter** and
 its own level control, fed through the monorepo pipeline (pipeline-manager →
 core-api → panel), and fix the currently-flat lecturer VU meter along the way.
 
@@ -348,7 +348,7 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 - Produces: `MicRow({ roleId, displayName }: { roleId: SourceRoleId; displayName: string })`.
 
 - [x] **Step 1: Write failing tests** — render `<MicRow roleId="mic-room"
-  displayName="Room Mic" />`, assert the name, the `LevelMeter` bound to `mic-room`,
+  displayName="PC Mic" />`, assert the name, the `LevelMeter` bound to `mic-room`,
   and that `useAudioControl('mic-room')` is used. Keep the lecturer test by passing
   the lecturer props.
 - [x] **Step 2: Run, confirm fail** (`pnpm --filter @eduscope/panel test -- mic-row`).
@@ -359,7 +359,7 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 - [x] **Step 4: Run, confirm pass.**
 - [x] **Step 5: Commit** — `refactor(panel): make MicRow role-generic`.
 
-### Task 3.2: Render the Room Mic row in the sources bar
+### Task 3.2: Render the PC Mic row in the sources bar
 
 **Files:**
 - Modify: `apps/panel/src/screens/sources/sources-bar.tsx:90` (render a second
@@ -367,17 +367,17 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 - Test: `apps/panel/src/screens/sources/sources-bar.test.tsx` (if present)
 
 - [x] **Step 1: Write/adjust failing test** — the sources bar shows both a
-  "Lecturer Mic" and a "Room Mic" row.
+  "Lecturer Mic" and a "PC Mic" row.
 - [x] **Step 2: Run, confirm fail.**
 - [x] **Step 3: Implement:**
 
 ```tsx
 <MicRow roleId="mic-lecturer" displayName="Lecturer Mic" />
-<MicRow roleId="mic-room" displayName="Room Mic" />
+<MicRow roleId="mic-room" displayName="PC Mic" />
 ```
 
 - [x] **Step 4: Run, confirm pass.**
-- [x] **Step 5: Commit** — `feat(panel): show Room Mic row with its own VU meter`.
+- [x] **Step 5: Commit** — `feat(panel): show PC Mic row with its own VU meter`.
 
 > **CHECKPOINT 3 — review panel.** `pnpm --filter @eduscope/panel test` green.
 
@@ -397,7 +397,7 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 - [x] Deploy the built stack to the device (your normal workstream-F deploy path).
 - [x] Confirm `/proc/asound/cards` shows both mics; set the real device strings in
   the PM audio config / bindings if they differ from the seeded defaults.
-- [ ] In the panel: both rows visible; speak into each mic → its bar moves and only
+- [x] In the panel: both rows visible; speak into each mic → its bar moves and only
   its bar; gain/mute works per mic; STT + a test recording still have audio.
 
 ### Task 4.3 (optional): Independent bench sanity with the reference scripts

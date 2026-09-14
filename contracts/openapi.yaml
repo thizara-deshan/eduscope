@@ -527,7 +527,7 @@ paths:
     put:
       tags: [sources]
       operationId: updateAudioControl
-      summary: Set lecturer or room mic gain/mute; result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
+      summary: Set lecturer or PC mic gain/mute; result pushed as audio.control — owner or admin only (G-AUTH-OWNER) while a session is non-terminal
       description: |
         Room Controls master mute writes the same `muted` field — one control,
         one truth (LP-14, [D-10]). 202 because application to the ALSA path is
