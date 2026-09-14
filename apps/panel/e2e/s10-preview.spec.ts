@@ -42,6 +42,29 @@ async function openPreview(page: Page, role = 'presentation'): Promise<Locator> 
 }
 
 test.describe('S-10 Source preview lightbox', () => {
+  test('the expanded source bar centers a larger active layout and anchors microphones on the right', async ({ page }) => {
+    await signIn(page);
+    await expandSources(page);
+
+    const bar = page.getByTestId('sources-bar');
+    const active = page.getByTestId('active-layout');
+    const activeTitle = bar.getByText('Active layout', { exact: true });
+    const microphones = bar.locator('.us-sources__mics');
+    const [barBox, activeBox, titleBox, microphonesBox] = await Promise.all([
+      bar.boundingBox(), active.boundingBox(), activeTitle.boundingBox(), microphones.boundingBox(),
+    ]);
+
+    expect(barBox).not.toBeNull();
+    expect(activeBox).not.toBeNull();
+    expect(titleBox).not.toBeNull();
+    expect(microphonesBox).not.toBeNull();
+    expect(activeBox!.width).toBe(200);
+    expect(Math.abs((activeBox!.x + activeBox!.width / 2) - (barBox!.x + barBox!.width / 2))).toBeLessThan(2);
+    expect(titleBox!.y + titleBox!.height).toBeLessThan(activeBox!.y);
+    expect(microphonesBox!.x).toBeGreaterThan(activeBox!.x + activeBox!.width);
+    await expect(active.getByText('Active layout', { exact: true })).toHaveCount(0);
+  });
+
   test('a live preview holds its frame shape, paints changing frames, closes, and leaves recording untouched', async ({ page }) => {
     await signIn(page);
     await expandSources(page);

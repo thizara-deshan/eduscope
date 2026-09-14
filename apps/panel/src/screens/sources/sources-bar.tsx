@@ -62,9 +62,7 @@ function ExpandedSources({
       </div>
       <section className="us-sources__active" aria-label="Active layout" data-testid="active-layout">
         {activePreset ? <LayoutPreview preset={activePreset} frames={frames} /> : <div className="us-sources__activeempty" />}
-        <span className="us-sources__activelabel">Active layout</span>
       </section>
-      <div className="us-sources__divider" aria-hidden="true" />
       <div className="us-sources__mics">
         <MicRow roleId="mic-lecturer" displayName="Lecturer Mic" />
         <MicRow roleId="mic-room" displayName="PC Mic" />
@@ -127,6 +125,7 @@ export function SourcesBar(): JSX.Element {
             </span>
           ) : null}
         </span>
+        {open ? <span className="us-panelbar__activetitle">Active layout</span> : null}
         <button type="button" className="us-panelbar__toggle" onClick={() => setOpen((value) => !value)}>
           {open ? 'Collapse' : 'Show sources'}
         </button>

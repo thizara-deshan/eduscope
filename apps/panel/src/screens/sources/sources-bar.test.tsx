@@ -87,10 +87,10 @@ describe('SourcesBar', () => {
     await waitFor(() => expect(screen.getAllByTestId('source-dot')[0]).toHaveAttribute('data-state', 'online'));
   });
 
-  it('keeps the expanded bar within the approved 154px envelope', () => {
+  it('expands to 180px so the larger 16:9 active layout does not overlap adjacent content', () => {
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
-    expect(getComputedStyle(screen.getByTestId('sources-bar')).height).toBe('154px');
+    expect(getComputedStyle(screen.getByTestId('sources-bar')).height).toBe('180px');
   });
 
   it('renders the three video roles in semantic order regardless of REST order', async () => {
@@ -112,7 +112,8 @@ describe('SourcesBar', () => {
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
     const active = await screen.findByTestId('active-layout');
-    expect(active).toHaveTextContent('Active layout');
+    expect(screen.getByText('Active layout')).not.toBe(active);
+    expect(active).not.toHaveTextContent('Active layout');
     await waitFor(() => expect(active.querySelector('[data-testid="layout-preview"]'))
       .toHaveAttribute('data-kind', 'composite'));
   });
