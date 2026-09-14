@@ -131,6 +131,14 @@
   background: var(--border);
 }
 
+.us-sources__mics {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
 .us-srcmic {
   display: flex;
   min-width: 0;

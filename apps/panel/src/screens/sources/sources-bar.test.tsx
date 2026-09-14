@@ -80,6 +80,13 @@ describe('SourcesBar', () => {
       .toEqual([...VIDEO_ROLE_ORDER]);
   });
 
+  it('renders lecturer and room microphone rows', () => {
+    renderBar();
+    fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
+    expect(screen.getByRole('switch', { name: 'Lecturer Mic' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Room Mic' })).toBeInTheDocument();
+  });
+
   it('renders pending-query tiles as unknown rather than empty boxes', () => {
     renderBar({ pending: true });
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
