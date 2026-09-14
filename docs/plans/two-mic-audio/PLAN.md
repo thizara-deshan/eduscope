@@ -347,17 +347,17 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 **Interfaces:**
 - Produces: `MicRow({ roleId, displayName }: { roleId: SourceRoleId; displayName: string })`.
 
-- [ ] **Step 1: Write failing tests** — render `<MicRow roleId="mic-room"
+- [x] **Step 1: Write failing tests** — render `<MicRow roleId="mic-room"
   displayName="Room Mic" />`, assert the name, the `LevelMeter` bound to `mic-room`,
   and that `useAudioControl('mic-room')` is used. Keep the lecturer test by passing
   the lecturer props.
-- [ ] **Step 2: Run, confirm fail** (`pnpm --filter @eduscope/panel test -- mic-row`).
-- [ ] **Step 3: Implement** — replace the module-level `ROLE_ID`/literals with the
+- [x] **Step 2: Run, confirm fail** (`pnpm --filter @eduscope/panel test -- mic-row`).
+- [x] **Step 3: Implement** — replace the module-level `ROLE_ID`/literals with the
   props; thread `roleId`/name into `useAudioControl`, `LevelMeter`, labels and
   aria-labels. Confirm `use-audio-control.ts` is role-generic (it takes a `roleId`
   arg already) — if it hardcodes lecturer anywhere, fix it here.
-- [ ] **Step 4: Run, confirm pass.**
-- [ ] **Step 5: Commit** — `refactor(panel): make MicRow role-generic`.
+- [x] **Step 4: Run, confirm pass.**
+- [x] **Step 5: Commit** — `refactor(panel): make MicRow role-generic`.
 
 ### Task 3.2: Render the Room Mic row in the sources bar
 
@@ -366,18 +366,18 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
   `MicRow` for `mic-room` below the lecturer one)
 - Test: `apps/panel/src/screens/sources/sources-bar.test.tsx` (if present)
 
-- [ ] **Step 1: Write/adjust failing test** — the sources bar shows both a
+- [x] **Step 1: Write/adjust failing test** — the sources bar shows both a
   "Lecturer Mic" and a "Room Mic" row.
-- [ ] **Step 2: Run, confirm fail.**
-- [ ] **Step 3: Implement:**
+- [x] **Step 2: Run, confirm fail.**
+- [x] **Step 3: Implement:**
 
 ```tsx
 <MicRow roleId="mic-lecturer" displayName="Lecturer Mic" />
 <MicRow roleId="mic-room" displayName="Room Mic" />
 ```
 
-- [ ] **Step 4: Run, confirm pass.**
-- [ ] **Step 5: Commit** — `feat(panel): show Room Mic row with its own VU meter`.
+- [x] **Step 4: Run, confirm pass.**
+- [x] **Step 5: Commit** — `feat(panel): show Room Mic row with its own VU meter`.
 
 > **CHECKPOINT 3 — review panel.** `pnpm --filter @eduscope/panel test` green.
 
