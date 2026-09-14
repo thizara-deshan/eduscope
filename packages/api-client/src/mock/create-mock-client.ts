@@ -168,7 +168,7 @@ export function createMockClient(
 
   build(scenario, options.seed ?? {});
 
-  let activePreview: PreviewChannel | null = null;
+  const activePreviews = new Set<PreviewChannel>();
   const client = {
     get scenario() {
       return current;
@@ -186,11 +186,10 @@ export function createMockClient(
     events$: envelopes.events$,
     connection$: connectionStream,
     openPreview: (roleId: SourceRoleId): PreviewChannel => {
-      activePreview?.close();
       const channel: PreviewChannel = createPreviewChannel(world, roleId, () => {
-        if (activePreview === channel) activePreview = null;
+        activePreviews.delete(channel);
       });
-      activePreview = channel;
+      activePreviews.add(channel);
       return channel;
     },
     resync: async () => {
@@ -211,8 +210,8 @@ export function createMockClient(
       }
     },
     dispose() {
-      activePreview?.close();
-      activePreview = null;
+      for (const preview of [...activePreviews]) preview.close();
+      activePreviews.clear();
       for (const stop of teardown) stop();
       teardown = [];
     },

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient, PreviewChannel } from '@eduscope/api-client';
-import type { SourceHealthState, SourceRole, SourceStatus, User } from '@eduscope/shared';
+import type { SourceHealthState, SourceRole, SourceRoleId, SourceStatus, User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
 import { OverlayHost, OverlayProvider } from '../../overlays/overlay-host.js';
@@ -37,7 +37,7 @@ function renderBar(options: { pending?: boolean; states?: SourceHealthState[] } 
   const channel: PreviewChannel = {
     close: vi.fn(), updates$: { subscribe: () => () => undefined },
   };
-  const openPreview = vi.fn(() => channel);
+  const openPreview = vi.fn((_roleId: SourceRoleId) => channel);
   const client = {
     listSourceRoles: vi.fn(options.pending ? never : () => Promise.resolve(roles)),
     getSourcesStatus: vi.fn(options.pending ? never : () => Promise.resolve(statuses(options.states))),
@@ -116,6 +116,8 @@ describe('SourcesBar', () => {
       .find((tile) => tile.dataset.role === 'presentation');
     fireEvent.click(presentation!);
     expect(screen.getByRole('dialog', { name: 'Presentation preview' })).toBeInTheDocument();
-    expect(view.openPreview).toHaveBeenCalledTimes(1);
+    expect(view.openPreview).toHaveBeenCalledTimes(4);
+    expect(view.openPreview.mock.calls.slice(0, 3).map(([roleId]) => roleId))
+      .toEqual([...VIDEO_ROLE_ORDER]);
   });
 });

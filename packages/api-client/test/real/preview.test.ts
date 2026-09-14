@@ -113,7 +113,7 @@ describe('real JPEG preview poller', () => {
     expect(seen).toEqual([]);
   });
 
-  it('uses authenticated no-store HTTP, supersedes the active source, and never opens preview WS', async () => {
+  it('uses authenticated no-store HTTP, supports concurrent sources, and never opens preview WS', async () => {
     const clock = createVirtualClock('2026-09-04T10:00:00.000Z');
     const requests: Array<{ url: string; init: Parameters<FetchLike>[1] }> = [];
     const response = (): HttpResponseLike => ({
@@ -152,7 +152,7 @@ describe('real JPEG preview poller', () => {
     expect(requests[1]!.url).toMatch(/^http:\/\/device\/api\/v1\/sources\/lecturer-cam\/preview\.jpg\?preview=/);
     expect(requests[0]!.init.cache).toBe('no-store');
     expect(requests[0]!.init.headers.get('authorization')).toBe('Bearer access');
-    expect(requests[0]!.init.signal?.aborted).toBe(true);
+    expect(requests[0]!.init.signal?.aborted).toBe(false);
     expect(webSocket).not.toHaveBeenCalled();
     expect(peer).not.toHaveBeenCalled();
     resolveFirst(response());

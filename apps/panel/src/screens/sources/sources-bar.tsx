@@ -6,7 +6,7 @@ import { useOverlays } from '../../overlays/overlay-host.js';
 import { useWsShallow } from '../../store/selectors.js';
 import { MicRow } from './mic-row.js';
 import { PreviewLightbox } from './preview-lightbox.js';
-import { SourceTile } from './source-tile.js';
+import { PreviewSourceTile } from './source-tile.js';
 import './sources.css';
 
 export const VIDEO_ROLE_ORDER = ['presentation', 'lecturer-cam', 'students-cam'] as const;
@@ -77,7 +77,7 @@ export function SourcesBar(): JSX.Element {
         <div className="us-sources">
           <div className="us-sources__tiles">
             {VIDEO_ROLE_ORDER.map((roleId) => (
-              <SourceTile
+              <PreviewSourceTile
                 key={roleId}
                 roleId={roleId}
                 displayLabel={roles.get(roleId)?.displayLabel ?? FALLBACK_LABELS[roleId]}

@@ -172,7 +172,7 @@ export function createRealClient(
     return transport.request(request);
   }
 
-  let activePreview: PreviewChannel | null = null;
+  const activePreviews = new Set<PreviewChannel>();
   const previewClock = options.clock ?? defaultClock;
 
   const client: EduscopeClient = {
@@ -330,7 +330,6 @@ export function createRealClient(
     events$: socket.events$,
     connection$: socket.connection$,
     openPreview: (roleId) => {
-      activePreview?.close();
       const channel: PreviewChannel = createPreviewPoller({
         roleId,
         clock: previewClock,
@@ -342,16 +341,16 @@ export function createRealClient(
           signal,
         }),
         onClose: () => {
-          if (activePreview === channel) activePreview = null;
+          activePreviews.delete(channel);
         },
       });
-      activePreview = channel;
+      activePreviews.add(channel);
       return channel;
     },
     resync: () => socket.resync(),
     dispose: () => {
-      activePreview?.close();
-      activePreview = null;
+      for (const preview of [...activePreviews]) preview.close();
+      activePreviews.clear();
       socket.dispose();
     },
   };

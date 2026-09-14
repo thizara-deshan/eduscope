@@ -23,6 +23,11 @@ describe('SourceTile', () => {
     expect(screen.getByTestId('source-tile')).toHaveAttribute('data-state', 'online');
   });
 
+  it('renders the current JPEG frame behind the tile status chrome', () => {
+    render(<SourceTile roleId="presentation" displayLabel="Presentation" status={status('online')} onOpen={vi.fn()} previewFrame="blob:pc-frame" />);
+    expect(screen.getByTestId('source-tile-preview')).toHaveAttribute('src', 'blob:pc-frame');
+  });
+
   it('renders a degraded tile with the reconnecting state and keeps preview available', () => {
     const onOpen = vi.fn();
     render(<SourceTile roleId="presentation" displayLabel="Presentation" status={status('degraded')} onOpen={onOpen} />);

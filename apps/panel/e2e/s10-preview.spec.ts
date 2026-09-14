@@ -183,6 +183,7 @@ realTest.describe('S-10 real JPEG preview acceptance', () => {
 
       await page.getByRole('button', { name: 'Show sources' }).click();
       await realExpect(page.getByTestId('source-tile')).toHaveCount(3);
+      await realExpect(page.getByTestId('source-tile-preview')).toHaveCount(3, { timeout: 10_000 });
 
       for (const [role, label] of Object.entries(REAL_PREVIEW_LABELS)) {
         await realStack.control('core.pm.status', { status: {
@@ -220,9 +221,9 @@ realTest.describe('S-10 real JPEG preview acceptance', () => {
         realExpect(dimensions.height).toBeLessThanOrEqual(270);
         await page.getByRole('button', { name: 'Close preview' }).click();
         await realExpect(dialog).toHaveCount(0);
-        const stoppedAt = realPreviewRequests.length;
+        const requestsBeforeBackgroundPoll = realPreviewRequests.length;
         await page.waitForTimeout(1_200);
-        realExpect(realPreviewRequests).toHaveLength(stoppedAt);
+        realExpect(realPreviewRequests.length).toBeGreaterThan(requestsBeforeBackgroundPoll);
       }
 
       const presentation = page.locator('[data-testid="source-tile"][data-role="presentation"]');
