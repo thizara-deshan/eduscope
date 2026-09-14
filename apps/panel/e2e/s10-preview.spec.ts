@@ -44,9 +44,15 @@ async function openPreview(page: Page, role = 'presentation'): Promise<Locator> 
 test.describe('S-10 Source preview lightbox', () => {
   test('the expanded source bar centers a larger active layout and anchors microphones on the right', async ({ page }) => {
     await signIn(page);
-    await expandSources(page);
-
     const bar = page.getByTestId('sources-bar');
+    const showSources = page.getByRole('button', { name: 'Show sources' });
+    const [collapsedBarBox, showSourcesBox] = await Promise.all([bar.boundingBox(), showSources.boundingBox()]);
+    expect(collapsedBarBox).not.toBeNull();
+    expect(showSourcesBox).not.toBeNull();
+    expect(collapsedBarBox!.x + collapsedBarBox!.width - showSourcesBox!.x - showSourcesBox!.width).toBe(18);
+    await showSources.click();
+    await expect(page.getByTestId('source-tile')).toHaveCount(3);
+
     const active = page.getByTestId('active-layout');
     const activeTitle = bar.getByText('Active layout', { exact: true });
     const microphones = bar.locator('.us-sources__mics');
@@ -58,7 +64,7 @@ test.describe('S-10 Source preview lightbox', () => {
     expect(activeBox).not.toBeNull();
     expect(titleBox).not.toBeNull();
     expect(microphonesBox).not.toBeNull();
-    expect(activeBox!.width).toBe(200);
+    expect(activeBox!.width).toBe(220);
     expect(Math.abs((activeBox!.x + activeBox!.width / 2) - (barBox!.x + barBox!.width / 2))).toBeLessThan(2);
     expect(titleBox!.y + titleBox!.height).toBeLessThan(activeBox!.y);
     expect(microphonesBox!.x).toBeGreaterThan(activeBox!.x + activeBox!.width);

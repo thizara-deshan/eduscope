@@ -87,10 +87,10 @@ describe('SourcesBar', () => {
     await waitFor(() => expect(screen.getAllByTestId('source-dot')[0]).toHaveAttribute('data-state', 'online'));
   });
 
-  it('expands to 180px so the larger 16:9 active layout does not overlap adjacent content', () => {
+  it('expands to 194px so the larger 16:9 previews do not overlap adjacent content', () => {
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: 'Show sources' }));
-    expect(getComputedStyle(screen.getByTestId('sources-bar')).height).toBe('180px');
+    expect(getComputedStyle(screen.getByTestId('sources-bar')).height).toBe('194px');
   });
 
   it('renders the three video roles in semantic order regardless of REST order', async () => {

@@ -5,18 +5,19 @@
   background: var(--surface);
 }
 
-.us-panelbar--open { height: 180px; }
+.us-panelbar--open { height: 194px; }
 
 .us-panelbar__head {
   display: grid;
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) 200px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
   gap: var(--sp-5);
   min-height: var(--panelbar-head-h);
   padding: var(--sp-1) var(--sp-8);
 }
 
 .us-panelbar__activetitle {
+  grid-column: 2;
   justify-self: center;
   color: var(--text-muted);
   font-size: var(--fs-2xs);
@@ -27,6 +28,7 @@
 
 .us-panelbar__title {
   display: inline-flex;
+  grid-column: 1;
   align-items: center;
   color: var(--text-muted);
   font-size: var(--fs-2xs);
@@ -53,6 +55,7 @@
 
 .us-panelbar__toggle {
   display: inline-flex;
+  grid-column: 3;
   min-height: var(--tap-min);
   align-items: center;
   padding: var(--sp-3) var(--sp-6);
@@ -68,7 +71,7 @@
 .us-sources {
   display: grid;
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) 200px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
   gap: var(--sp-5);
   padding: 0 var(--sp-8) var(--sp-6);
 }
@@ -81,7 +84,7 @@
 
 .us-srctile {
   position: relative;
-  width: 124px;
+  width: 140px;
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--border);
@@ -92,7 +95,7 @@
 
 .us-sources__active {
   position: relative;
-  width: 200px;
+  width: 220px;
   overflow: hidden;
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
