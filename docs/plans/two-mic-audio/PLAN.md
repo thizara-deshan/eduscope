@@ -394,8 +394,8 @@ its samples. The work is making `MicRow` role-generic and rendering a second row
 
 ### Task 4.2: Hardware verification
 
-- [ ] Deploy the built stack to the device (your normal workstream-F deploy path).
-- [ ] Confirm `/proc/asound/cards` shows both mics; set the real device strings in
+- [x] Deploy the built stack to the device (your normal workstream-F deploy path).
+- [x] Confirm `/proc/asound/cards` shows both mics; set the real device strings in
   the PM audio config / bindings if they differ from the seeded defaults.
 - [ ] In the panel: both rows visible; speak into each mic → its bar moves and only
   its bar; gain/mute works per mic; STT + a test recording still have audio.
