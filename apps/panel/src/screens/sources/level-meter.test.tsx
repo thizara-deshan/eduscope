@@ -8,12 +8,12 @@ describe('LevelMeter', () => {
   beforeEach(() => useTelemetryStore.getState().reset());
 
   it('renders the approved twenty CSS-driven segments', () => {
-    render(<LevelMeter roleId="mic-lecturer" />);
+    render(<LevelMeter roleId="mic-lecturer" displayName="Lecturer Mic" />);
     expect(screen.getAllByTestId('level-segment')).toHaveLength(20);
   });
 
   it('writes telemetry to --level without using React state', () => {
-    render(<LevelMeter roleId="mic-lecturer" />);
+    render(<LevelMeter roleId="mic-lecturer" displayName="Lecturer Mic" />);
     act(() => useTelemetryStore.getState().setLevel('mic-lecturer', 0.625));
     expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0.625');
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuenow', '63');
@@ -23,7 +23,7 @@ describe('LevelMeter', () => {
     let commits = 0;
     render(
       <Profiler id="level-meter" onRender={() => { commits += 1; }}>
-        <LevelMeter roleId="mic-lecturer" />
+        <LevelMeter roleId="mic-lecturer" displayName="Lecturer Mic" />
       </Profiler>,
     );
     act(() => {
@@ -36,9 +36,14 @@ describe('LevelMeter', () => {
 
   it('suppresses stale meter values while its source is offline', () => {
     useTelemetryStore.getState().setLevel('mic-lecturer', 0.8);
-    render(<LevelMeter roleId="mic-lecturer" active={false} />);
+    render(<LevelMeter roleId="mic-lecturer" displayName="Lecturer Mic" active={false} />);
     expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0');
     act(() => useTelemetryStore.getState().setLevel('mic-lecturer', 0.9));
     expect(screen.getByRole('meter').style.getPropertyValue('--level')).toBe('0');
+  });
+
+  it('uses the supplied room microphone accessible name', () => {
+    render(<LevelMeter roleId="mic-room" displayName="Room Mic" />);
+    expect(screen.getByRole('meter', { name: 'Room Mic level' })).toBeInTheDocument();
   });
 });

@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
-import type { AudioControlPayload, SourcesStatusPayload, User } from '@eduscope/shared';
+import type { AudioControlPayload, SourceRoleId, SourcesStatusPayload, User } from '@eduscope/shared';
 import { AuthProvider } from '../../auth/auth-context.js';
 import { ClientContext } from '../../client/client-provider.js';
 import { useWsStore } from '../../store/ws-store.js';
@@ -37,12 +37,15 @@ function renderMic(options: {
   audio?: AudioControlPayload;
   health?: SourcesStatusPayload['state'];
   stale?: boolean;
+  roleId?: SourceRoleId;
+  displayName?: string;
 } = {}) {
+  const roleId = options.roleId ?? 'mic-lecturer';
   useWsStore.getState().reset();
   useWsStore.setState({
     recording: recording as never,
-    audioControls: { 'mic-lecturer': options.audio ?? control() },
-    sources: { 'mic-lecturer': source(options.health) },
+    audioControls: { [roleId]: options.audio ?? control({ roleId }) },
+    sources: { [roleId]: { ...source(options.health), roleId } },
     stale: options.stale ?? false,
   });
   const updateAudioControl = vi.fn(() => Promise.resolve({ resolveBySec: 2 }));
@@ -52,10 +55,16 @@ function renderMic(options: {
     { value: client },
     createElement(AuthProvider, { initialUser: options.viewer ?? owner, children }),
   );
-  return { ...render(<MicRow />, { wrapper }), updateAudioControl };
+  return { ...render(<MicRow roleId={roleId} displayName={options.displayName ?? 'Lecturer Mic'} />, { wrapper }), updateAudioControl };
 }
 
 describe('MicRow', () => {
+  it('binds the room label, meter, and controls to mic-room', () => {
+    const { updateAudioControl } = renderMic({ roleId: 'mic-room', displayName: 'Room Mic' });
+    expect(screen.getByRole('meter', { name: 'Room Mic level' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Room Mic' }));
+    expect(updateAudioControl).toHaveBeenCalledWith('mic-room', { muted: true });
+  });
   it('renders applied live truth and issues mute and ±5 gain requests', () => {
     const { updateAudioControl } = renderMic();
     expect(screen.getByRole('switch', { name: 'Lecturer Mic' })).toHaveAttribute('aria-checked', 'true');

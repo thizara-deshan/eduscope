@@ -54,7 +54,7 @@ function renderMic(options: {
     { value: client },
     createElement(AuthProvider, { initialUser: options.viewer ?? owner, children }),
   );
-  const node = options.both ? <><MicRow /><MicMasterRow /></> : <MicMasterRow />;
+  const node = options.both ? <><MicRow roleId="mic-lecturer" displayName="Lecturer Mic" /><MicMasterRow /></> : <MicMasterRow />;
   return { ...render(node, { wrapper }), updateAudioControl };
 }
 

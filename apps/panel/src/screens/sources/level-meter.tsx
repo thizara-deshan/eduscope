@@ -7,10 +7,12 @@ const DEFAULT_SEGMENTS = 20;
 
 export function LevelMeter({
   roleId,
+  displayName,
   segments = DEFAULT_SEGMENTS,
   active = true,
 }: {
   readonly roleId: SourceRoleId;
+  readonly displayName: string;
   readonly segments?: number;
   readonly active?: boolean;
 }): JSX.Element {
@@ -35,7 +37,7 @@ export function LevelMeter({
       ref={meterRef}
       className="us-srcmic__meter"
       role="meter"
-      aria-label="Lecturer microphone level"
+      aria-label={`${displayName} level`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(initial * 100)}
