@@ -522,7 +522,20 @@ async def put_room_audio_control(body: AudioControlBody, request: Request):
     if controller.pid is not None:
         async with state.publisher_locks[PublisherId.AUDIO]:
             await state.stop_publisher(controller)
-            await state.start_publisher(controller)
+            for attempt in range(3):
+                await state.start_publisher(controller)
+                if controller.pid is not None:
+                    break
+                # ALSA can remain busy briefly after gst-launch exits. The
+                # failed start is still registered in the supervisor, so stop
+                # it before retrying the same publisher identity.
+                await state.stop_publisher(controller)
+                if attempt < 2:
+                    await asyncio.sleep(0.25 * (attempt + 1))
+            if controller.pid is None:
+                result = result.model_copy(
+                    update={"applied_state": "failed", "last_error": "audio publisher failed to restart"}
+                )
     return {
         "roleId": result.role_id.value,
         "appliedGain": result.applied_gain,

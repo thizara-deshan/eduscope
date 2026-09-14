@@ -4,6 +4,8 @@ import sys
 
 import pytest
 
+from pipeline_manager.models import PublisherId
+
 
 @pytest.mark.asyncio
 async def test_publisher_start_returns_202(client, auth_headers) -> None:
@@ -104,6 +106,34 @@ async def test_room_audio_control_route(client, auth_headers) -> None:
     response = await client.put("/audio/controls/mic-room", headers=auth_headers, json={"gain": 50, "muted": False})
     assert response.status_code == 200
     assert response.json()["roleId"] == "mic-room"
+
+
+@pytest.mark.asyncio
+async def test_room_audio_control_retries_after_transient_publisher_restart_failure(
+    client, app, auth_headers, monkeypatch
+) -> None:
+    controller = app.state.publishers[PublisherId.AUDIO]
+    controller.pid = 123
+    starts = 0
+
+    async def stop(current) -> None:
+        current.pid = None
+
+    async def start(current) -> None:
+        nonlocal starts
+        starts += 1
+        if starts == 2:
+            current.pid = 456
+
+    monkeypatch.setattr(app.state, "stop_publisher", stop)
+    monkeypatch.setattr(app.state, "start_publisher", start)
+    response = await client.put(
+        "/audio/controls/mic-room", headers=auth_headers, json={"gain": 50, "muted": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["appliedState"] == "applied"
+    assert starts == 2
 
 
 @pytest.mark.asyncio
