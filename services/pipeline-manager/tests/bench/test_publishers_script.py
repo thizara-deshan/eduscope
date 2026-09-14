@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -67,11 +66,12 @@ def test_warm_wait_timeout_fails(state_dir: Path) -> None:
 
 
 def test_missing_socket_fails(state_dir: Path) -> None:
-    """On this dev host there is no real AF_UNIX support to create genuine
-    socket files (see test_helper_client.py's equivalent POSIX gate), so the
-    warm publishers always reach the socket check and correctly fail there."""
+    """An isolated empty socket directory reaches the missing-socket gate."""
     write_sequence(state_dir, [ONLINE_SNAPSHOT])
-    result = run_script("publishers.sh", ["http://fake"], state_dir)
+    result = run_script(
+        "publishers.sh", ["http://fake"], state_dir,
+        env_overrides={"SOCKET_DIR": str(state_dir / "sockets")},
+    )
     assert result.returncode != 0
     assert "FAIL A15-PUB missing" in result.stdout
 
@@ -80,14 +80,14 @@ def test_missing_socket_fails(state_dir: Path) -> None:
 def test_restart_isolation_success_fixture(state_dir: Path) -> None:
     import socket
 
+    socket_dir = state_dir / "sockets"
+    socket_dir.mkdir()
+    sockets = []
     for name in ("usb.sock", "rtsp.sock", "rtsp2.sock", "audio.sock"):
-        path = f"/tmp/{name}"
-        try:
-            os.unlink(path)
-        except FileNotFoundError:
-            pass
+        path = str(socket_dir / name)
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.bind(path)
+        sockets.append(s)
 
     restart_usb = json.loads(json.dumps(ONLINE_SNAPSHOT))
     restart_usb["publishers"]["usb"] = {"pid": 200, "state": "online"}
@@ -109,7 +109,13 @@ def test_restart_isolation_success_fixture(state_dir: Path) -> None:
         ],
     )
 
-    result = run_script("publishers.sh", ["http://fake"], state_dir, timeout=60)
+    result = run_script(
+        "publishers.sh", ["http://fake"], state_dir, timeout=60,
+        env_overrides={"SOCKET_DIR": str(socket_dir)},
+    )
+
+    for sock in sockets:
+        sock.close()
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PASS A15-PUB warm publishers, sockets, isolated restarts" in result.stdout

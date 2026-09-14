@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -18,17 +18,15 @@ function write(path: string): void {
   writeFileSync(path, CODE, 'utf8');
 }
 
-function lint(): { code: number; text: string } {
-  try {
-    const out = execFileSync('pnpm', ['lint'], { cwd: root, stdio: 'pipe', shell: true });
-    return { code: 0, text: out.toString() };
-  } catch (e) {
-    const err = e as { status?: number; stdout?: Buffer };
-    return { code: err.status ?? 1, text: err.stdout?.toString() ?? '' };
-  }
+function lint(): Promise<{ code: number; text: string }> {
+  return new Promise((resolveLint) => {
+    execFile('pnpm', ['lint'], { cwd: root }, (error, stdout) => {
+      resolveLint({ code: error ? 1 : 0, text: stdout.toString() });
+    });
+  });
 }
 
-const lintExitCode = (): number => lint().code;
+const lintExitCode = async (): Promise<number> => (await lint()).code;
 
 afterEach(() => {
   for (const p of [VIOLATION, CONTROL]) {
@@ -37,17 +35,18 @@ afterEach(() => {
 });
 
 // Each assertion shells out to a full `pnpm lint` across the workspace
-// (~8-9s observed here) — well past vitest's 5000ms default, same class of
-// cold-start cost as Task 17's ESLint#lintText finding. Bumped explicitly.
+// (~15s observed on the deployment device) — well past vitest's 5000ms
+// default, and slower under the full parallel workspace suite. Keep enough
+// headroom for the device gate without weakening any assertion.
 describe('GATE 3 — the boundary rule fails the build', () => {
-  it('3a: pnpm lint is green with no violation present', () => {
-    expect(lintExitCode(), 'the repo must lint clean before the gate means anything')
+  it('3a: pnpm lint is green with no violation present', async () => {
+    expect(await lintExitCode(), 'the repo must lint clean before the gate means anything')
       .toBe(0);
-  }, 20_000);
+  }, 60_000);
 
-  it('3b: a direct fetch in apps/panel makes pnpm lint exit non-zero', () => {
+  it('3b: a direct fetch in apps/panel makes pnpm lint exit non-zero', async () => {
     write(VIOLATION);
-    const { code, text } = lint();
+    const { code, text } = await lint();
     expect(code, 'a component calling fetch() must FAIL the build (frontend-conventions §1)')
       .not.toBe(0);
     // Asserting the exit code alone is not enough: it passes even with the
@@ -56,13 +55,13 @@ describe('GATE 3 — the boundary rule fails the build', () => {
     expect(text, 'lint failed, but not because of the boundary rule')
       .toContain('no-restricted-globals');
     expect(text, 'lint failed, but not on the gate fixture').toMatch(/__gate__/);
-  }, 20_000);
+  }, 60_000);
 
-  it('3c: the same file inside packages/api-client keeps lint green', () => {
+  it('3c: the same file inside packages/api-client keeps lint green', async () => {
     write(CONTROL);
     expect(
-      lintExitCode(),
+      await lintExitCode(),
       'packages/api-client IS the network boundary and must stay unrestricted',
     ).toBe(0);
-  }, 20_000);
+  }, 60_000);
 });

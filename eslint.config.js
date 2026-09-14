@@ -19,6 +19,10 @@ export default tseslint.config(
       // and a worktree under .claude/ carries its own full copy of prototype/
       // and legacy-Codebase/, which is how a clean tree lints 1142 errors.
       '.claude/**', '.agents/**', 'agent/**', 'revamp-guide/**',
+      // Runtime/deployment artifacts when this checkout is also the install
+      // root. Immutable releases are full source copies and must not be
+      // linted as part of the working tree.
+      'current/**', 'releases/**', 'models/**',
       // Python virtualenvs for the pipeline-manager (A) and AI (C) services.
       // Gitignored and never present in CI, but a local checkout carries them
       // and flat config walks into their vendored .js (e.g. urllib3's

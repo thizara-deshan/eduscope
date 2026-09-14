@@ -28,7 +28,7 @@ async def test_helper_double_accepts_only_the_bench_allowlist(tmp_path: Path) ->
         response = json.loads(await reader.readline())
         writer.close()
         await writer.wait_closed()
-        assert response == {"id": "bad", "ok": False, "error": "verb_not_allowed"}
+        assert response == {"ok": False, "detail": "verb_not_allowed"}
     finally:
         proc.terminate()
         await proc.wait()

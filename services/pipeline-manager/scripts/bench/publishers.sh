@@ -11,6 +11,7 @@ CURL="${CURL:-curl}"
 JQ="${JQ:-jq}"
 KILL="${KILL:-kill}"
 SLEEP="${SLEEP:-sleep}"
+SOCKET_DIR="${SOCKET_DIR:-/tmp}"
 
 command -v "$CURL" >/dev/null || { echo "FAIL A15-PUB curl is required"; exit 1; }
 command -v "$JQ" >/dev/null || { echo "FAIL A15-PUB jq is required"; exit 1; }
@@ -36,7 +37,7 @@ until status | "$JQ" -e '[.publishers.usb,.publishers.rtsp,.publishers.rtsp2,.pu
   "$SLEEP" 1
 done
 
-for sock in /tmp/usb.sock /tmp/rtsp.sock /tmp/rtsp2.sock /tmp/audio.sock; do
+for sock in "$SOCKET_DIR/usb.sock" "$SOCKET_DIR/rtsp.sock" "$SOCKET_DIR/rtsp2.sock" "$SOCKET_DIR/audio.sock"; do
   test -S "$sock" || { echo "FAIL A15-PUB missing $sock"; exit 1; }
 done
 

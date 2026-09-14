@@ -130,7 +130,7 @@ function stageCandidate(candidatePath: string, bytes: Buffer): void {
     try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
   } catch (error) {
     if (fd !== undefined) closeSync(fd);
-    try { unlinkSync(tempPath); } catch {}
+    try { unlinkSync(tempPath); } catch { /* already absent */ }
     throw error;
   }
 }

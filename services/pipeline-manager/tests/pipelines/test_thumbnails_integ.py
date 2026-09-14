@@ -18,7 +18,9 @@ that broken path at all, and are exercised for real here.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import platform
 import shutil
 import subprocess
 import sys
@@ -42,7 +44,9 @@ from pipeline_manager.supervisor.process import ProcessSupervisor
 from pipeline_manager.supervisor.stop import STOP_DEADLINE_SECONDS, stop_process
 
 pytestmark = pytest.mark.skipif(
-    sys.platform == "win32" or shutil.which("gst-launch-1.0") is None,
+    sys.platform == "win32"
+    or shutil.which("gst-launch-1.0") is None
+    or platform.freedesktop_os_release().get("ID") != "arch",
     reason="requires a real GStreamer + PyGObject + webrtcbin install (Arch integ-b target, plan §3)",
 )
 
@@ -108,7 +112,7 @@ class _RealConfirmer:
         )
 
 
-def _read_outbound_messages(process, *, timeout: float, want_types: set[str]) -> dict[str, object]:
+async def _read_outbound_messages(process, *, timeout: float, want_types: set[str]) -> dict[str, object]:
     found: dict[str, object] = {}
     deadline = time.monotonic() + timeout
     seen = 0
@@ -119,14 +123,14 @@ def _read_outbound_messages(process, *, timeout: float, want_types: set[str]) ->
             message = parse_worker_output_line(line)
             if message is not None and message.type not in found:
                 found[message.type] = message
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
     return found
 
 
 @pytest.mark.asyncio
 async def test_real_offer_produces_a_real_answer_and_ice_candidates(tmp_path) -> None:
     writer = _start_warm_presentation_writer()
-    time.sleep(0.5)
+    await asyncio.sleep(0.5)
 
     graph = worker_graph(SourceRole.PRESENTATION, _SoftwareEncoderPlatform())
     spec = PipelineSpec(argv=worker_argv(graph=graph), required_roles=(SourceRole.PRESENTATION,), encode_slots=1, outputs=())
@@ -143,7 +147,7 @@ async def test_real_offer_produces_a_real_answer_and_ice_candidates(tmp_path) ->
         process.popen.stdin.write(offer_line + "\n")
         process.popen.stdin.flush()
 
-        found = _read_outbound_messages(process, timeout=10.0, want_types={"answer", "ice"})
+        found = await _read_outbound_messages(process, timeout=10.0, want_types={"answer", "ice"})
 
         assert "answer" in found, "worker never produced an SDP answer"
         answer = found["answer"]
@@ -179,7 +183,7 @@ async def test_malformed_control_lines_do_not_crash_the_worker() -> None:
     """plan: 'fake-worker WebRTC signaling + crash cleanup' — garbage input
     on stdin must be ignored, not bring the process down."""
     writer = _start_warm_presentation_writer()
-    time.sleep(0.5)
+    await asyncio.sleep(0.5)
 
     graph = worker_graph(SourceRole.PRESENTATION, _SoftwareEncoderPlatform())
     spec = PipelineSpec(argv=worker_argv(graph=graph), required_roles=(SourceRole.PRESENTATION,), encode_slots=1, outputs=())
@@ -192,7 +196,7 @@ async def test_malformed_control_lines_do_not_crash_the_worker() -> None:
         for garbage in ("not json", "{}", '{"type": "unknown"}', '{"type": "offer"}'):
             process.popen.stdin.write(garbage + "\n")
         process.popen.stdin.flush()
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
         assert process.popen.poll() is None  # still alive after garbage input
 

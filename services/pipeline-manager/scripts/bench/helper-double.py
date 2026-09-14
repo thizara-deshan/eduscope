@@ -18,11 +18,9 @@ async def serve(path: Path) -> None:
             request = json.loads(raw)
             verb = request.get("verb")
             response = {
-                "id": request.get("id", "unknown"),
                 "ok": verb in ALLOWED,
+                "detail": "ok" if verb in ALLOWED else "verb_not_allowed",
             }
-            if verb not in ALLOWED:
-                response["error"] = "verb_not_allowed"
             writer.write((json.dumps(response, separators=(",", ":")) + "\n").encode())
             await writer.drain()
         except Exception:
