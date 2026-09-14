@@ -433,6 +433,15 @@ def create_production_app(settings: Settings | None = None) -> FastAPI:
             )
             for role in (SourceRole.MIC_LECTURER, SourceRole.MIC_ROOM)
         }
+        for sampler in samplers.values():
+            sampler.add_listener(
+                lambda sample: asyncio.create_task(
+                    app.state.events.publish(
+                        "evt.pm.audio.level",
+                        {"roleId": sample.role_id.value, "rms": sample.rms},
+                    )
+                )
+            )
         samplers[SourceRole.MIC_LECTURER].add_listener(
             lambda sample: app.state.publishers[PublisherId.AUDIO].observe_telemetry(rms=sample.rms)
         )

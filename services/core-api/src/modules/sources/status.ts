@@ -8,12 +8,12 @@ import type { LifecycleComponent, LifecycleStopReason } from '../../lifecycle.js
 import type { PmPublisherId, PmPublisherState, PmStatus } from '../recording/pm/types.js';
 import { AudioLevelThrottle } from './telemetry.js';
 
-/** pipeline-manager.md §1.1 — the only four provisionable, publisher-backed roles (INV-SR-2: `mic-room` is permanently `unbound`). */
-export const PM_PUBLISHER_TO_ROLE: Record<PmPublisherId, SourceRoleId> = {
-  usb: 'presentation',
-  rtsp: 'lecturer-cam',
-  rtsp2: 'students-cam',
-  audio: 'mic-lecturer',
+/** Publisher health fans out to every role carried by that publisher. */
+export const PM_PUBLISHER_TO_ROLES: Record<PmPublisherId, readonly SourceRoleId[]> = {
+  usb: ['presentation'],
+  rtsp: ['lecturer-cam'],
+  rtsp2: ['students-cam'],
+  audio: ['mic-lecturer', 'mic-room'],
 };
 
 export type SourceObservation =
@@ -218,6 +218,7 @@ export class SourceExecutor implements LifecycleComponent {
   readonly #projection: SourceProjection;
   readonly #audio: AudioLevelThrottle;
   #unsubscribeResynced: Unsubscribe | null = null;
+  #unsubscribeAudioLevel: Unsubscribe | null = null;
 
   constructor(deps: SourceExecutorDeps) {
     this.#deps = deps;
@@ -237,11 +238,16 @@ export class SourceExecutor implements LifecycleComponent {
     }
 
     this.#unsubscribeResynced = this.#deps.bus.subscribe('pm.status.resynced', (status) => this.#onPmStatus(status));
+    this.#unsubscribeAudioLevel = this.#deps.bus.subscribe('evt.pm.audio.level', ({ roleId, rms }) => {
+      this.#maybePublishAudioLevel(roleId, rms);
+    });
   }
 
   async stop(_reason: LifecycleStopReason): Promise<void> {
     this.#unsubscribeResynced?.();
     this.#unsubscribeResynced = null;
+    this.#unsubscribeAudioLevel?.();
+    this.#unsubscribeAudioLevel = null;
     this.#projection.dispose();
   }
 
@@ -255,11 +261,12 @@ export class SourceExecutor implements LifecycleComponent {
   }
 
   #onPmStatus(status: PmStatus): void {
-    for (const [publisherId, roleId] of Object.entries(PM_PUBLISHER_TO_ROLE) as [PmPublisherId, SourceRoleId][]) {
+    for (const [publisherId, roleIds] of Object.entries(PM_PUBLISHER_TO_ROLES) as [PmPublisherId, readonly SourceRoleId[]][]) {
       const publisher = status.publishers[publisherId];
       if (!publisher) continue;
-      this.#projection.observePmEvent({ kind: 'telemetry', roleId, publisherState: publisher.state });
-      this.#maybePublishAudioLevel(roleId, publisher.rms);
+      for (const roleId of roleIds) {
+        this.#projection.observePmEvent({ kind: 'telemetry', roleId, publisherState: publisher.state });
+      }
     }
   }
 

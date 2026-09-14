@@ -81,3 +81,32 @@ async def test_start_audio_meter_replaces_the_sampler_with_a_real_meter_backed_o
     assert app.state.publishers[PublisherId.AUDIO].health.rms == pytest.approx(10 ** (-12.0 / 20.0))
 
     await app.state.audio_meter.stop()
+
+
+@pytest.mark.asyncio
+async def test_audio_samplers_publish_role_specific_level_events() -> None:
+    app = _app()
+    await app.state.start_audio_meter()
+    subscriber_id, queue = app.state.events.subscribe()
+    try:
+        app.state.audio_meter.observe_line(
+            b'from element "lvl_mic_lecturer": level, rms=(GValueArray)< -12.0, -13.0 >;'
+        )
+        app.state.audio_meter.observe_line(
+            b'from element "lvl_mic_room": level, rms=(GValueArray)< -20.0, -21.0 >;'
+        )
+        await app.state.audio_samplers[SourceRole.MIC_LECTURER].__aenter__()
+        await app.state.audio_samplers[SourceRole.MIC_ROOM].__aenter__()
+
+        events = [await asyncio.wait_for(queue.get(), timeout=1) for _ in range(2)]
+        payloads = {event.data["roleId"]: event.data["rms"] for event in events}
+        assert payloads == {
+            "mic-lecturer": pytest.approx(10 ** (-12.0 / 20.0)),
+            "mic-room": pytest.approx(10 ** (-20.0 / 20.0)),
+        }
+        assert all(event.kind == "evt.pm.audio.level" for event in events)
+    finally:
+        await app.state.audio_samplers[SourceRole.MIC_LECTURER].drain()
+        await app.state.audio_samplers[SourceRole.MIC_ROOM].drain()
+        app.state.events.unsubscribe(subscriber_id)
+        await app.state.audio_meter.stop()

@@ -189,17 +189,38 @@ describe('sources status contract (openapi.yaml tag: sources — getSourcesStatu
   it('audio.levels: nothing is published with zero bus subscribers; a subscriber receives a clamped, contract-valid reading', async () => {
     testApp = await startTestApp();
 
-    testApp.app.bus.publish('pm.status.resynced', statusWith('online', 1.5));
+    testApp.app.bus.publish('evt.pm.audio.level', { roleId: 'mic-lecturer', rms: 1.5 });
     await delay(30);
     // No subscriber yet — nothing to assert against directly, but this proves the call above didn't throw.
 
     const levels: unknown[] = [];
     testApp.app.bus.subscribe('audio.levels', (payload) => levels.push(payload));
 
-    testApp.app.bus.publish('pm.status.resynced', statusWith('online', 1.5));
+    testApp.app.bus.publish('evt.pm.audio.level', { roleId: 'mic-lecturer', rms: 1.5 });
     await waitFor(() => levels.length > 0);
 
     expect(() => zAudioLevelsPayload.parse(levels[0])).not.toThrow();
     expect((levels[0] as { rms: number }).rms).toBe(1);
+  });
+
+  it('shared audio publisher health and role-specific RMS reach mic-room', async () => {
+    testApp = await startTestApp();
+    const events: SourcesStatusPayload[] = [];
+    const levels: unknown[] = [];
+    testApp.app.bus.subscribe('sources.status', (payload) => events.push(payload));
+    testApp.app.bus.subscribe('audio.levels', (payload) => levels.push(payload));
+
+    const status = statusWith('online');
+    status.publishers.audio.state = 'online';
+    testApp.app.bus.publish('pm.status.resynced', status);
+    testApp.clock.advance(3000);
+    await waitFor(() => lastFor(events, 'mic-room')?.state === 'online');
+
+    testApp.pm.publish('evt.pm.audio.level', { roleId: 'mic-room', rms: 0.37 });
+    await waitFor(() => levels.some((level) => (level as { roleId?: string }).roleId === 'mic-room'));
+
+    const roomStatus = findRole(zGetSourcesStatusResponse.parse((await getStatus(testApp)).body).items, 'mic-room');
+    expect(roomStatus?.state).toBe('online');
+    expect(levels).toContainEqual({ roleId: 'mic-room', rms: 0.37 });
   });
 });

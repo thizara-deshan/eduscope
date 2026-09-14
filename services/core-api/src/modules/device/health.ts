@@ -9,7 +9,7 @@ import type { HelperClient } from '../../lib/helper-client.js';
 import type { IdGenerator } from '../../lib/ids.js';
 import type { LifecycleComponent, LifecycleStopReason } from '../../lifecycle.js';
 import type { PmPublisherId, PmPublisherState, PmStatus } from '../recording/pm/types.js';
-import { PM_PUBLISHER_TO_ROLE } from '../sources/status.js';
+import { PM_PUBLISHER_TO_ROLES } from '../sources/status.js';
 
 /** device.health emits on change + this cadence (§2.9, mirrors storage.status's 60s). */
 export const HEALTH_REFRESH_INTERVAL_MS = 60_000;
@@ -154,16 +154,18 @@ export class HealthAggregator implements LifecycleComponent {
     const nowIso = this.#deps.clock.now().toISOString();
     let publisherChanged = false;
     const next: PublisherStatesMap = {};
-    for (const [publisherId, roleId] of Object.entries(PM_PUBLISHER_TO_ROLE) as [PmPublisherId, string][]) {
+    for (const [publisherId, roleIds] of Object.entries(PM_PUBLISHER_TO_ROLES) as [PmPublisherId, readonly string[]][]) {
       const publisher = status.publishers[publisherId];
       const mapped = publisher ? mapPublisherStatus(publisher.state) : 'unknown';
       const lastErrorCode = publisher?.lastError ?? null;
-      const prior = this.#publisherStates[roleId];
-      if (prior && prior.status === mapped && prior.lastErrorCode === lastErrorCode) {
-        next[roleId] = prior;
-      } else {
-        publisherChanged = true;
-        next[roleId] = { status: mapped, lastErrorCode, since: nowIso };
+      for (const roleId of roleIds) {
+        const prior = this.#publisherStates[roleId];
+        if (prior && prior.status === mapped && prior.lastErrorCode === lastErrorCode) {
+          next[roleId] = prior;
+        } else {
+          publisherChanged = true;
+          next[roleId] = { status: mapped, lastErrorCode, since: nowIso };
+        }
       }
     }
     this.#publisherStates = next;

@@ -122,6 +122,11 @@ export interface PmConsumerExitedData {
   code: string;
 }
 
+export interface PmAudioLevelData {
+  roleId: 'mic-lecturer' | 'mic-room';
+  rms: number;
+}
+
 /**
  * Typed union over the `evt.pm.*` kinds this bridge understands. Only
  * `consumer.running` and `resync-required` are ever actually published by
@@ -135,6 +140,7 @@ export type PmEvent =
   | { kind: 'evt.pm.consumer.failed'; sequence: number; data: PmConsumerFailedData }
   | { kind: 'evt.pm.consumer.eos'; sequence: number; data: PmConsumerEosData }
   | { kind: 'evt.pm.consumer.exited'; sequence: number; data: PmConsumerExitedData }
+  | { kind: 'evt.pm.audio.level'; sequence: number; data: PmAudioLevelData }
   | { kind: 'evt.pm.resync-required'; sequence: number; data: Record<string, never> };
 
 export const PM_RESYNC_EVENT_KIND = 'evt.pm.resync-required';

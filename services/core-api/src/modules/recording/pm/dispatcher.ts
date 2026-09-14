@@ -7,6 +7,7 @@ import type { PipelineManagerClient } from './client.js';
 import { parseSseStream } from './sse.js';
 import {
   PM_RESYNC_EVENT_KIND,
+  type PmAudioLevelData,
   type PmConsumerEosData,
   type PmConsumerExitedData,
   type PmConsumerFailedData,
@@ -48,6 +49,9 @@ function dispatchFrame(frame: PmSseFrame, bus: DomainBus): void {
       return;
     case 'evt.pm.consumer.exited':
       bus.publish('evt.pm.consumer.exited', data as PmConsumerExitedData);
+      return;
+    case 'evt.pm.audio.level':
+      bus.publish('evt.pm.audio.level', data as PmAudioLevelData);
       return;
     case 'evt.pm.thumbnail.answer':
       bus.publish('evt.pm.thumbnail.answer', data as PmThumbnailAnswerData);
