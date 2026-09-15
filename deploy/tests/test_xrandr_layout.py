@@ -64,7 +64,7 @@ class XrandrLayoutTest(unittest.TestCase):
         self.assertEqual(78, result.returncode)
         self.assertFalse(self.calls.exists())
 
-    def test_demo_uses_hdmi_panel_and_dp2_preferred_mode(self):
+    def test_demo_uses_dp2_panel_and_hdmi_meeting_output(self):
         fixture = self.root / "demo.txt"
         fixture.write_text(
             "HDMI-1 connected primary 1280x800+0+0\n"
@@ -74,8 +74,8 @@ class XrandrLayoutTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("multi-display acceptance open", result.stdout)
         self.assertEqual([
-            "--output <HDMI-1> <--mode> <1920x1080> <--pos> <0x0> <--primary> <--output> <DP-2> <--mode> <1920x1080> <--pos> <1920x0>",
-            "map-to-output <HID 27c0:0818> <HDMI-1>",
+            "--output <DP-2> <--mode> <1920x1080> <--pos> <0x0> <--primary> <--output> <HDMI-1> <--mode> <1920x1080> <--pos> <1920x0>",
+            "map-to-output <HID 27c0:0818> <DP-2>",
         ], self.calls.read_text().splitlines())
 
     def test_demo_rejects_any_topology_other_than_hdmi_1_and_dp_2(self):
