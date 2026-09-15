@@ -281,6 +281,49 @@ describe('Channel runtime (machine 1c, CH-01..CH-10)', () => {
     await waitFor(() => latestState(ctx, 'meeting') === 'on');
   });
 
+  it('changing an active meeting layout replaces only its consumer and applies the new preset', async () => {
+    ctx = await createContext();
+    await startSession(ctx);
+    await post(ctx, 'meeting/enable', ctx.ownerToken);
+    await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/meeting'));
+    ctx.pm.publish('evt.pm.consumer.running', { consumerId: 'meeting:00000001', pgid: 7 });
+    await waitFor(() => latestState(ctx, 'meeting') === 'on');
+
+    const response = await ctx.app.inject({
+      method: 'PUT', url: '/api/v1/channels/meeting',
+      headers: { authorization: `Bearer ${ctx.ownerToken}` }, payload: { presetId: 'cam-1' },
+    });
+    expect(response.statusCode).toBe(200);
+    await waitFor(() => stopCallFor(ctx, 'meeting:00000001') !== undefined);
+    ctx.pm.publish('evt.pm.consumer.exited', { consumerId: 'meeting:00000001', code: 'stopped' });
+    await waitFor(() => ctx.pm.calls.filter((call) => call.path === '/consumers/meeting').length === 2);
+    const restart = ctx.pm.calls.filter((call) => call.path === '/consumers/meeting')[1]!;
+    expect(restart.body).toMatchObject({ preset: 'cam-1' });
+    ctx.pm.publish('evt.pm.consumer.running', { consumerId: 'meeting:00000002', pgid: 8 });
+    await waitFor(() => latestState(ctx, 'meeting') === 'on');
+    expect([...ctx.channelEvents].reverse().find((event) => event.channelId === 'meeting')?.presetId).toBe('cam-1');
+    expect(ctx.app.db.select().from(lectureSessions).all()[0]?.state).toBe('recording');
+  });
+
+  it('stopping the recording also stops an active meeting consumer', async () => {
+    ctx = await createContext();
+    await startSession(ctx);
+    await post(ctx, 'meeting/enable', ctx.ownerToken);
+    await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/meeting'));
+    ctx.pm.publish('evt.pm.consumer.running', { consumerId: 'meeting:00000001', pgid: 7 });
+    await waitFor(() => latestState(ctx, 'meeting') === 'on');
+
+    const response = await ctx.app.inject({
+      method: 'POST', url: '/api/v1/recording/stop', headers: { authorization: `Bearer ${ctx.ownerToken}` },
+    });
+    expect(response.statusCode).toBe(202);
+    await waitFor(() => stopCallFor(ctx, 'meeting:00000001') !== undefined);
+    expect(stopCallFor(ctx, 'meeting:00000001')?.body).toEqual({ mode: 'kill' });
+    ctx.pm.publish('evt.pm.consumer.exited', { consumerId: 'meeting:00000001', code: 'stopped' });
+    ctx.pm.publish('evt.pm.consumer.eos', { consumerId: RECORD_CONSUMER_ID });
+    await waitFor(() => latestState(ctx, 'meeting') === 'off');
+  });
+
   it('six-second confirm failure: no evt.pm.consumer.running within T-CHANNEL-START marks failed', async () => {
     ctx = await createContext();
     await startSession(ctx);

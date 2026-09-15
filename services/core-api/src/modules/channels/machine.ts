@@ -109,6 +109,7 @@ interface RuntimeRecord {
   consumerId: string | null;
   sessionId: string | null;
   disableRequested: boolean;
+  sessionEnding: boolean;
   restartAttempts: number;
   restartWindowStartMs: number | null;
 }
@@ -148,6 +149,7 @@ export class ChannelExecutor implements LifecycleComponent {
   readonly #serial = new SerialExecutor();
   readonly #records = new Map<ToggleableChannelId, RuntimeRecord>();
   #unsubscribeExited: Unsubscribe | null = null;
+  #unsubscribeRecording: Unsubscribe | null = null;
 
   constructor(deps: ChannelExecutorDeps) {
     this.#deps = deps;
@@ -162,6 +164,7 @@ export class ChannelExecutor implements LifecycleComponent {
         consumerId: null,
         sessionId: null,
         disableRequested: false,
+        sessionEnding: false,
         restartAttempts: 0,
         restartWindowStartMs: null,
       });
@@ -183,11 +186,19 @@ export class ChannelExecutor implements LifecycleComponent {
         this.#deps.logger?.warn('channel executor: exited handler failed', { error: describeError(error) });
       });
     });
+    this.#unsubscribeRecording = this.#deps.bus.subscribe('recording.state', (payload) => {
+      if (payload.state !== 'stopping' || payload.sessionId === null) return;
+      void this.#serial.run(() => this.#stopMeetingForRecordingEnd(payload.sessionId!)).catch((error: unknown) => {
+        this.#deps.logger?.warn('channel executor: recording-stop handler failed', { error: describeError(error) });
+      });
+    });
   }
 
   async stop(_reason: LifecycleStopReason): Promise<void> {
     this.#unsubscribeExited?.();
     this.#unsubscribeExited = null;
+    this.#unsubscribeRecording?.();
+    this.#unsubscribeRecording = null;
   }
 
   listStatuses(): ChannelStatePayload[] {
@@ -200,6 +211,11 @@ export class ChannelExecutor implements LifecycleComponent {
 
   async disable(channelId: string, actor: AuthContext): Promise<ChannelAccepted> {
     return this.#serial.run(() => this.#doDisable(channelId, actor));
+  }
+
+  /** Applies a saved meeting config immediately without touching recording or other outputs. */
+  async reconfigureMeeting(): Promise<void> {
+    await this.#serial.run(() => this.#doReconfigure('meeting'));
   }
 
   #doEnable(channelId: string, actor: AuthContext): ChannelAccepted {
@@ -217,6 +233,7 @@ export class ChannelExecutor implements LifecycleComponent {
 
     const channel = resolveToggleableChannel(this.#deps.db, id);
     record.disableRequested = false;
+    record.sessionEnding = false;
     record.restartAttempts = 0;
     record.restartWindowStartMs = null;
     record.presetId = channel.layoutPreset.id;
@@ -273,6 +290,45 @@ export class ChannelExecutor implements LifecycleComponent {
     return accepted;
   }
 
+  #doReconfigure(id: ToggleableChannelId): void {
+    const channel = resolveToggleableChannel(this.#deps.db, id);
+    const record = this.#records.get(id)!;
+    if (record.state !== 'on') {
+      if (record.state === 'off' || record.state === 'failed') {
+        record.presetId = channel.layoutPreset.id;
+        record.ratioA = channel.channelConfig.ratioA;
+        record.ratioB = channel.channelConfig.ratioB;
+      }
+      return;
+    }
+
+    record.disableRequested = true;
+    const consumerId = record.consumerId;
+    this.#transition(record, 'stopping', 'channel.reconfiguring');
+    void this.#finishReconfigure(record, consumerId, channel).catch((error: unknown) => {
+      this.#deps.logger?.warn('channel reconfigure: restart failed unexpectedly', { error: describeError(error) });
+    });
+  }
+
+  #stopMeetingForRecordingEnd(sessionId: string): void {
+    const record = this.#records.get('meeting')!;
+    if (record.state === 'off' || record.sessionId !== sessionId) return;
+    if (record.state === 'failed') {
+      this.#transition(record, 'off', null);
+      record.consumerId = null;
+      record.sessionId = null;
+      return;
+    }
+
+    record.disableRequested = true;
+    record.sessionEnding = true;
+    const consumerId = record.consumerId;
+    this.#transition(record, 'stopping', null);
+    void this.#finishDisable('meeting', consumerId).catch((error: unknown) => {
+      this.#deps.logger?.warn('meeting stop with recording: stop failed unexpectedly', { error: describeError(error) });
+    });
+  }
+
   /** CH-01/CH-03: elements present, relay/TLS bridge up, push target configured (A-10) — the relay itself is B-25's design; this task owns only the local guard plus the "activate before connect" ordering (INV-ST-2). */
   async #runStreamingPreflight(record: RuntimeRecord, channel: ResolvedChannel): Promise<void> {
     const streamTargetIds = channel.channelConfig.streamTargetIds ?? [];
@@ -321,9 +377,17 @@ export class ChannelExecutor implements LifecycleComponent {
     }
 
     const consumerId = accepted.consumerId;
-    await this.#serial.run(() => {
+    const stillWanted = await this.#serial.run(() => {
+      if (record.disableRequested || record.state !== 'starting') return false;
       record.consumerId = consumerId;
+      return true;
     });
+    if (!stillWanted) {
+      await this.#deps.pm.stopConsumer(consumerId, { mode: 'kill' }).catch((error: unknown) => {
+        this.#deps.logger?.warn('channel launch: late consumer stop failed', { error: describeError(error) });
+      });
+      return;
+    }
     this.#armConfirmRace(record, consumerId);
   }
 
@@ -401,6 +465,45 @@ export class ChannelExecutor implements LifecycleComponent {
       record.consumerId = null;
       record.sessionId = null;
       record.disableRequested = false;
+      record.sessionEnding = false;
+    });
+  }
+
+  async #finishReconfigure(
+    record: RuntimeRecord,
+    consumerId: string | null,
+    channel: ResolvedChannel,
+  ): Promise<void> {
+    if (consumerId) {
+      try {
+        await this.#deps.pm.stopConsumer(consumerId, { mode: 'kill' });
+      } catch (error) {
+        this.#deps.logger?.warn('channel reconfigure: stop call failed', { error: describeError(error) });
+      }
+      await waitForExited(this.#deps.bus, this.#deps.clock, consumerId, TIMERS['T-CHANNEL-START']);
+    }
+
+    await this.#serial.run(() => {
+      if (record.consumerId !== consumerId || record.state !== 'stopping') return;
+      if (record.sessionId) closeActivation(this.#deps.db, this.#deps.clock, record.sessionId, record.channelId);
+      record.consumerId = null;
+      if (record.sessionEnding) {
+        this.#transition(record, 'off', null);
+        record.sessionId = null;
+        record.disableRequested = false;
+        record.sessionEnding = false;
+        return;
+      }
+      record.disableRequested = false;
+      record.restartAttempts = 0;
+      record.restartWindowStartMs = null;
+      record.presetId = channel.layoutPreset.id;
+      record.ratioA = channel.channelConfig.ratioA;
+      record.ratioB = channel.channelConfig.ratioB;
+      this.#transition(record, 'starting', 'channel.reconfiguring');
+      void this.#launchConsumer(record, channel).catch((error: unknown) => {
+        this.#deps.logger?.warn('channel reconfigure: launch failed unexpectedly', { error: describeError(error) });
+      });
     });
   }
 

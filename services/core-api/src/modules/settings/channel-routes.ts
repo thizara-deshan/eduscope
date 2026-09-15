@@ -137,6 +137,9 @@ export function registerChannelSettingsRoutes(app: FastifyInstance, authService:
         .run();
 
       const updated = deps.db.select().from(channelConfigs).where(eq(channelConfigs.channelId, id)).get()!;
+      if (id === 'meeting') {
+        await deps.channelExecutor.reconfigureMeeting();
+      }
       reply.code(200).send(toChannelConfigPayload(updated));
     },
   );
