@@ -153,6 +153,7 @@ export interface PublicationOrchestratorDeps {
   quizSync: Pick<QuizSyncPort, 'publish' | 'closePublication'>;
   alerts: AlertStore;
   isAiEnabled: () => boolean;
+  isMeetingActive?: () => boolean;
   logger?: PublicationOrchestratorLogger;
 }
 
@@ -229,6 +230,10 @@ export class PublicationOrchestrator implements LifecycleComponent {
     const question = db.select().from(questions).where(eq(questions.id, questionId)).get();
     if (!question) throw new ProblemError(404, 'not-found', 'Question not found');
 
+    if (this.#deps.isMeetingActive?.() === true) {
+      throw new ProblemError(409, 'conflict', 'Projector unavailable while Live Meeting is active');
+    }
+
     const session = this.#sessionFor(question.sessionId);
     if (!this.#deps.isAiEnabled()) throw new ProblemError(409, 'ai.unavailable', 'AI is not enabled for this session');
     assertAuthOwner(session, actor);
@@ -283,6 +288,10 @@ export class PublicationOrchestrator implements LifecycleComponent {
   /** Q-36 `cmd.ai.project` — `{publicationId}` re-projects (a `closed` publication renders in reveal mode); `{publicationId:null}` withdraws to slides passthrough. Never reopens acceptance. */
   setProjector(actor: AuthContext, publicationId: string | null): PublicationAccepted {
     const { db } = this.#deps;
+
+    if (publicationId !== null && this.#deps.isMeetingActive?.() === true) {
+      throw new ProblemError(409, 'conflict', 'Projector unavailable while Live Meeting is active');
+    }
 
     if (publicationId === null) {
       const showing = db.select().from(questionPublications).where(eq(questionPublications.projectorState, 'showing')).get();

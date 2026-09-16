@@ -29,18 +29,20 @@ class ProjectorConsumer(ConsumerController):
         *,
         platform: PlatformProfile,
         precondition_holds: Callable[[], bool],
+        projector_x: int = 0,
         runtime_dir: str | os.PathLike[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(consumer_id, restart_class=RestartClass.DISPLAY, **kwargs)
         self._platform = platform
         self._precondition_holds = precondition_holds
+        self._projector_x = projector_x
         self._runtime_dir = runtime_dir
         self.mode = ProjectorMode.PASSTHROUGH
         self._rendered_cards: list[str] = []
 
     async def start(self) -> ConsumerEvent:
-        spec = build_projector(self._platform)
+        spec = build_projector(self._platform, projector_x=self._projector_x)
         return await self.spawn(spec, priority="guaranteed")
 
     def set_mode(self, mode: ProjectorMode, payload: QuestionOverlay | None = None) -> bytes:

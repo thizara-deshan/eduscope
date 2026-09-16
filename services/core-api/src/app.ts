@@ -726,6 +726,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     quizSync: quizSyncClient,
     alerts: alertStore,
     isAiEnabled,
+    isMeetingActive: () => channelExecutor.listStatuses().some(
+      (channel) => channel.channelId === 'meeting' && channel.state !== 'off' && channel.state !== 'failed',
+    ),
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(publicationOrchestrator);

@@ -129,6 +129,11 @@ _FAKE_WORKER_SCRIPT = (
 def worker_argv(
     video_caps: str,
     display_sink_tokens: str,
+    *,
+    x: int = 0,
+    y: int = 0,
+    width: int = 1920,
+    height: int = 1080,
     python_executable: str = sys.executable,
 ) -> tuple[str, ...]:
     """One long-running worker for the projector's whole session (A-REV-009):
@@ -150,6 +155,14 @@ def worker_argv(
         video_caps,
         "--display-sink",
         display_sink_tokens,
+        "--x",
+        str(x),
+        "--y",
+        str(y),
+        "--width",
+        str(width),
+        "--height",
+        str(height),
     )
 
 
@@ -175,7 +188,7 @@ def worker_graph(video_caps: str, display_sink_tokens: str) -> str:
     )
 
 
-def build_projector(platform: PlatformProfile) -> PipelineSpec:
+def build_projector(platform: PlatformProfile, *, projector_x: int = 0) -> PipelineSpec:
     """One long-running worker with an input-selector; mode switches
     (POST /consumers/projector {mode}) are control messages, never a restart —
     passthrough and question modes always share this same argv/child.
@@ -183,8 +196,9 @@ def build_projector(platform: PlatformProfile) -> PipelineSpec:
     argv = worker_argv(
         platform.shm_video_caps(SourceRole.PRESENTATION),
         " ".join(platform.display_sink(DisplayOut.HDMI_1)),
+        x=projector_x,
     )
-    placement = DisplayPlacement(output=DisplayOut.HDMI_1, x=0, y=0, width=1920, height=1080, fullscreen=True)
+    placement = DisplayPlacement(output=DisplayOut.HDMI_1, x=projector_x, y=0, width=1920, height=1080, fullscreen=True)
     return PipelineSpec(
         argv=argv,
         required_roles=(SourceRole.PRESENTATION,),
@@ -194,7 +208,14 @@ def build_projector(platform: PlatformProfile) -> PipelineSpec:
     )
 
 
-def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragma: no cover - requires PyGObject + Gst on the board/Arch
+def _run_gst_worker(  # pragma: no cover - requires PyGObject + Gst on the board/Arch
+    video_caps: str,
+    display_sink_tokens: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> None:
     """The crash-isolated worker entry point (board/Arch-only). No `gi`
     import anywhere above this line — unit tests import this module freely
     without GStreamer installed.
@@ -205,13 +226,20 @@ def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragm
     import gi
 
     gi.require_version("Gst", "1.0")
-    from gi.repository import GLib, Gst
+    gi.require_version("GstVideo", "1.0")
+    from gi.repository import GLib, Gst, GstVideo
+    from ..display import _create_window
 
     Gst.init(None)
 
     pipeline = Gst.parse_launch(worker_graph(video_caps, display_sink_tokens))
     selector = pipeline.get_by_name("sel")
     card = pipeline.get_by_name("card")
+    sink = pipeline.get_by_name("xvimagesink0")
+    if sink is None:
+        raise RuntimeError("projector pipeline has no xvimagesink")
+    x11, display, window = _create_window(x, y, width, height)
+    GstVideo.VideoOverlay.set_window_handle(sink, window)
     pads = {ProjectorMode.PASSTHROUGH: selector.get_static_pad("sink_0"), ProjectorMode.QUESTION: selector.get_static_pad("sink_1")}
 
     bus = pipeline.get_bus()
@@ -281,6 +309,8 @@ def _run_gst_worker(video_caps: str, display_sink_tokens: str) -> None:  # pragm
         loop.run()
     finally:
         pipeline.set_state(Gst.State.NULL)
+        x11.XDestroyWindow(display, window)
+        x11.XCloseDisplay(display)
 
 
 def _parse_worker_args(argv: list[str]) -> argparse.Namespace:
@@ -288,12 +318,16 @@ def _parse_worker_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--video-caps", required=True)
     parser.add_argument("--display-sink", required=True)
+    parser.add_argument("--x", required=True, type=int)
+    parser.add_argument("--y", required=True, type=int)
+    parser.add_argument("--width", required=True, type=int)
+    parser.add_argument("--height", required=True, type=int)
     return parser.parse_args(argv)
 
 
 def main() -> None:  # pragma: no cover - board/Arch-only
     args = _parse_worker_args(sys.argv[1:])
-    _run_gst_worker(args.video_caps, args.display_sink)
+    _run_gst_worker(args.video_caps, args.display_sink, args.x, args.y, args.width, args.height)
 
 
 if __name__ == "__main__":  # pragma: no cover

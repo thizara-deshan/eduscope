@@ -254,6 +254,24 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     await waitFor(() => ctx.app.db.select().from(questions).where(eq(questions.id, questionId)).get()!.state === 'sent');
   });
 
+  it('refuses projector output while Live Meeting owns the shared external display', async () => {
+    ctx = await createContext();
+    const sessionId = await startAndConfirm(ctx);
+    await openQuizSession(ctx, sessionId);
+    const questionId = await createDraftQuestion(ctx);
+
+    const enable = await ctx.app.inject({
+      method: 'POST', url: '/api/v1/channels/meeting/enable', headers: { authorization: `Bearer ${ctx.ownerToken}` },
+    });
+    expect(enable.statusCode).toBe(202);
+
+    const response = await sendToProjector(ctx, questionId);
+    expect(response.statusCode).toBe(409);
+    expect(response.body).toMatchObject({ code: 'conflict', title: 'Projector unavailable while Live Meeting is active' });
+    expect(ctx.quiz.calls.some((call) => call.path === '/device/v1/publications')).toBe(false);
+    expect(ctx.pm.calls.some((call) => call.path === '/consumers/projector')).toBe(false);
+  });
+
   it('Q-31: sending a second question closes the previous open publication (closeReason=next-question) and enforces exactly one isShowing', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);

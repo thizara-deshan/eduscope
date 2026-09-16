@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     mic_mixer_min: int = 0
     mic_mixer_max: int = 100
     hdmi2_alsa_device: str = "hw:2,0"
+    projector_x: int = Field(default=0, ge=0)
 
     capture_card_stable_identifier: str = "eduscope-capture-dongle"
     capture_card_hub_location: str = "1-2"

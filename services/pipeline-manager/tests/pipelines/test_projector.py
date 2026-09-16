@@ -108,9 +108,10 @@ def test_no_leaderboard_answer_or_participant_fields_accepted(forbidden_field: s
 
 
 def test_hdmi_1_placement_is_selected() -> None:
-    spec = build_projector(RK3588Profile())
+    spec = build_projector(RK3588Profile(), projector_x=1920)
     assert isinstance(spec.placement, DisplayPlacement)
     assert spec.placement.output is DisplayOut.HDMI_1
+    assert spec.placement.x == 1920
 
 
 class TestWorkerArgv:
@@ -129,6 +130,11 @@ class TestWorkerArgv:
     def test_worker_argv_helper_takes_an_explicit_python_executable(self) -> None:
         argv = worker_argv("video/x-raw,format=NV12", "xvimagesink sync=false", python_executable="python3")
         assert argv[0] == "python3"
+
+    def test_argv_carries_explicit_display_geometry(self) -> None:
+        spec = build_projector(RK3588Profile(), projector_x=1920)
+        assert spec.argv[spec.argv.index("--x") + 1] == "1920"
+        assert spec.argv[spec.argv.index("--width") + 1] == "1920"
 
     def test_argv_carries_platform_caps_and_display_sink(self) -> None:
         from pipeline_manager.models import SourceRole
