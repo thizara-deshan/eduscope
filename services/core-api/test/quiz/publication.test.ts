@@ -273,18 +273,37 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     expect(ctx.pm.calls.some((call) => call.path === '/consumers/projector')).toBe(false);
   });
 
-  it('demo projector-only mode sends a draft locally without a quiz session', async () => {
+  it('demo projector-only mode lists the local publication and close restores PC passthrough', async () => {
     ctx = await createContext(true);
-    await startAndConfirm(ctx);
+    const sessionId = await startAndConfirm(ctx);
     const questionId = await createDraftQuestion(ctx);
 
     const response = await sendToProjector(ctx, questionId);
     expect(response.statusCode).toBe(202);
     await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/projector'));
     const body = ctx.pm.calls.find((call) => call.path === '/consumers/projector')!.body;
-    expect(body).toMatchObject({ mode: 'question', questionPayload: { publicationId: questionId, joinUrl: '', joinCode: '' } });
+    expect(body).toMatchObject({ mode: 'question', questionPayload: { joinUrl: '', joinCode: '' } });
     await waitFor(() => ctx.app.db.select().from(questions).where(eq(questions.id, questionId)).get()!.state === 'sent');
+    const publication = publicationFor(ctx, questionId);
+    expect(publication).toMatchObject({ state: 'open', isShowing: true, projectorState: 'showing' });
+
+    const listed = await ctx.app.inject({
+      method: 'GET', url: `/api/v1/ai/publications?sessionId=${sessionId}`,
+      headers: { authorization: `Bearer ${ctx.ownerToken}` },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toMatchObject({ items: [{ id: publication.id, questionId, state: 'open', isShowing: true }] });
+
+    const close = await ctx.app.inject({
+      method: 'POST', url: `/api/v1/ai/publications/${publication.id}/close`,
+      headers: { authorization: `Bearer ${ctx.ownerToken}` },
+    });
+    expect(close.statusCode).toBe(202);
+    await waitFor(() => publicationFor(ctx, questionId).projectorState === 'withdrawn');
+    expect(publicationFor(ctx, questionId)).toMatchObject({ state: 'closed', isShowing: false });
+    expect(ctx.pm.calls.at(-1)?.body).toEqual({ mode: 'passthrough' });
     expect(ctx.quiz.calls.some((call) => call.path === '/device/v1/publications')).toBe(false);
+    expect(ctx.quiz.calls.some((call) => call.path.includes('/close'))).toBe(false);
   });
 
   it('Q-31: sending a second question closes the previous open publication (closeReason=next-question) and enforces exactly one isShowing', async () => {

@@ -761,7 +761,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     quizSync: quizSyncClient,
     alerts: alertStore,
     isAiEnabled,
-    quizServerBaseUrl: quizSyncBaseUrl,
+    quizServerBaseUrl: () => config.demoProjectorOnly ? null : quizSyncBaseUrl(),
     deviceId,
     hallDisplayName,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },

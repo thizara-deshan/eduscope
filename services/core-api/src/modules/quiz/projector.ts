@@ -242,7 +242,23 @@ export class PublicationOrchestrator implements LifecycleComponent {
     if (question.correctOptionId === null) throw new ProblemError(409, 'conflict', 'Question has no correct option');
 
     if (this.#deps.demoProjectorOnly === true) {
-      void this.#serial.run(() => this.#projectLocally(question)).catch((error: unknown) => {
+      const quizSession = this.#demoQuizSessionFor(question.sessionId);
+      const now = this.#deps.clock.now();
+      const publicationId = this.#deps.ids.next(now);
+      db.insert(questionPublications).values({
+        id: publicationId,
+        questionId,
+        quizSessionId: quizSession.id,
+        state: 'publishing',
+        publishedAt: null,
+        closedAt: null,
+        closeReason: null,
+        isShowing: false,
+        projectorState: 'not-shown',
+        syncState: 'synced',
+      }).run();
+      this.#publishPublicationRow(publicationId);
+      void this.#serial.run(() => this.#projectLocally(publicationId, question, quizSession)).catch((error: unknown) => {
         this.#deps.logger?.warn('local demo projector failed', { error: describeError(error) });
       });
       return accepted(this.#deps);
@@ -287,7 +303,10 @@ export class PublicationOrchestrator implements LifecycleComponent {
     if (publication.state === 'closed' || publication.state === 'failed') return accepted(this.#deps);
     if (publication.state !== 'open') throw new ProblemError(409, 'conflict', 'Publication is not open');
 
-    void this.#serial.run(() => this.#closePublicationRow(publication, 'lecturer-closed', actor.userId)).catch((error: unknown) => {
+    void this.#serial.run(async () => {
+      await this.#closePublicationRow(publication, 'lecturer-closed', actor.userId);
+      if (this.#deps.demoProjectorOnly === true) await this.#withdrawProjector();
+    }).catch((error: unknown) => {
       this.#deps.logger?.warn('quiz publication orchestrator: close failed', { error: describeError(error) });
     });
     return accepted(this.#deps);
@@ -326,20 +345,35 @@ export class PublicationOrchestrator implements LifecycleComponent {
 
   // ── Q-31/Q-32: publish, then switch the projector ──────────────────────
 
-  async #projectLocally(question: QuestionRow): Promise<void> {
-    const options = this.#deps.db.select().from(questionOptions).where(eq(questionOptions.questionId, question.id)).orderBy(questionOptions.position).all();
+  async #projectLocally(publicationId: string, question: QuestionRow, quizSession: QuizSessionRow): Promise<void> {
+    const { db } = this.#deps;
+    const previous = db.select().from(questionPublications).where(and(
+      eq(questionPublications.quizSessionId, quizSession.id),
+      eq(questionPublications.state, 'open'),
+    )).get();
+    if (previous) await this.#closePublicationRow(previous, 'next-question');
+
+    const options = db.select().from(questionOptions).where(eq(questionOptions.questionId, question.id)).orderBy(questionOptions.position).all();
     await this.#deps.pm.setProjectorConsumer({
       mode: 'question',
       questionPayload: {
-        publicationId: question.id,
+        publicationId,
         prompt: question.prompt,
         options: options.map((option) => ({ id: option.id, label: option.label, text: option.text })),
         joinUrl: '',
         joinCode: '',
       },
     });
-    this.#deps.db.update(questions).set({ state: 'sent' }).where(eq(questions.id, question.id)).run();
+    const now = this.#deps.clock.now();
+    db.transaction((tx) => {
+      tx.update(questionPublications).set({
+        state: 'open', publishedAt: now.toISOString(), isShowing: true, projectorState: 'showing',
+      }).where(eq(questionPublications.id, publicationId)).run();
+      tx.update(questions).set({ state: 'sent' }).where(eq(questions.id, question.id)).run();
+    });
+    this.#publishPublicationRow(publicationId);
     this.#publishQuestionRow({ ...question, state: 'sent' });
+    checkQuestionSetReviewed(db, this.#deps.bus, question.questionSetId);
   }
 
   async #handleSend(publicationId: string, question: QuestionRow, quizSession: QuizSessionRow): Promise<void> {
@@ -505,6 +539,8 @@ export class PublicationOrchestrator implements LifecycleComponent {
     this.#publishQuestionRow({ ...question, state: 'closed' });
     checkQuestionSetReviewed(db, this.#deps.bus, question.questionSetId);
 
+    if (this.#deps.demoProjectorOnly === true) return;
+
     try {
       await this.#deps.quizSync.closePublication({ publicationId: publication.id, closedAt: nowIso, closeReason: reason });
     } catch (error) {
@@ -520,8 +556,9 @@ export class PublicationOrchestrator implements LifecycleComponent {
     const quizSession = db.select().from(quizSessionProjections).where(eq(quizSessionProjections.id, publication.quizSessionId)).get();
     const reveal = publication.state === 'closed';
 
-    // E-49: require non-null join values before calling A (never nullable fields).
-    if (!quizSession || quizSession.joinUrl === null || quizSession.joinCode === null) {
+    // E-49: production requires non-null join values before calling A. The
+    // projector-only demo intentionally renders no join QR/code.
+    if (this.#deps.demoProjectorOnly !== true && (!quizSession || quizSession.joinUrl === null || quizSession.joinCode === null)) {
       this.#raiseProjectorFailed('The quiz session has no join URL or code to project yet');
       return;
     }
@@ -533,8 +570,8 @@ export class PublicationOrchestrator implements LifecycleComponent {
           publicationId: publication.id,
           prompt: question.prompt,
           options: options.map((option) => ({ id: option.id, label: option.label, text: option.text })),
-          joinUrl: quizSession.joinUrl,
-          joinCode: quizSession.joinCode,
+          joinUrl: this.#deps.demoProjectorOnly === true ? '' : quizSession!.joinUrl!,
+          joinCode: this.#deps.demoProjectorOnly === true ? '' : quizSession!.joinCode!,
           ...(reveal && question.correctOptionId !== null ? { correctOptionId: question.correctOptionId } : {}),
         },
       });
@@ -619,6 +656,29 @@ export class PublicationOrchestrator implements LifecycleComponent {
     const row = this.#deps.db.select({ ownerUserId: lectureSessions.ownerUserId }).from(lectureSessions).where(eq(lectureSessions.id, lectureSessionId)).get();
     if (!row) throw new ProblemError(404, 'not-found', 'Session not found');
     return row;
+  }
+
+  #demoQuizSessionFor(lectureSessionId: string): QuizSessionRow {
+    const existing = this.#deps.db.select().from(quizSessionProjections)
+      .where(eq(quizSessionProjections.lectureSessionId, lectureSessionId)).get();
+    if (existing) return existing;
+
+    const now = this.#deps.clock.now();
+    const row: typeof quizSessionProjections.$inferInsert = {
+      id: this.#deps.ids.next(now),
+      lectureSessionId,
+      deviceId: 'local-projector-demo',
+      hallDisplayName: 'Local projector demo',
+      joinCode: null,
+      joinUrl: null,
+      state: 'absent',
+      openedAt: null,
+      closedAt: null,
+      lastAnswerSeq: 0,
+    };
+    this.#deps.db.insert(quizSessionProjections).values(row).run();
+    return this.#deps.db.select().from(quizSessionProjections)
+      .where(eq(quizSessionProjections.id, row.id)).get()!;
   }
 
   /** LP-17 response/correct/incorrect tallies (openapi.yaml `PublicationWithQuestion`) — reads the `AnswerProjection` rows B-33 ingests; always zero until then. */
