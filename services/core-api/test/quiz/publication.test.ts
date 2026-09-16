@@ -74,7 +74,7 @@ async function loginAs(app: FastifyInstance, username: string, password: string)
   return (response.json() as { tokens: { accessToken: string } }).tokens.accessToken;
 }
 
-async function createContext(): Promise<TestContext> {
+async function createContext(demoProjectorOnly = false): Promise<TestContext> {
   const dir = mkdtempSync(join(tmpdir(), 'core-api-quiz-publication-'));
   const pm = new FakePipelineManager({ bearerToken: BEARER });
   const pmBaseUrl = await pm.listen();
@@ -93,6 +93,7 @@ async function createContext(): Promise<TestContext> {
     CORE_API_RUNTIME_DIR: join(dir, 'runtime'),
     CORE_API_PM_BASE_URL: pmBaseUrl,
     CORE_API_INTERNAL_BEARER: BEARER,
+    CORE_API_DEMO_PROJECTOR_ONLY: String(demoProjectorOnly),
   });
 
   const clock = new FakeClock(NOW);
@@ -270,6 +271,20 @@ describe('Publication and projector orchestration (Q-30..Q-36, machine 2d)', () 
     expect(response.body).toMatchObject({ code: 'conflict', title: 'Projector unavailable while Live Meeting is active' });
     expect(ctx.quiz.calls.some((call) => call.path === '/device/v1/publications')).toBe(false);
     expect(ctx.pm.calls.some((call) => call.path === '/consumers/projector')).toBe(false);
+  });
+
+  it('demo projector-only mode sends a draft locally without a quiz session', async () => {
+    ctx = await createContext(true);
+    await startAndConfirm(ctx);
+    const questionId = await createDraftQuestion(ctx);
+
+    const response = await sendToProjector(ctx, questionId);
+    expect(response.statusCode).toBe(202);
+    await waitFor(() => ctx.pm.calls.some((call) => call.path === '/consumers/projector'));
+    const body = ctx.pm.calls.find((call) => call.path === '/consumers/projector')!.body;
+    expect(body).toMatchObject({ mode: 'question', questionPayload: { publicationId: questionId, joinUrl: '', joinCode: '' } });
+    await waitFor(() => ctx.app.db.select().from(questions).where(eq(questions.id, questionId)).get()!.state === 'sent');
+    expect(ctx.quiz.calls.some((call) => call.path === '/device/v1/publications')).toBe(false);
   });
 
   it('Q-31: sending a second question closes the previous open publication (closeReason=next-question) and enforces exactly one isShowing', async () => {

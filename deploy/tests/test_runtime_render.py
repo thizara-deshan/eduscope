@@ -40,6 +40,7 @@ class RuntimeRenderTest(unittest.TestCase):
         self.assertIn("CORE_API_RECORDINGS_ROOT=/media/eduscope", files["env/core.env"][0])
         self.assertIn("CORE_API_DEVICE_BOOTSTRAP_PATH=/run/eduscope/device-bootstrap.json", files["env/core.env"][0])
         self.assertIn("CORE_API_PROVISIONING_PATH=/run/eduscope/provisioning.json", files["env/core.env"][0])
+        self.assertIn("CORE_API_DEMO_PROJECTOR_ONLY=false", files["env/core.env"][0])
         self.assertIn("EDUSCOPE_PM_RECORDINGS_ROOT=/media/eduscope", files["env/pipeline.env"][0])
         self.assertIn("EDUSCOPE_PM_PROJECTOR_X=0", files["env/pipeline.env"][0])
         self.assertIn("EDUSCOPE_SLIDE_RECORDINGS_ROOT=/media/eduscope", files["env/slide.env"][0])
@@ -60,6 +61,7 @@ class RuntimeRenderTest(unittest.TestCase):
         manifest["integrations"]["llmEndpoint"] = "http://192.168.8.103:5000"
         files = module.render(manifest, self.provisioning_values, self.secret_values, "demo-staging")
         self.assertEqual(json.loads(files["provisioning.json"][0])["llmEndpoint"], "http://192.168.8.103:5000")
+        self.assertIn("CORE_API_DEMO_PROJECTOR_ONLY=true", files["env/core.env"][0])
         self.assertIn("EDUSCOPE_PM_PROJECTOR_X=1920", files["env/pipeline.env"][0])
         with self.assertRaisesRegex(ValueError, "production requires HTTPS"):
             module.render(manifest, self.provisioning_values, self.secret_values, "production")

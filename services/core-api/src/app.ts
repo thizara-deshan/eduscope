@@ -729,6 +729,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     isMeetingActive: () => channelExecutor.listStatuses().some(
       (channel) => channel.channelId === 'meeting' && channel.state !== 'off' && channel.state !== 'failed',
     ),
+    demoProjectorOnly: config.demoProjectorOnly,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
   });
   lifecycle.register(publicationOrchestrator);

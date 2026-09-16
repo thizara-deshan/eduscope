@@ -3,9 +3,10 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient } from '@eduscope/api-client';
-import { ProblemError } from '@eduscope/api-client';
+import { DEFAULT_RUNTIME_CONFIG, ProblemError } from '@eduscope/api-client';
 import { TIMERS, type Question } from '@eduscope/shared';
 import { ClientContext } from '../client/client-provider.js';
+import { RuntimeConfigProvider } from '../config/runtime-config.js';
 import { useWsStore } from '../store/ws-store.js';
 import { useQuestions } from './use-questions.js';
 
@@ -34,7 +35,7 @@ const openQuizSession = () => ({
 const envelope = (event: string, payload: unknown, seq: number) =>
   ({ event, at: '2026-08-05T10:00:00+00:00', seq, payload }) as never;
 
-function build(methods: Partial<EduscopeClient> = {}) {
+function build(methods: Partial<EduscopeClient> = {}, demoProjectorOnly = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const stub = {
     listQuestions: vi.fn(() => Promise.resolve([])),
@@ -46,7 +47,16 @@ function build(methods: Partial<EduscopeClient> = {}) {
     ...methods,
   } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
-    QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: stub, children }),
+    RuntimeConfigProvider,
+    {
+      config: {
+        ...DEFAULT_RUNTIME_CONFIG,
+        deploymentProfile: demoProjectorOnly ? 'demo-staging' : 'production',
+      },
+    },
+    createElement(
+      QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: stub, children }),
+    ),
   );
   return { hook: renderHook(() => useQuestions(), { wrapper }), client: stub };
 }
@@ -186,6 +196,25 @@ describe('useQuestions', () => {
     });
     await waitFor(() => expect(hook.result.current.canSend).toBe(false));
     expect(hook.result.current.sendRefusalReason).not.toBeNull();
+  });
+
+  it('demo projector mode enables sending without a quiz session', async () => {
+    const sendToProjector = vi.fn(() => Promise.resolve({
+      commandId: 'c', acceptedAt: '2026-08-05T10:00:00Z', resolveBySec: 10,
+    }));
+    const { hook } = build({
+      listQuestions: vi.fn(() => Promise.resolve([question()])),
+      getQuizSession: vi.fn(() => Promise.resolve({
+        state: 'failed', quizSessionId: null, lectureSessionId: null, joinUrl: null, joinCode: null,
+        joinedCount: 0, syncState: null,
+      })) as unknown as EduscopeClient['getQuizSession'],
+      sendToProjector,
+    }, true);
+    await waitFor(() => expect(hook.result.current.questions).toHaveLength(1));
+    expect(hook.result.current.canSend).toBe(true);
+    expect(hook.result.current.sendRefusalReason).toBeNull();
+    act(() => hook.result.current.sendToProjector('q1'));
+    expect(sendToProjector).toHaveBeenCalledWith('q1');
   });
 
   it('superseded while open: a new ai.set{ready} keeps lecturer-authored (questionSetId:null) rows', async () => {

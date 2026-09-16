@@ -20,6 +20,7 @@ export interface CoreConfig {
   /** AD-7 product-log rotation policy (design/core-api.md §12) — a deployment value, never product-visible config. */
   logMaxRows: number;
   logMaxAgeDays: number;
+  demoProjectorOnly: boolean;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -44,6 +45,7 @@ const rawEnvSchema = z.object({
   CORE_API_REFRESH_TTL_SEC: z.coerce.number().int().positive().default(2_592_000),
   EDUSCOPE_CORE_LOG_MAX_ROWS: z.coerce.number().int().positive().default(50_000),
   EDUSCOPE_CORE_LOG_MAX_AGE_DAYS: z.coerce.number().int().positive().default(90),
+  CORE_API_DEMO_PROJECTOR_ONLY: z.enum(['true', 'false']).default('false'),
 });
 
 /** Validates and shapes process env into `CoreConfig`. Throws on an invalid or unsafe value. */
@@ -88,5 +90,6 @@ export function loadConfig(env: Record<string, string | undefined>): CoreConfig 
     refreshTokenTtlSec: raw.CORE_API_REFRESH_TTL_SEC,
     logMaxRows: raw.EDUSCOPE_CORE_LOG_MAX_ROWS,
     logMaxAgeDays: raw.EDUSCOPE_CORE_LOG_MAX_AGE_DAYS,
+    demoProjectorOnly: raw.CORE_API_DEMO_PROJECTOR_ONLY === 'true',
   };
 }

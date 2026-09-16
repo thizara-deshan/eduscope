@@ -6,6 +6,7 @@ import { useClient } from '../client/client-provider.js';
 import { useAiSet, useQuestionEvents, useRecordingSession } from '../store/selectors.js';
 import { AI_KEYS } from './query-keys.js';
 import { useQuizSession } from './use-quiz-session.js';
+import { useOptionalRuntimeConfig } from '../config/runtime-config.js';
 
 export type QuestionsPendingKind = 'editing' | 'discarding' | 'sending';
 
@@ -48,6 +49,7 @@ export function useQuestions(): UseQuestions {
   const wsSet = useAiSet();
   const questionDeltas = useQuestionEvents();
   const quiz = useQuizSession();
+  const demoProjectorOnly = useOptionalRuntimeConfig()?.deploymentProfile === 'demo-staging';
 
   const query = useQuery({
     queryKey: AI_KEYS.questions(sessionId),
@@ -170,12 +172,12 @@ export function useQuestions(): UseQuestions {
   }, [client, failPending, pendingId, startPending]);
 
   const sendToProjector = useCallback((id: string) => {
-    if (pendingId || !quiz.loading && quiz.state !== 'open') return;
+    if (pendingId || (!demoProjectorOnly && !quiz.loading && quiz.state !== 'open')) return;
     startPending(id, 'sending');
     void client.sendToProjector(id).catch((error: unknown) => {
       failPending(id, error, 'Could not send to the projector.');
     });
-  }, [client, failPending, pendingId, quiz.loading, quiz.state, startPending]);
+  }, [client, demoProjectorOnly, failPending, pendingId, quiz.loading, quiz.state, startPending]);
 
   const regenerate = useCallback(() => {
     void client.generateNow().catch(() => {});
@@ -188,8 +190,8 @@ export function useQuestions(): UseQuestions {
     pendingId,
     pendingKind,
     problemByQuestionId,
-    canSend: quiz.state === 'open',
-    sendRefusalReason: quiz.state === 'open' ? null : SEND_REFUSAL_REASON,
+    canSend: demoProjectorOnly || quiz.state === 'open',
+    sendRefusalReason: demoProjectorOnly || quiz.state === 'open' ? null : SEND_REFUSAL_REASON,
     editQuestion,
     discardQuestion,
     sendToProjector,

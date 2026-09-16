@@ -134,25 +134,32 @@ def render_question_card(payload: QuestionOverlay, runtime_dir: str | os.PathLik
     qr_box = 560
     qr_x = _RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - qr_box) // 2
     qr_y = _MARGIN + 40
-    _draw_qr(canvas, payload.joinUrl, qr_box, (qr_x, qr_y))
+    if not payload.joinUrl or not payload.joinCode:
+        caption = "Local projector demo"
+        caption_w = draw.textlength(caption, font=caption_font)
+        draw.text((_RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - caption_w) // 2, 480), caption, font=caption_font, fill=_MUTED)
+    else:
+        _draw_qr(canvas, payload.joinUrl, qr_box, (qr_x, qr_y))
 
     caption = "Scan to join"
     caption_w = draw.textlength(caption, font=caption_font)
-    draw.text(
-        (_RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - caption_w) // 2, qr_y + qr_box + 24),
-        caption,
-        font=caption_font,
-        fill=_MUTED,
-    )
+    if payload.joinUrl and payload.joinCode:
+        draw.text(
+            (_RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - caption_w) // 2, qr_y + qr_box + 24),
+            caption,
+            font=caption_font,
+            fill=_MUTED,
+        )
 
     code = payload.joinCode
     code_w = draw.textlength(code, font=code_font)
-    draw.text(
-        (_RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - code_w) // 2, qr_y + qr_box + 96),
-        code,
-        font=code_font,
-        fill=_FG,
-    )
+    if payload.joinUrl and payload.joinCode:
+        draw.text(
+            (_RIGHT_X + ((CANVAS_W - _RIGHT_X - _MARGIN) - code_w) // 2, qr_y + qr_box + 96),
+            code,
+            font=code_font,
+            fill=_FG,
+        )
 
     # ── atomic publish ───────────────────────────────────────────────────
     projector_dir = Path(runtime_dir) / "projector"

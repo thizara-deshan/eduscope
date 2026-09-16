@@ -154,6 +154,7 @@ export interface PublicationOrchestratorDeps {
   alerts: AlertStore;
   isAiEnabled: () => boolean;
   isMeetingActive?: () => boolean;
+  demoProjectorOnly?: boolean;
   logger?: PublicationOrchestratorLogger;
 }
 
@@ -240,6 +241,13 @@ export class PublicationOrchestrator implements LifecycleComponent {
     if (question.state !== 'draft') throw new ProblemError(409, 'question.immutable', 'Only a draft question can be sent to the projector');
     if (question.correctOptionId === null) throw new ProblemError(409, 'conflict', 'Question has no correct option');
 
+    if (this.#deps.demoProjectorOnly === true) {
+      void this.#serial.run(() => this.#projectLocally(question)).catch((error: unknown) => {
+        this.#deps.logger?.warn('local demo projector failed', { error: describeError(error) });
+      });
+      return accepted(this.#deps);
+    }
+
     const quizSession = db.select().from(quizSessionProjections).where(and(eq(quizSessionProjections.lectureSessionId, question.sessionId), eq(quizSessionProjections.state, 'open'))).get();
     if (!quizSession) throw new ProblemError(409, 'quiz.unavailable', 'No quiz session is open');
 
@@ -317,6 +325,22 @@ export class PublicationOrchestrator implements LifecycleComponent {
   }
 
   // ── Q-31/Q-32: publish, then switch the projector ──────────────────────
+
+  async #projectLocally(question: QuestionRow): Promise<void> {
+    const options = this.#deps.db.select().from(questionOptions).where(eq(questionOptions.questionId, question.id)).orderBy(questionOptions.position).all();
+    await this.#deps.pm.setProjectorConsumer({
+      mode: 'question',
+      questionPayload: {
+        publicationId: question.id,
+        prompt: question.prompt,
+        options: options.map((option) => ({ id: option.id, label: option.label, text: option.text })),
+        joinUrl: '',
+        joinCode: '',
+      },
+    });
+    this.#deps.db.update(questions).set({ state: 'sent' }).where(eq(questions.id, question.id)).run();
+    this.#publishQuestionRow({ ...question, state: 'sent' });
+  }
 
   async #handleSend(publicationId: string, question: QuestionRow, quizSession: QuizSessionRow): Promise<void> {
     const { db } = this.#deps;
