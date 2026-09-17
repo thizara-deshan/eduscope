@@ -306,7 +306,9 @@ describe('POST /recording/start (R-01) and GET /recording/state', () => {
     const recording = ctx.app.db.select().from(recordings).all()[0]!;
 
     expect(session.state).toBe('starting');
-    expect(session.title).toBe(`Lecture Hall 1 – 2026-03-10 08:00`);
+    const localDate = [NOW.getFullYear(), String(NOW.getMonth() + 1).padStart(2, '0'), String(NOW.getDate()).padStart(2, '0')].join('-');
+    const localTime = [String(NOW.getHours()).padStart(2, '0'), String(NOW.getMinutes()).padStart(2, '0')].join(':');
+    expect(session.title).toBe(`Lecture Hall 1 – ${localDate} ${localTime}`);
     expect(session.hallCode).toBe('LAC001');
     expect(session.deviceId).toBe('device-1');
     expect(session.ownerUserId).toBe(ctx.userId);

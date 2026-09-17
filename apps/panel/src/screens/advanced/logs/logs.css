@@ -49,6 +49,7 @@
   overflow-y: auto;
 }
 .us-logs__row {
+  flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-2);
@@ -85,4 +86,11 @@
 }
 .us-logs__detail {
   padding: var(--sp-2) var(--sp-4) var(--sp-3);
+}
+.us-logs__detail-message {
+  margin: 0 0 var(--sp-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }

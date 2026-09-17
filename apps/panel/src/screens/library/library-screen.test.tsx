@@ -101,6 +101,19 @@ describe('LibraryScreen (S-21)', () => {
     expect(screen.getByText('Uploaded')).toBeInTheDocument();
   });
 
+  it('refresh: fetches the first page again and shows the latest recording', async () => {
+    const listRecordings = vi.fn()
+      .mockResolvedValueOnce({ items: [rec({ id: 'R1', title: 'Earlier lecture' })], nextCursor: null })
+      .mockResolvedValueOnce({ items: [rec({ id: 'R2', title: 'Latest lecture' })], nextCursor: null });
+    renderLibrary({ listRecordings: listRecordings as unknown as EduscopeClient['listRecordings'] });
+    await screen.findByText('Earlier lecture');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh recordings' }));
+
+    await screen.findByText('Latest lecture');
+    expect(listRecordings).toHaveBeenCalledTimes(2);
+  });
+
   it('selection mode: shows checkboxes and the Σ-bytes selection bar', async () => {
     const listRecordings = vi.fn(() => Promise.resolve({
       items: [

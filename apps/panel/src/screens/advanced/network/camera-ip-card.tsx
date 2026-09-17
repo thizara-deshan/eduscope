@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { CameraCard } from './use-camera-bindings.js';
-import { IpInput } from './ip-input.js';
-import { isValidIpv4 } from './ip-validate.js';
+import { useOskField } from '../../../keyboard/use-keyboard.js';
 
 interface CameraIpCardProps {
   readonly camera: CameraCard;
@@ -13,8 +12,9 @@ interface CameraIpCardProps {
 /** S-28 — CAM 1/CAM 2 address; Save re-probes the role (tile unknown -> online/offline). */
 export function CameraIpCard({ camera, saving, onSave, disabled }: CameraIpCardProps): JSX.Element {
   const [address, setAddress] = useState(camera.address);
+  const addressInput = useOskField({ value: address, onChange: setAddress });
   const dirty = address !== camera.address;
-  const valid = isValidIpv4(address);
+  const valid = address.trim().length > 0;
 
   return (
     <section className="us-adm__card us-network__card" aria-label={`${camera.roleId} camera`} data-testid={`camera-${camera.roleId}`}>
@@ -24,9 +24,18 @@ export function CameraIpCard({ camera, saving, onSave, disabled }: CameraIpCardP
       </div>
       <div className="us-device__field">
         <span className="us-device__label">Address</span>
-        <IpInput label="Camera address" value={address} onChange={setAddress} disabled={disabled} />
+        <input
+          type="text"
+          inputMode="text"
+          className="us-network__camera-address"
+          aria-label="Camera address"
+          value={address}
+          disabled={disabled}
+          onChange={(event) => setAddress(event.target.value)}
+          {...addressInput}
+        />
       </div>
-      {!valid ? <p className="us-device__missing">Enter a valid IPv4 address.</p> : null}
+      {!valid ? <p className="us-device__missing">Enter a camera address.</p> : null}
       <button
         type="button"
         className="us-adm__primary"

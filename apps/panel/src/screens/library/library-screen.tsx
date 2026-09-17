@@ -31,7 +31,7 @@ export function LibraryScreen(): JSX.Element {
   const [filters, setFilters] = useState<LibraryFiltersValue>({});
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { loading, error, rows, removed, hasMore, loadMore, loadingMore } = useRecordings(filters);
+  const { loading, error, rows, removed, hasMore, loadMore, loadingMore, refresh, refreshing } = useRecordings(filters);
   const uploadJobs = useUploadJobEvents();
 
   const toggleSelected = (id: string) => {
@@ -86,14 +86,25 @@ export function LibraryScreen(): JSX.Element {
           <>
             <h1>Recordings</h1>
             <LibraryFilters value={filters} isAdmin={isAdmin} onChange={setFilters} />
-            <button
-              type="button"
-              className="us-library__select"
-              disabled={rows.length === 0}
-              onClick={() => setSelectionMode(true)}
-            >
-              Select
-            </button>
+            <div className="us-library__actions">
+              <button
+                type="button"
+                className="us-library__refresh"
+                disabled={refreshing}
+                aria-label="Refresh recordings"
+                onClick={refresh}
+              >
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button
+                type="button"
+                className="us-library__select"
+                disabled={rows.length === 0}
+                onClick={() => setSelectionMode(true)}
+              >
+                Select
+              </button>
+            </div>
           </>
         )}
       </div>

@@ -15,8 +15,10 @@ export interface RecordingMachineDeps {
 
 /** A-07: `{hall}`/`{date}`/`{time}` are the only recognized placeholders — the pattern itself is data (domain-model.md §4.1 `titlePattern`), never code. */
 export function renderTitle(pattern: string, hallDisplayName: string, now: Date): string {
-  const iso = now.toISOString();
-  return pattern.replace('{hall}', hallDisplayName).replace('{date}', iso.slice(0, 10)).replace('{time}', iso.slice(11, 16));
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const localDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const localTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  return pattern.replace('{hall}', hallDisplayName).replace('{date}', localDate).replace('{time}', localTime);
 }
 
 const DEFAULT_RETENTION_MAX_AGE_DAYS = 14;

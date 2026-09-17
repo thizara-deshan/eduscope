@@ -88,6 +88,17 @@ describe('LogsScreen', () => {
     await waitFor(() => expect(queryLogs).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'S1' })));
   });
 
+  it('expanding a row exposes the complete message and expanded rows do not shrink', async () => {
+    const message = 'A long diagnostic message that must remain readable after the row is expanded.';
+    build({ queryLogs: () => Promise.resolve({ items: [log({ message })], nextCursor: null }) });
+    const row = await screen.findByTestId('log-row-L1');
+
+    fireEvent.click(row.querySelector('button')!);
+
+    expect(screen.getByTestId('log-detail-message-L1')).toHaveTextContent(message);
+    expect(row).toHaveStyle({ flexShrink: '0' });
+  });
+
   it('DR-01: an ai-service row renders its context.subservice alongside the closed service enum', async () => {
     const queryLogs = vi.fn(() => Promise.resolve({
       items: [log({ service: 'ai', context: { subservice: 'question' }, message: 'Question set ready: 4 question(s)' })],

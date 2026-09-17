@@ -24,7 +24,7 @@ const vlan = (overrides: Partial<NetworkConfig> = {}): NetworkConfig => ({
 });
 
 const cameraInput = (overrides: Partial<PhysicalInput> = {}): PhysicalInput => ({
-  id: 'CAM1', kind: 'rtsp', address: '192.168.1.50', credentialRef: null, transport: 'tcp',
+  id: 'CAM1', kind: 'rtsp', address: 'rtsp://192.168.1.50:554/stream/main/', credentialRef: null, transport: 'tcp',
   expectedCodec: null, stableIdentifier: null, presenceState: 'present', lastSeenAt: null,
   updatedAt: '2026-01-01T00:00:00Z',
   ...overrides,
@@ -65,9 +65,25 @@ describe('NetworkScreen', () => {
     await waitFor(() => expect(screen.getByLabelText('eth0 (lan)')).toBeInTheDocument());
     expect(screen.getByLabelText('eth0.100 (vlan)')).toBeInTheDocument();
     expect(screen.getByTestId('camera-lecturer-cam')).toBeInTheDocument();
-    for (const octet of screen.getAllByLabelText(/octet \d$/)) {
-      expect(octet).toHaveAttribute('data-osk', 'ip');
-    }
+    const cameraAddress = screen.getByLabelText('Camera address');
+    expect(cameraAddress).toHaveValue('rtsp://192.168.1.50:554/stream/main/');
+    expect(cameraAddress).toHaveAttribute('data-osk', 'default');
+    expect(cameraAddress).toHaveAttribute('inputmode', 'text');
+    expect(screen.queryByLabelText('Camera address octet 1')).not.toBeInTheDocument();
+  });
+
+  it('camera address: accepts and saves a full RTSP URL from one field', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const updatePhysicalInput = vi.fn(() => Promise.resolve(cameraInput({ address: 'rtsp://192.168.8.32:554/stream/main/' })));
+    build({ updatePhysicalInput });
+    const address = await screen.findByLabelText('Camera address');
+
+    fireEvent.change(address, { target: { value: 'rtsp://192.168.8.32:554/stream/main/' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updatePhysicalInput).toHaveBeenCalledWith('CAM1', {
+      address: 'rtsp://192.168.8.32:554/stream/main/',
+    }));
   });
 
   it('dirty and validating: an invalid IP disables Apply and shows the reason', async () => {

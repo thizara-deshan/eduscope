@@ -27,6 +27,7 @@ export function LogTable({ logs, onDrillIntoSession }: LogTableProps): JSX.Eleme
           </button>
           {expandedId === entry.id ? (
             <div className="us-logs__detail">
+              <p className="us-logs__detail-message" data-testid={`log-detail-message-${entry.id}`}>{entry.message}</p>
               <p className="us-adm__note">
                 service: {entry.service}
                 {/* DR-01: the closed `service` enum covers all AI sub-services (stt/slide/question) as one

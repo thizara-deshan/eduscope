@@ -27,6 +27,8 @@ export interface UseRecordings {
   hasMore: boolean;
   loadMore(): void;
   loadingMore: boolean;
+  refresh(): void;
+  refreshing: boolean;
 }
 
 /**
@@ -91,5 +93,7 @@ export function useRecordings(filters: LibraryFilters): UseRecordings {
     hasMore: query.hasNextPage ?? false,
     loadMore: () => { void query.fetchNextPage(); },
     loadingMore: query.isFetchingNextPage,
+    refresh: () => { void query.refetch(); },
+    refreshing: query.isRefetching && !query.isFetchingNextPage,
   };
 }

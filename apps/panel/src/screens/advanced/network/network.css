@@ -44,3 +44,6 @@
   color: var(--text);
   font-size: var(--fs-base);
 }
+.us-network__camera-address {
+  width: min(100%, 42rem);
+}

@@ -37,9 +37,15 @@
   color: var(--text);
 }
 
-/* Select pushes to the far right; the filters sit between it and the title. */
-.us-library__select {
+.us-library__actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.us-library__select,
+.us-library__refresh {
   min-height: var(--tap-min);
   display: inline-flex;
   align-items: center;
@@ -54,12 +60,14 @@
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.us-library__select:hover {
+.us-library__select:hover,
+.us-library__refresh:hover {
   border-color: var(--border-strong);
   background: var(--surface-2);
 }
 
-.us-library__select:disabled {
+.us-library__select:disabled,
+.us-library__refresh:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
