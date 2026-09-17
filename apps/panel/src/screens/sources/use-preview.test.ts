@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient, PreviewChannel, PreviewUpdate } from '@eduscope/api-client';
 import { ClientContext } from '../../client/client-provider.js';
@@ -35,14 +35,15 @@ function renderPreview(channel: PreviewChannel, clientOverrides: Record<string, 
   return { ...renderHook(() => usePreview('presentation'), { wrapper }), openPreview };
 }
 
+function bitmap(size: number) {
+  return { width: size, height: 1, close: vi.fn() } as unknown as ImageBitmap;
+}
+
 describe('usePreview', () => {
   beforeEach(() => {
     useWsStore.getState().reset();
     useWsStore.setState({ recording: { state: 'recording' } as never, stale: false });
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn((blob: Blob) => `blob:preview-${blob.size}`),
-      revokeObjectURL: vi.fn(),
-    });
+    vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob) => bitmap(blob.size)));
   });
 
   it('opens a role-bound channel and starts in loading state', () => {
@@ -53,56 +54,62 @@ describe('usePreview', () => {
     view.unmount();
   });
 
-  it('creates an object URL for a frame and revokes it when superseded', () => {
+  it('closes a decoded frame when it is superseded or unmounted', async () => {
     const preview = fakeChannel();
     const { result, unmount } = renderPreview(preview.channel);
     const first = new Blob(['first'], { type: 'image/jpeg' });
     const second = new Blob(['second-frame'], { type: 'image/jpeg' });
     act(() => preview.emit({ kind: 'frame', blob: first, receivedAt: 1, stale: false }));
-    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-5' });
+    await waitFor(() => expect(result.current.state.kind).toBe('live'));
+    const firstBitmap = result.current.state.kind === 'live' ? result.current.state.frame as ImageBitmap : null;
     act(() => preview.emit({ kind: 'frame', blob: second, receivedAt: 2, stale: false }));
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-5');
-    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-12' });
+    await waitFor(() => expect(firstBitmap?.close).toHaveBeenCalledOnce());
+    const secondBitmap = result.current.state.kind === 'live' ? result.current.state.frame as ImageBitmap : null;
+    expect(secondBitmap?.width).toBe(12);
     unmount();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-12');
+    expect(secondBitmap?.close).toHaveBeenCalledOnce();
   });
 
-  it('retains the last good frame while stale and returns to live on recovery', () => {
+  it('retains the last good frame while stale and returns to live on recovery', async () => {
     const preview = fakeChannel();
     const { result, unmount } = renderPreview(preview.channel);
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
     }));
+    await waitFor(() => expect(result.current.state.kind).toBe('live'));
+    const firstFrame = result.current.state.kind === 'live' ? result.current.state.frame : null;
     act(() => preview.emit({ kind: 'stale', since: 1 }));
-    expect(result.current.state).toEqual({ kind: 'stale', frame: 'blob:preview-5' });
+    expect(result.current.state).toEqual({ kind: 'stale', frame: firstFrame });
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['recovered'], { type: 'image/jpeg' }), receivedAt: 4, stale: false,
     }));
-    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-9' });
+    await waitFor(() => expect(result.current.state.kind === 'live' && result.current.state.frame !== firstFrame).toBe(true));
     unmount();
   });
 
-  it('marks a retained frame stale when the source status goes offline', () => {
+  it('marks a retained frame stale when the source status goes offline', async () => {
     const preview = fakeChannel();
     const { result, unmount } = renderPreview(preview.channel);
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
     }));
+    await waitFor(() => expect(result.current.state.kind).toBe('live'));
+    const firstFrame = result.current.state.kind === 'live' ? result.current.state.frame : null;
     act(() => useWsStore.setState({
       sources: { presentation: {
         roleId: 'presentation', state: 'offline', detail: 'unplugged',
         since: '2026-09-08T04:00:00.000Z', inputId: null,
       } },
     }));
-    expect(result.current.state).toEqual({ kind: 'stale', frame: 'blob:preview-5' });
+    expect(result.current.state).toEqual({ kind: 'stale', frame: firstFrame });
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['recovered'], { type: 'image/jpeg' }), receivedAt: 4, stale: false,
     }));
-    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-9' });
+    await waitFor(() => expect(result.current.state.kind === 'live' && result.current.state.frame !== firstFrame).toBe(true));
     unmount();
   });
 
-  it('shows an error before any usable frame but retains a live frame on a transient error', () => {
+  it('shows an error before any usable frame but retains a live frame on a transient error', async () => {
     const preview = fakeChannel();
     const { result, unmount } = renderPreview(preview.channel);
     act(() => preview.emit({ kind: 'error', code: 'internal', message: 'Preview unavailable.' }));
@@ -112,8 +119,10 @@ describe('usePreview', () => {
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
     }));
+    await waitFor(() => expect(result.current.state.kind).toBe('live'));
+    const frame = result.current.state.kind === 'live' ? result.current.state.frame : null;
     act(() => preview.emit({ kind: 'error', code: 'source-offline', message: 'offline' }));
-    expect(result.current.state).toEqual({ kind: 'live', frame: 'blob:preview-5' });
+    expect(result.current.state).toEqual({ kind: 'live', frame });
     unmount();
   });
 

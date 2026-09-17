@@ -53,10 +53,10 @@ function build(methods: Partial<EduscopeClient> = {}, demoProjectorOnly = false)
         ...DEFAULT_RUNTIME_CONFIG,
         deploymentProfile: demoProjectorOnly ? 'demo-staging' : 'production',
       },
+      children: createElement(
+        QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: stub, children }),
+      ),
     },
-    createElement(
-      QueryClientProvider, { client: queryClient }, createElement(ClientContext.Provider, { value: stub, children }),
-    ),
   );
   return { hook: renderHook(() => useQuestions(), { wrapper }), client: stub };
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeConfig } from '@eduscope/api-client';
 import {
   ClientProvider,
+  needsExplicitResync,
   useClient,
   useMockClient,
 } from './client-provider.js';
@@ -53,6 +54,12 @@ afterEach(() => {
 });
 
 describe('ClientProvider (runtime adapter routing)', () => {
+  it('does not explicitly resync a routine token-rotation reconnect', () => {
+    expect(needsExplicitResync('reconnect')).toBe(false);
+    expect(needsExplicitResync(undefined)).toBe(false);
+    expect(needsExplicitResync('seq-gap')).toBe(true);
+  });
+
   it('constructs a routed client and exposes the concrete mock for the overlay', async () => {
     renderProvider(mockConfig);
     await act(async () => {

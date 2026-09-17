@@ -3,20 +3,22 @@ import type { PreviewChannel } from '@eduscope/api-client';
 import type { SourceRoleId } from '@eduscope/shared';
 import { useClient } from '../../client/client-provider.js';
 import { useWsStore } from '../../store/ws-store.js';
+import type { PreviewFrame } from './preview-frame.js';
 
 export type PreviewErrorCode = 'source-offline' | 'source-unbound' | 'internal';
 
 export type PreviewState =
   | { readonly kind: 'negotiating' }
-  | { readonly kind: 'live'; readonly frame: string }
-  | { readonly kind: 'stale'; readonly frame: string }
+  | { readonly kind: 'live'; readonly frame: PreviewFrame }
+  | { readonly kind: 'stale'; readonly frame: PreviewFrame }
   | { readonly kind: 'failed'; readonly code: PreviewErrorCode; readonly message: string }
   | { readonly kind: 'closed'; readonly reason: 'user' };
 
 interface ActivePreview {
   readonly channel: PreviewChannel;
   unsubscribe: () => void;
-  objectUrl: string | null;
+  bitmap: ImageBitmap | null;
+  decodeGeneration: number;
   closed: boolean;
 }
 
@@ -32,8 +34,9 @@ export function usePreview(roleId: SourceRoleId): { readonly state: PreviewState
     active.closed = true;
     active.unsubscribe();
     active.channel.close();
-    if (active.objectUrl) URL.revokeObjectURL(active.objectUrl);
-    active.objectUrl = null;
+    active.decodeGeneration += 1;
+    active.bitmap?.close();
+    active.bitmap = null;
     activeRef.current = null;
     if (updateState) setState({ kind: 'closed', reason: 'user' });
   }, []);
@@ -44,24 +47,35 @@ export function usePreview(roleId: SourceRoleId): { readonly state: PreviewState
     const active: ActivePreview = {
       channel,
       unsubscribe: () => undefined,
-      objectUrl: null,
+      bitmap: null,
+      decodeGeneration: 0,
       closed: false,
     };
     activeRef.current = active;
     active.unsubscribe = channel.updates$.subscribe((update) => {
       if (active.closed) return;
       if (update.kind === 'frame') {
-        const nextUrl = URL.createObjectURL(update.blob);
-        if (active.objectUrl) URL.revokeObjectURL(active.objectUrl);
-        active.objectUrl = nextUrl;
-        setState({ kind: 'live', frame: nextUrl });
+        const generation = ++active.decodeGeneration;
+        void createImageBitmap(update.blob).then((bitmap) => {
+          if (active.closed || generation !== active.decodeGeneration) {
+            bitmap.close();
+            return;
+          }
+          active.bitmap?.close();
+          active.bitmap = bitmap;
+          setState({ kind: 'live', frame: bitmap });
+        }).catch(() => {
+          if (!active.closed && active.bitmap === null) {
+            setState({ kind: 'failed', code: 'internal', message: 'The preview could not be loaded.' });
+          }
+        });
         return;
       }
       if (update.kind === 'stale') {
-        if (active.objectUrl) setState({ kind: 'stale', frame: active.objectUrl });
+        if (active.bitmap) setState({ kind: 'stale', frame: active.bitmap });
         return;
       }
-      if (!active.objectUrl) {
+      if (!active.bitmap) {
         setState({ kind: 'failed', code: update.code, message: update.message });
       }
     });

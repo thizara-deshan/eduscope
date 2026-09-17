@@ -1,5 +1,6 @@
 import type { SourceRoleId, SourcesStatusPayload } from '@eduscope/shared';
 import { useIsStale } from '../../store/selectors.js';
+import { PreviewFrameImage, type PreviewFrame } from './preview-frame.js';
 import './sources.css';
 
 const HEALTH_WORDS: Record<SourcesStatusPayload['state'], string> = {
@@ -21,7 +22,7 @@ export function SourceTile({
   readonly displayLabel: string;
   readonly status: SourcesStatusPayload | undefined;
   readonly onOpen: (roleId: SourceRoleId) => void;
-  readonly previewFrame?: string;
+  readonly previewFrame?: PreviewFrame;
 }): JSX.Element | null {
   const stale = useIsStale();
   const state = status?.state ?? 'unknown';
@@ -43,7 +44,7 @@ export function SourceTile({
       onClick={() => onOpen(roleId)}
     >
       {previewFrame ? (
-        <img className="us-srctile__frame" src={previewFrame} alt="" data-testid="source-tile-preview" />
+        <PreviewFrameImage frame={previewFrame} className="us-srctile__frame" testId="source-tile-preview" />
       ) : (
         <span className="us-srctile__fill" aria-hidden="true" />
       )}

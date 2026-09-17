@@ -10,6 +10,7 @@ import { MicRow } from './mic-row.js';
 import { PreviewLightbox } from './preview-lightbox.js';
 import { SourceTile } from './source-tile.js';
 import { usePreview, type PreviewState } from './use-preview.js';
+import type { PreviewFrame } from './preview-frame.js';
 import './sources.css';
 
 export const VIDEO_ROLE_ORDER = ['presentation', 'lecturer-cam', 'students-cam'] as const;
@@ -20,7 +21,7 @@ const FALLBACK_LABELS: Record<(typeof VIDEO_ROLE_ORDER)[number], string> = {
   'students-cam': 'Students Camera',
 };
 
-function frameFrom(state: PreviewState): string | undefined {
+function frameFrom(state: PreviewState): PreviewFrame | undefined {
   return state.kind === 'live' || state.kind === 'stale' ? state.frame : undefined;
 }
 
@@ -37,7 +38,7 @@ function ExpandedSources({
   const pc = usePreview('presentation');
   const cam1 = usePreview('lecturer-cam');
   const cam2 = usePreview('students-cam');
-  const frames: Partial<Record<SourceRoleId, string>> = {};
+  const frames: Partial<Record<SourceRoleId, PreviewFrame>> = {};
   const pcFrame = frameFrom(pc.state);
   const cam1Frame = frameFrom(cam1.state);
   const cam2Frame = frameFrom(cam2.state);

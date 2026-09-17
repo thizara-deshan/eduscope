@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EduscopeClient, PreviewChannel, PreviewUpdate } from '@eduscope/api-client';
 import { ClientContext } from '../../client/client-provider.js';
@@ -39,10 +39,10 @@ describe('PreviewLightbox', () => {
   beforeEach(() => {
     useWsStore.getState().reset();
     useWsStore.setState({ stale: false });
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn((blob: Blob) => `blob:preview-${blob.size}`),
-      revokeObjectURL: vi.fn(),
-    });
+    vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob) => ({
+      width: blob.size, height: 1, close: vi.fn(),
+    } as unknown as ImageBitmap)));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as never);
   });
 
   it('holds the preview frame shape with a negotiating skeleton', () => {
@@ -51,13 +51,13 @@ describe('PreviewLightbox', () => {
     expect(screen.getByTestId('preview-skeleton')).toBeInTheDocument();
   });
 
-  it('renders the LIVE chip and paints the latest mock frame', () => {
+  it('renders the LIVE chip and paints the latest mock frame', async () => {
     const preview = renderLightbox();
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
     }));
-    expect(screen.getByText('LIVE')).toBeInTheDocument();
-    expect(screen.getByTestId('preview-frame')).toHaveAttribute('src', 'blob:preview-5');
+    expect(await screen.findByText('LIVE')).toBeInTheDocument();
+    expect(screen.getByTestId('preview-frame').tagName).toBe('CANVAS');
   });
 
   it.each([
@@ -70,14 +70,15 @@ describe('PreviewLightbox', () => {
     expect(screen.getByText(message)).toBeInTheDocument();
   });
 
-  it('retains the last frame and labels it stale', () => {
+  it('retains the last frame and labels it stale', async () => {
     const preview = renderLightbox();
     act(() => preview.emit({
       kind: 'frame', blob: new Blob(['frame'], { type: 'image/jpeg' }), receivedAt: 1, stale: false,
     }));
+    await waitFor(() => expect(screen.getByText('LIVE')).toBeInTheDocument());
     act(() => preview.emit({ kind: 'stale', since: 1 }));
     expect(screen.getByText('STALE')).toBeInTheDocument();
-    expect(screen.getByTestId('preview-frame')).toHaveAttribute('src', 'blob:preview-5');
+    expect(screen.getByTestId('preview-frame').tagName).toBe('CANVAS');
   });
 
   it('has a labelled close target at least 44px square and closes the poller', () => {

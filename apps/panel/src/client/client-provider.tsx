@@ -40,6 +40,11 @@ export const ClientContext = createContext<EduscopeClient | null>(null);
  */
 const MockClientContext = createContext<MockClient | null>(null);
 
+/** A transport reconnect already supplies its own fresh snapshot. */
+export const needsExplicitResync = (
+  reason: 'seq-gap' | 'reconnect' | undefined,
+): boolean => reason === 'seq-gap';
+
 /**
  * THE only place in apps/panel that constructs a client. Everything else takes
  * it from context, which is what makes the ESLint boundary rule enforceable:
@@ -124,7 +129,11 @@ export function ClientProvider({
       offs.push(
         routed.connectionByDomain$.subscribe((dc) => {
           useWsStore.getState().setDomainConnection(dc.domain, dc);
-          if (!dc.resyncReason) return;
+          // A routine reconnect (including access-token rotation) already gets
+          // a fresh socket snapshot. Calling resync() for that status closes
+          // the replacement socket and feeds an endless reconnect/resync loop.
+          // Only an actual sequence gap requires the explicit full resync.
+          if (!needsExplicitResync(dc.resyncReason)) return;
           resyncDomains.add(dc.domain);
           if (scheduled) return;
           scheduled = true;

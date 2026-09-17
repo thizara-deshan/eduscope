@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { SourceRoleId } from '@eduscope/shared';
 import { useOverlays } from '../../overlays/overlay-host.js';
 import { usePreview } from './use-preview.js';
+import { PreviewFrameImage } from './preview-frame.js';
 import './sources.css';
 
 export function PreviewLightbox({
@@ -55,7 +56,7 @@ export function PreviewLightbox({
             <div className="us-previewlightbox__frame us-previewlightbox__skeleton" data-testid="preview-skeleton" />
           ) : preview.state.kind === 'live' || preview.state.kind === 'stale' ? (
             <div className="us-previewlightbox__frame us-previewlightbox__live">
-              <img src={preview.state.frame} alt="" data-testid="preview-frame" />
+              <PreviewFrameImage frame={preview.state.frame} className="us-previewlightbox__image" testId="preview-frame" />
               <span className="us-previewlightbox__chip">
                 <span className="us-previewlightbox__dot" aria-hidden="true" />
                 {preview.state.kind === 'stale' ? 'STALE' : 'LIVE'}

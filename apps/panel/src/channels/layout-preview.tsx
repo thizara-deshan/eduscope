@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { LayoutPreset, OutputSpec, SourceRoleId, Tile } from '@eduscope/shared';
+import { PreviewFrameImage, type PreviewFrame } from '../screens/sources/preview-frame.js';
 import './channels.css';
 
 const ROLE_LABELS: Partial<Record<SourceRoleId, string>> = {
@@ -23,7 +24,7 @@ interface FrameProps {
   readonly label: string;
   readonly compact?: boolean | undefined;
   readonly style?: CSSProperties | undefined;
-  readonly frame?: string | undefined;
+  readonly frame?: PreviewFrame | undefined;
 }
 
 /** The existing PC/camera visual vocabulary (prototype `outputs/LayoutPreview.tsx`), driven by role id rather than a preset switch. */
@@ -32,7 +33,7 @@ function Frame({ roleId, label, compact, style, frame }: FrameProps): JSX.Elemen
   return (
     <div className={`us-lp__tile us-lp__tile--${kind}`} style={style}>
       {frame ? (
-        <img className="us-lp__image" src={frame} alt="" data-role={roleId} />
+        <PreviewFrameImage frame={frame} className="us-lp__image" roleId={roleId} />
       ) : kind === 'cam' ? (
         <div className="us-lp__cam">
           <div className="us-lp__silhouette" />
@@ -62,7 +63,7 @@ export interface LayoutPreviewProps {
   /** Large renders the detailed per-channel output preview. */
   readonly large?: boolean;
   /** Optional live JPEG frames keyed by source role. */
-  readonly frames?: Partial<Record<SourceRoleId, string>>;
+  readonly frames?: Partial<Record<SourceRoleId, PreviewFrame>>;
 }
 
 function tileStyle(tile: Tile, canvas: { readonly width: number; readonly height: number }): CSSProperties {
