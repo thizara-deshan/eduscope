@@ -20,4 +20,18 @@ flags=("--user-data-dir=$profile_dir")
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -z "$line" || "$line" == \#* ]] || flags+=("$line")
 done <"$flags_file"
-exec /snap/bin/chromium "${flags[@]}"
+/snap/bin/chromium "${flags[@]}" &
+browser_pid=$!
+trap 'kill "$browser_pid" 2>/dev/null || true' EXIT INT TERM
+
+window=
+for ((attempt=0; attempt<60; attempt++)); do
+  window=$(/usr/bin/wmctrl -lp | /usr/bin/awk -v pid="$browser_pid" '$3 == pid { print $1; exit }')
+  [[ -z "$window" ]] || break
+  /usr/bin/sleep 0.25
+done
+[[ -n "$window" ]] || { printf 'Chromium kiosk window unavailable\n' >&2; exit 1; }
+/usr/bin/wmctrl -ir "$window" -b remove,fullscreen
+/usr/bin/wmctrl -ir "$window" -e 0,3840,0,1920,1080
+/usr/bin/wmctrl -ir "$window" -b add,fullscreen
+wait "$browser_pid"

@@ -28,18 +28,19 @@ fi
 
 mapfile -t connected < <(awk '$2 == "connected" {print $1}' "$topology")
 if [[ "$profile" == demo-staging ]]; then
-  if [[ ${#connected[@]} -ne 2 ]] ||
-    [[ ! ( ${connected[0]:-} == HDMI-1 && ${connected[1]:-} == DP-2 ) &&
-       ! ( ${connected[0]:-} == DP-2 && ${connected[1]:-} == HDMI-1 ) ]]; then
+  connected_set=$(printf '%s\n' "${connected[@]}" | sort | tr '\n' ' ')
+  if [[ ${#connected[@]} -ne 3 ]] ||
+    [[ "$connected_set" != "DP-1 DP-2 HDMI-1 " ]]; then
     printf 'topology mismatch; observed:' >&2
     printf ' %s' "${connected[@]}" >&2
     printf '\n' >&2
     exit 78
   fi
   touch_name=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["touch"]["name"])' "$manifest")
-  xrandr --output DP-2 --mode 1920x1080 --pos 0x0 --primary \
-    --output HDMI-1 --mode 1920x1080 --pos 1920x0
-  xinput map-to-output "$touch_name" DP-2
+  xrandr --output HDMI-1 --mode 1920x1080 --pos 0x0 \
+    --output DP-2 --mode 1920x1080 --pos 1920x0 \
+    --output DP-1 --mode 1920x1080 --pos 3840x0 --primary
+  xinput map-to-output "$touch_name" DP-1
   printf 'multi-display acceptance open\n'
   exit 0
 fi

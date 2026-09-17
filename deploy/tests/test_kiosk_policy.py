@@ -42,7 +42,8 @@ class KioskPolicyTest(unittest.TestCase):
     def test_flags_are_exact_and_safe(self):
         flags = (KIOSK / "chromium-flags.conf").read_text().splitlines()
         self.assertEqual([
-            "--kiosk", "--no-first-run", "--no-default-browser-check", "--disable-session-crashed-bubble",
+            "--kiosk", "--window-position=3840,0", "--window-size=1920,1080",
+            "--no-first-run", "--no-default-browser-check", "--disable-session-crashed-bubble",
             "--disable-component-update", "--overscroll-history-navigation=0", "--touch-events=enabled",
             "http://127.0.0.1/",
         ], flags)
@@ -63,6 +64,8 @@ class KioskPolicyTest(unittest.TestCase):
         launcher = (KIOSK / "user-launcher.sh").read_text()
         self.assertIn("xhost +SI:localuser:eduscope-pipeline", launcher)
         self.assertIn("snap/chromium/common/edus-kiosk", launcher)
+        self.assertIn("wmctrl -ir \"$window\" -e 0,3840,0,1920,1080", launcher)
+        self.assertIn("wmctrl -ir \"$window\" -b add,fullscreen", launcher)
 
 
 if __name__ == "__main__":
