@@ -36,7 +36,12 @@ export function FileList({
               {' · '}
               {file.hasAudio ? 'with audio' : 'no audio'}
             </span>
-            <button type="button" onClick={() => void download(file)} disabled={file.state === 'missing'}>
+            <button
+              type="button"
+              className="us-detail__download"
+              onClick={() => void download(file)}
+              disabled={file.state === 'missing'}
+            >
               Download ⤓
             </button>
           </li>

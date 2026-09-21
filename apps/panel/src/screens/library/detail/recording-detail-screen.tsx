@@ -30,7 +30,7 @@ export function RecordingDetailScreen(): JSX.Element {
   if (status === 'loading') {
     return (
       <main className="us-detail" data-testid="screen" data-screen="S-22" aria-label="Recording detail">
-        <Link to="/advanced/library">‹ Back to recordings</Link>
+        <Link className="us-detail__back" to="/advanced/library">‹ Back to recordings</Link>
         <div className="us-detail__skeleton" data-testid="detail-skeleton" />
       </main>
     );
@@ -39,8 +39,8 @@ export function RecordingDetailScreen(): JSX.Element {
   if (status === 'not-found') {
     return (
       <main className="us-detail" data-testid="screen" data-screen="S-22" aria-label="Recording detail">
-        <p>This recording no longer exists.</p>
-        <Link to="/advanced/library">‹ Back</Link>
+        <p className="us-detail__notice">This recording no longer exists.</p>
+        <Link className="us-detail__back" to="/advanced/library">‹ Back</Link>
       </main>
     );
   }
@@ -48,8 +48,8 @@ export function RecordingDetailScreen(): JSX.Element {
   if (status === 'forbidden') {
     return (
       <main className="us-detail" data-testid="screen" data-screen="S-22" aria-label="Recording detail">
-        <p>You don&apos;t have access to this recording.</p>
-        <Link to="/advanced/library">‹ Back</Link>
+        <p className="us-detail__notice">You don&apos;t have access to this recording.</p>
+        <Link className="us-detail__back" to="/advanced/library">‹ Back</Link>
       </main>
     );
   }
@@ -57,8 +57,8 @@ export function RecordingDetailScreen(): JSX.Element {
   if (status === 'deleted') {
     return (
       <main className="us-detail" data-testid="screen" data-screen="S-22" aria-label="Recording detail">
-        <p>This recording was removed.</p>
-        <Link to="/advanced/library">‹ Back</Link>
+        <p className="us-detail__notice">This recording was removed.</p>
+        <Link className="us-detail__back" to="/advanced/library">‹ Back</Link>
       </main>
     );
   }
@@ -83,7 +83,7 @@ export function RecordingDetailScreen(): JSX.Element {
 
   return (
     <main className="us-detail" data-testid="screen" data-screen="S-22" aria-label="Recording detail">
-      <Link to="/advanced/library">‹ Back to recordings</Link>
+      <Link className="us-detail__back" to="/advanced/library">‹ Back to recordings</Link>
       <div className="us-detail__header">
         <h1>{rec.title}</h1>
         <RecordingBadge rec={rec} />
@@ -131,7 +131,7 @@ export function RecordingDetailScreen(): JSX.Element {
         </>
       ) : null}
 
-      <section aria-label="Segments">
+      <section className="us-detail__section" aria-label="Segments">
         <h2>{mergeFailed ? 'Segments (kept for audit)' : 'Segments'}</h2>
         <SegmentList segments={rec.segments} />
       </section>

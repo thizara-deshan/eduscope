@@ -1,26 +1,181 @@
+/* ============================================================
+   S-22 Recording detail — a dedicated section INSIDE the Advanced
+   shell (renders in .us-adm__content, which owns the scroll). The
+   screen lays its blocks out as a single readable column of cards,
+   using the shared design tokens only (frontend-conventions §6 —
+   custom properties are the system; no Tailwind utilities).
+   ============================================================ */
+
+.us-detail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-6);
+  width: 100%;
+  max-width: 960px;
+  animation: fade-in 0.2s ease both;
+}
+
+/* ---------- Back link ---------- */
+
+.us-detail__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--sp-5) 0 var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.us-detail__back:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ---------- Header: title + status badge + delete ---------- */
+
+.us-detail__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-5);
+  padding: var(--sp-7) var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.us-detail__header h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+.us-detail__delete {
+  margin-left: auto;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-7);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--radius-pill);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.us-detail__delete:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  border-color: var(--danger);
+}
+
+/* ---------- Meta line ---------- */
+
+.us-detail__meta {
+  margin: calc(var(--sp-5) * -1) 0 0;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ---------- Notice / empty states ---------- */
+
+.us-detail__notice {
+  margin: 0;
+  padding: var(--sp-8);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  text-align: center;
+}
+
+/* ---------- Section headings ---------- */
+
+.us-detail__section,
+.us-detail__files {
+  padding: var(--sp-7) var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.us-detail__section h2,
+.us-detail__files h2 {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+}
+
+/* ---------- Stream picker (chips over streamKeys) ---------- */
+
 .us-detail__streampicker {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--sp-3);
+}
+
+.us-detail__streampicker-label {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .us-detail__streamchip {
   min-height: var(--tap-min);
-  padding: 0 var(--sp-4);
+  padding: 0 var(--sp-6);
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.us-detail__streamchip--active {
-  background: var(--surface-3, var(--surface-2));
+.us-detail__streamchip:hover {
   border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
 }
+
+.us-detail__streamchip--active,
+.us-detail__streamchip--active:hover {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+
+/* ---------- Player ---------- */
 
 .us-detail__player {
   background: var(--ink);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .us-detail__player--message {
@@ -28,10 +183,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
-  color: var(--on-ink);
+  min-height: 220px;
+  color: var(--on-ink-muted);
   gap: var(--sp-4);
-  padding: var(--sp-8);
+  padding: var(--sp-10);
   text-align: center;
 }
 
@@ -64,63 +219,147 @@
   height: 24px;
 }
 
+/* ---------- Segments ---------- */
+
 .us-detail__segments {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
 .us-detail__segment {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-3) 0;
-  font-size: var(--fs-xs);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  min-height: var(--tap-min);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 .us-detail__segment-marker--warning {
   color: var(--warning);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
+  font-weight: 700;
 }
 
 .us-detail__segment-marker--danger {
   color: var(--danger);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
+  font-weight: 700;
 }
+
+/* ---------- Files ---------- */
 
 .us-detail__files ul {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
 .us-detail__file-row {
   display: flex;
   align-items: center;
+  gap: var(--sp-4);
   justify-content: space-between;
+  flex-wrap: wrap;
   min-height: var(--tap-row);
-  padding: 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
   background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  margin-bottom: var(--sp-2);
   font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.us-detail__download {
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.us-detail__download:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.us-detail__download:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .us-detail__download-hint {
-  font-size: var(--fs-2xs);
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-xs);
   color: var(--text-faint);
 }
 
+/* ---------- Retry (recovery, --accent not --danger per DTL-D-3) ---------- */
+
 .us-detail__retry {
+  align-self: flex-start;
   min-height: 56px;
-  padding: 0 var(--sp-8);
+  padding: 0 var(--sp-9);
+  border: none;
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
-  border-radius: var(--radius-md);
+  color: var(--on-accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease;
+}
+
+.us-detail__retry:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.us-detail__retry:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .us-detail__retry-refused {
   color: var(--warning);
   font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* ---------- Loading skeleton ---------- */
+
+.us-detail__skeleton {
+  min-height: 320px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    100deg,
+    var(--surface) 30%,
+    var(--surface-2) 50%,
+    var(--surface) 70%
+  );
+  background-size: 200% 100%;
+  animation: us-detail-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes us-detail-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
