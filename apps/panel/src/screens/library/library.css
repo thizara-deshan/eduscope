@@ -266,6 +266,37 @@
   cursor: pointer;
 }
 
+.us-reclist__thumb {
+  flex: 0 0 112px;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-faint);
+}
+
+.us-reclist__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.us-reclist__thumb-placeholder {
+  font-size: var(--fs-sm);
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .us-reclist__thumb {
+    flex-basis: 96px;
+    width: 96px;
+  }
+}
+
 .us-reclist__body {
   flex: 1 1 auto;
   min-width: 0;

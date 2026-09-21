@@ -226,6 +226,8 @@ describe('AI ingest — snapshot consumer lifecycle, slide anchor, SSE reconnect
   it('item 3: a network blip that does not lose the stt session reconnects without re-posting a new session start', async () => {
     ctx = await createContext();
     const sessionId = await startAndConfirm(ctx);
+    const captionEvents: unknown[] = [];
+    ctx.app.bus.subscribe('transcript.segment', (payload) => captionEvents.push(payload));
     await waitFor(() => ctx.ai.sttOpenConnectionCount === 1 && ctx.ai.sttCalls.some((call) => call.path === '/sessions'));
     const startCallsBefore = ctx.ai.sttCalls.filter((call) => call.path === '/sessions').length;
 
@@ -237,6 +239,7 @@ describe('AI ingest — snapshot consumer lifecycle, slide anchor, SSE reconnect
     ctx.ai.emitSttSegment({ startOffsetMs: 1000, endOffsetMs: 2000, text: 'after blip', confidence: 0.9, engine: 'vosk', modelVersion: 'v1' });
     await waitFor(() => ctx.app.db.select().from(transcriptSegments).all().length === 1);
     expect(ctx.app.db.select().from(transcriptSegments).all()[0]).toMatchObject({ sessionId, text: 'after blip' });
+    expect(captionEvents).toEqual([expect.objectContaining({ sessionId, text: 'after blip' })]);
   });
 
   it('item 3: a stt-service restart that loses the session is reconciled by re-posting start, with no duplicate transcript rows', async () => {

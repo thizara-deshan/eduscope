@@ -23,8 +23,8 @@ function contractEventNames(): string[] {
 describe('event catalog coverage', () => {
   const names = contractEventNames();
 
-  it('reads 22 events out of contracts/events.md §2', () => {
-    expect(names).toHaveLength(22);
+  it('reads 23 events out of contracts/events.md §2', () => {
+    expect(names).toHaveLength(23);
     expect(names).toContain('recording.state');
     expect(names).toContain('firmware.state');
   });

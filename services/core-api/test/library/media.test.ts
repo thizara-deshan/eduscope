@@ -11,6 +11,7 @@ import { UlidGenerator } from '../../src/lib/ids.js';
 import { hashPassword } from '../../src/modules/auth/passwords.js';
 import { FakeClock } from '../fakes/clock.js';
 import { FakePipelineManager } from '../fakes/pipeline-manager.js';
+import { FakeMediaTools } from '../fakes/media-tools.js';
 
 const NOW = new Date('2026-07-05T00:00:00.000Z');
 const BEARER = 'media-test-pm-bearer';
@@ -31,6 +32,7 @@ interface TestApp {
   recordingId: string;
   fileId: string;
   filePath: string;
+  mediaTools: FakeMediaTools;
 }
 
 async function loginAs(app: FastifyInstance, username: string, password: string): Promise<string> {
@@ -54,7 +56,8 @@ async function startTestApp(): Promise<TestApp> {
   });
 
   const ids = new UlidGenerator();
-  const app = await buildApp({ config, clock: new FakeClock(NOW), ids });
+  const mediaTools = new FakeMediaTools();
+  const app = await buildApp({ config, clock: new FakeClock(NOW), ids, mediaRunner: mediaTools });
   await app.lifecycle.start();
 
   const ownerId = ids.next(NOW);
@@ -132,7 +135,7 @@ async function startTestApp(): Promise<TestApp> {
   const otherOwnerToken = await loginAs(app, 'other', 'Password1');
   const adminToken = await loginAs(app, 'admin1', 'Password1');
 
-  return { app, dir, recordingsRoot, pm, ids, ownerId, otherOwnerId, adminId, ownerToken, otherOwnerToken, adminToken, recordingId, fileId, filePath };
+  return { app, dir, recordingsRoot, pm, ids, ownerId, otherOwnerId, adminId, ownerToken, otherOwnerToken, adminToken, recordingId, fileId, filePath, mediaTools };
 }
 
 async function stopTestApp(testApp: TestApp): Promise<void> {
@@ -286,5 +289,41 @@ describe('getRecordingMedia (openapi.yaml tag: recordings — HTTP Range playbac
       headers: { authorization: `Bearer ${testApp.ownerToken}` },
     });
     expect(JSON.stringify(response.json())).not.toContain(testApp.filePath);
+  });
+});
+
+describe('getRecordingThumbnail (cached 10-second preview)', () => {
+  let testApp: TestApp;
+
+  afterEach(async () => {
+    await stopTestApp(testApp);
+  });
+
+  const thumbnailUrl = (app: TestApp) => `/api/v1/recordings/${app.recordingId}/thumbnail.jpg`;
+
+  it('uses the midpoint for a short recording and reuses the cached JPEG', async () => {
+    testApp = await startTestApp();
+    const request = () => testApp.app.inject({
+      method: 'GET', url: thumbnailUrl(testApp), headers: { authorization: `Bearer ${testApp.ownerToken}` },
+    });
+    const first = await request();
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['content-type']).toBe('image/jpeg');
+    const ffmpeg = testApp.mediaTools.calls.filter((call) => call.executable === 'ffmpeg');
+    expect(ffmpeg).toHaveLength(1);
+    expect(ffmpeg[0]?.args).toContain('0.500');
+
+    const second = await request();
+    expect(second.statusCode).toBe(200);
+    expect(testApp.mediaTools.calls.filter((call) => call.executable === 'ffmpeg')).toHaveLength(1);
+  });
+
+  it('denies a lecturer who does not own the recording', async () => {
+    testApp = await startTestApp();
+    const response = await testApp.app.inject({
+      method: 'GET', url: thumbnailUrl(testApp), headers: { authorization: `Bearer ${testApp.otherOwnerToken}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(testApp.mediaTools.calls.filter((call) => call.executable === 'ffmpeg')).toHaveLength(0);
   });
 });

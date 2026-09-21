@@ -248,6 +248,13 @@ export class AiIngest implements LifecycleComponent {
               createdAt: now.toISOString(),
             })
             .run();
+          this.#deps.bus.publish('transcript.segment', {
+            sessionId,
+            startOffsetMs: data.startOffsetMs,
+            endOffsetMs: data.endOffsetMs,
+            text: data.text,
+            confidence: data.confidence ?? null,
+          });
         }
       } catch (error) {
         if (signal.aborted) return;

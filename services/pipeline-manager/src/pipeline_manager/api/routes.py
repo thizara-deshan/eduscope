@@ -52,8 +52,10 @@ def _validate_record_paths(body: RecordStartBody, recordings_root: Path) -> None
             raise ValueError("outputPaths entries must not target the same resolved path")
 
 
-def _validate_snapshot_path(body: SnapshotStartBody, recordings_root: Path, runtime_root: Path) -> None:
-    resolve_snapshot_output_path(Path(body.outputPath), recordings_root, runtime_root)
+def _prepare_snapshot_path(output_path: str, recordings_root: Path, runtime_root: Path) -> Path:
+    resolved = resolve_snapshot_output_path(Path(output_path), recordings_root, runtime_root)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved
 
 
 def _check_preflight(state) -> None:
@@ -351,7 +353,7 @@ async def set_projector_mode(body: ProjectorModeBody, request: Request) -> Comma
 @router.post("/consumers/snapshot/start", status_code=202)
 async def start_snapshot(body: SnapshotStartBody, request: Request) -> CommandAccepted:
     state = request.app.state
-    _validate_snapshot_path(body, state.settings.recordings_root, state.settings.runtime_root)
+    _prepare_snapshot_path(body.outputPath, state.settings.recordings_root, state.settings.runtime_root)
     consumer_id = f"snapshot:{state.new_id()}"
     consumer = SnapshotConsumer(
         consumer_id, platform=state.platform, has_ai_subscription=state.has_ai_subscription,

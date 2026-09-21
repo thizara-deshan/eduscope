@@ -79,6 +79,28 @@ describe('ws store', () => {
     expect(notifications, '10 Hz telemetry must not wake the UI store').toBe(0);
   });
 
+  it('keeps only two live captions and clears them when recording ends', () => {
+    const sessionId = '01J00000000000000000000001';
+    const s = useWsStore.getState();
+    s.ingest(envelope('recording.state', { state: 'recording', sessionId }, 0));
+    for (let index = 1; index <= 3; index += 1) {
+      s.ingest(envelope('transcript.segment', {
+        sessionId,
+        startOffsetMs: index * 1_000,
+        endOffsetMs: (index + 1) * 1_000,
+        text: `caption ${index}`,
+        confidence: 0.9,
+      }, index));
+    }
+    expect(useWsStore.getState().captions.map((caption) => caption.text)).toEqual([
+      'caption 2',
+      'caption 3',
+    ]);
+
+    s.ingest(envelope('recording.state', { state: 'completed', sessionId }, 4));
+    expect(useWsStore.getState().captions).toEqual([]);
+  });
+
   it('drops cleared alerts rather than growing forever on a weeks-long uptime', () => {
     const s = useWsStore.getState();
     s.ingest(envelope('system.alert', { id: 'A1', code: 'source.offline', clearedAt: null }, 0));

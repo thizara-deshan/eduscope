@@ -97,6 +97,10 @@ class SystemdUnitsTest(unittest.TestCase):
         self.assertIn("Group=eduscope-media", pipeline)
         self.assertIn("SupplementaryGroups=eduscope eduscope-pipeline video audio render", pipeline)
 
+    def test_pipeline_manager_can_write_slide_snapshots(self):
+        pipeline = self.read("eduscope-pipeline-manager.service")
+        self.assertIn("/run/eduscope/slides", pipeline)
+
     def test_pipeline_manager_can_access_rk3588_media_devices(self):
         pipeline = self.read("eduscope-pipeline-manager.service")
         self.assertIn("Environment=DISPLAY=:0", pipeline)

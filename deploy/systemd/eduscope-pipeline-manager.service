@@ -34,7 +34,7 @@ DeviceAllow=char-drm rw
 DeviceAllow=/dev/mpp_service rw
 DeviceAllow=/dev/rga rw
 DeviceAllow=@TOUCH_DEVNODE@ r
-ReadWritePaths=/tmp /run/eduscope/pipeline-manager /media/eduscope /var/lib/eduscope/pipeline-manager
+ReadWritePaths=/tmp /run/eduscope/pipeline-manager /run/eduscope/slides /media/eduscope /var/lib/eduscope/pipeline-manager
 UMask=0007
 
 [Install]

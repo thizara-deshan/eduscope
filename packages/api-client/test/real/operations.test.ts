@@ -86,13 +86,13 @@ function harness(routes: Record<string, () => HttpResponseLike>) {
 }
 
 describe('real client operation coverage', () => {
-  it('implements a function for all 79 panel operations', () => {
+  it('implements a function for all 80 panel operations', () => {
     const record = createRealClient('http://host/api/v1', {
       fetch: (async () => jsonResponse({})) as FetchLike,
     }) as unknown as Record<string, unknown>;
     const missing = PANEL_OPERATION_IDS.filter((id) => typeof record[id] !== 'function');
     expect(missing).toEqual([]);
-    expect(PANEL_OPERATION_IDS).toHaveLength(79);
+    expect(PANEL_OPERATION_IDS).toHaveLength(80);
   });
 
   it('never carries the four server-only quiz-sync operations', () => {

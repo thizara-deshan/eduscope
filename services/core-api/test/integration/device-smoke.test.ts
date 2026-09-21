@@ -73,7 +73,7 @@ describe('B-38 device workflow smoke', () => {
     stack = await startFixtureStack();
     const evidence: Record<string, unknown> = {
       startedAt: new Date().toISOString(),
-      ownership: { rest: 79, panelEvents: 22, previewVariants: 5, syncHello: 1 },
+      ownership: { rest: 80, panelEvents: 23, previewVariants: 5, syncHello: 1 },
       httpStatuses: [],
       ws: [],
     };

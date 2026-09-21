@@ -51,6 +51,7 @@ export const OPERATION_AUTHORIZATION: Record<PanelOperationId, AuthorizationRequ
   deleteRecording: 'admin',
   retryMergeRecording: 'admin',
   getRecordingMedia: 'owner-or-admin',
+  getRecordingThumbnail: 'owner-or-admin',
   listExportTargets: 'any-authenticated',
   createExport: 'owner-or-admin',
   getExport: 'owner-or-admin',

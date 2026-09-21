@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactNode, ReactElement } from 'react';
+import type { EduscopeClient } from '@eduscope/api-client';
 import type { Recording } from '@eduscope/shared';
+import { ClientContext } from '../../client/client-provider.js';
 import { RecordingRow } from './recording-row.js';
+
+const client = { getRecordingThumbnail: vi.fn(async () => new Blob()) } as unknown as EduscopeClient;
+const wrapper = ({ children }: { children: ReactNode }) => <ClientContext.Provider value={client}>{children}</ClientContext.Provider>;
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper });
 
 function rec(overrides: Partial<Recording>): Recording {
   return {

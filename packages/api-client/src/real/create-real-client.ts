@@ -232,6 +232,8 @@ export function createRealClient(
       call('retryMergeRecording', { params: { recordingId }, response: zCommandAccepted }),
     getRecordingMedia: (recordingId, fileId, query) =>
       call('getRecordingMedia', { params: { recordingId, fileId }, query, response: 'blob' }),
+    getRecordingThumbnail: (recordingId) =>
+      call('getRecordingThumbnail', { params: { recordingId }, response: 'blob' }),
     listExportTargets: async () =>
       (await call<z.infer<typeof zListExportTargetsResponse>>('listExportTargets', { response: zListExportTargetsResponse })).items,
     createExport: (body) => call('createExport', { body, response: zCreateExportResponse }),

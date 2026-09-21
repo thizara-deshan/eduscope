@@ -1,5 +1,5 @@
-import { createReadStream, statSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { createReadStream, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -7,12 +7,74 @@ import { ProblemError } from '../../contracts/problem.js';
 import { parseBody } from '../../contracts/validate.js';
 import type { DrizzleDb } from '../../db/client.js';
 import { lectureSessions, recordingFiles, recordings } from '../../db/schema.js';
+import type { ArgvRunner } from '../../lib/argv-worker.js';
+import { SerialExecutor } from '../../lib/serial-executor.js';
 import { requireAuth } from '../auth/guard.js';
 import type { AuthService } from '../auth/service.js';
 
 export interface MediaRouteDeps {
   db: DrizzleDb;
   recordingsRoot: string;
+  runner: ArgvRunner;
+}
+
+const THUMBNAIL_FILENAME = 'thumbnail-10s.jpg';
+
+class RecordingThumbnailGenerator {
+  readonly #serial = new SerialExecutor();
+  readonly #inFlight = new Map<string, Promise<string>>();
+
+  constructor(private readonly deps: MediaRouteDeps) {}
+
+  getOrCreate(recording: typeof recordings.$inferSelect): Promise<string> {
+    const existing = this.#inFlight.get(recording.id);
+    if (existing) return existing;
+
+    const work = this.#serial.run(() => this.#generate(recording));
+    this.#inFlight.set(recording.id, work);
+    void work.finally(() => this.#inFlight.delete(recording.id)).catch(() => undefined);
+    return work;
+  }
+
+  async #generate(recording: typeof recordings.$inferSelect): Promise<string> {
+    const outputPath = join(this.deps.recordingsRoot, 'sessions', recording.sessionId, THUMBNAIL_FILENAME);
+    try {
+      if (statSync(outputPath).size > 0) return outputPath;
+    } catch {
+      // Generate the missing or empty cache file below.
+    }
+
+    const files = this.deps.db.select().from(recordingFiles).where(eq(recordingFiles.recordingId, recording.id)).all();
+    const source = files.find((file) => file.kind === 'derived' && file.streamKey === 'main' && file.state === 'finalized')
+      ?? files.find((file) => file.kind === 'derived' && file.state === 'finalized');
+    if (!source || !isUnderMount(this.deps.recordingsRoot, source.path) || !existsSync(source.path)) {
+      throw new ProblemError(404, 'not-found', 'Recording thumbnail is not available');
+    }
+
+    const seekSeconds = source.durationMs !== null && source.durationMs <= 10_000
+      ? Math.max(0, source.durationMs / 2_000)
+      : 10;
+    const temporaryPath = `${outputPath}.tmp-${process.pid}`;
+    mkdirSync(dirname(outputPath), { recursive: true });
+    try { unlinkSync(temporaryPath); } catch { /* absent */ }
+
+    const result = await this.deps.runner.run('ffmpeg', [
+      '-y', '-i', source.path, '-ss', seekSeconds.toFixed(3),
+      '-frames:v', '1', '-vf', 'scale=320:-2', '-q:v', '3', '-f', 'image2', temporaryPath,
+    ]);
+    if (result.code !== 0) {
+      try { unlinkSync(temporaryPath); } catch { /* absent */ }
+      throw new ProblemError(404, 'not-found', 'Recording thumbnail is not available');
+    }
+    try {
+      if (statSync(temporaryPath).size <= 0) throw new Error('empty thumbnail');
+      renameSync(temporaryPath, outputPath);
+    } catch {
+      try { unlinkSync(temporaryPath); } catch { /* absent */ }
+      throw new ProblemError(404, 'not-found', 'Recording thumbnail is not available');
+    }
+    return outputPath;
+  }
 }
 
 const zMediaQuery = z.object({
@@ -61,6 +123,27 @@ function sanitizeFilenameSegment(value: string): string {
 
 /** `getRecordingMedia` (openapi.yaml, design/core-api.md §5.4): per-request owner-or-admin authz (INV-RC-6), HTTP Range (200/206), `?download=1` attachment disposition. Closes B-37 — the physical path never appears in a header or a Problem. */
 export function registerMediaRoutes(app: FastifyInstance, authService: AuthService, deps: MediaRouteDeps): void {
+  const thumbnails = new RecordingThumbnailGenerator(deps);
+
+  app.get(
+    '/api/v1/recordings/:recordingId/thumbnail.jpg',
+    { config: { operationId: 'getRecordingThumbnail' }, preHandler: requireAuth(authService, 'getRecordingThumbnail') },
+    async (request, reply) => {
+      const { recordingId } = request.params as { recordingId: string };
+      const actor = request.authContext!;
+      const recording = deps.db.select().from(recordings).where(eq(recordings.id, recordingId)).get();
+      if (!recording || recording.state === 'deleted') throw new ProblemError(404, 'not-found', 'Recording not found');
+      if (actor.role !== 'admin' && recording.ownerUserId !== actor.userId) {
+        throw new ProblemError(403, 'not-authorized', 'Only the recording owner or an admin may access this thumbnail');
+      }
+
+      const path = await thumbnails.getOrCreate(recording);
+      const size = statSync(path).size;
+      reply.header('Content-Type', 'image/jpeg').header('Content-Length', size).header('Cache-Control', 'private, max-age=86400');
+      return reply.send(createReadStream(path));
+    },
+  );
+
   app.get(
     '/api/v1/recordings/:recordingId/files/:fileId/media',
     { config: { operationId: 'getRecordingMedia' }, preHandler: requireAuth(authService, 'getRecordingMedia') },

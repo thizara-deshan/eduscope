@@ -75,18 +75,18 @@ describe('E-50 production runtime config', () => {
 });
 
 describe('E-50 contract ownership and count audit', () => {
-  it('totals 86 REST operations (79 panel + 4 server-only + 3 student)', () => {
-    expect(PANEL_OPERATION_IDS.length).toBe(79);
+  it('totals 87 REST operations (80 panel + 4 server-only + 3 student)', () => {
+    expect(PANEL_OPERATION_IDS.length).toBe(80);
     expect(SERVER_SIDE_ONLY_OPERATION_IDS.length).toBe(4);
     const panelSpecOps = operationIds(OPENAPI);
-    expect(panelSpecOps.length).toBe(83); // 79 panel + 4 server-only quiz-sync
+    expect(panelSpecOps.length).toBe(84); // 80 panel + 4 server-only quiz-sync
     const studentOps = operationIds(QUIZ_APP);
     expect(studentOps.length).toBe(3);
-    expect(panelSpecOps.length + studentOps.length).toBe(86);
+    expect(panelSpecOps.length + studentOps.length).toBe(87);
   });
 
-  it('declares exactly 22 panel events', () => {
-    expect(PANEL_EVENT_NAMES.length).toBe(22);
+  it('declares exactly 23 panel events', () => {
+    expect(PANEL_EVENT_NAMES.length).toBe(23);
   });
 
   it('retains exactly five preview-signaling messages (compatibility inventory, no production client-domain mapping)', () => {

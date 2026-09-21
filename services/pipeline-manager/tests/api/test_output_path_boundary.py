@@ -6,6 +6,7 @@ import sys
 
 import pytest
 
+from pipeline_manager.api.routes import _prepare_snapshot_path
 from pipeline_manager.app import create_app
 from pipeline_manager.config import Settings
 
@@ -26,6 +27,18 @@ def _assert_rejected_and_no_spawn(app, response, *, expected_status: int = 400) 
     assert body["status"] == expected_status
     assert app.state.consumers == {}
     assert app.state.supervisor.processes == {}
+
+
+def test_prepare_snapshot_path_creates_validated_session_directory(tmp_path) -> None:
+    recordings_root = tmp_path / "recordings"
+    recordings_root.mkdir()
+    runtime_root = tmp_path / "run"
+    runtime_root.mkdir()
+    output_path = runtime_root / "slides" / "01J00000000000000000000000" / "current.png"
+
+    assert not output_path.parent.exists()
+    assert _prepare_snapshot_path(str(output_path), recordings_root, runtime_root) == output_path
+    assert output_path.parent.is_dir()
 
 
 @pytest.mark.asyncio

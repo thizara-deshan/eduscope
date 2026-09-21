@@ -1614,6 +1614,8 @@ export const zGetRecordingMediaResponse = z.union([
     z.unknown()
 ]);
 
+export const zGetRecordingThumbnailResponse = z.string();
+
 export const zListExportTargetsResponse = z.object({
     items: z.array(zUsbVolume)
 });

@@ -64,6 +64,23 @@ describe('AiStudioCard', () => {
     expect(screen.getByRole('button', { name: 'Generate Questions Now' })).toBeEnabled();
   });
 
+  it('shows the two latest finalized transcript segments in the footer', () => {
+    renderCard();
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown(), 0)));
+    for (const [index, text] of ['First sentence.', 'Second sentence.'].entries()) {
+      act(() => useWsStore.getState().ingest(envelope('transcript.segment', {
+        sessionId: '01J00000000000000000000001',
+        startOffsetMs: index * 1_000,
+        endOffsetMs: (index + 1) * 1_000,
+        text,
+        confidence: 0.9,
+      }, index + 1)));
+    }
+    expect(screen.getByTestId('ai-live-captions')).toHaveTextContent(
+      'First sentence. Second sentence.',
+    );
+  });
+
   it('generating: the button reads Generating… and is disabled', () => {
     renderCard();
     act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'generating' }), 0)));

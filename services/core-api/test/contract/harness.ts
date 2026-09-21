@@ -38,9 +38,9 @@ export function extractInfoVersion(source: string): string | null {
 }
 
 const EXPECTED_VERSION = '1.0.0';
-const EXPECTED_PANEL_OPERATION_COUNT = 79;
+const EXPECTED_PANEL_OPERATION_COUNT = 80;
 const EXPECTED_SERVER_SIDE_ONLY_OPERATION_COUNT = 4;
-const EXPECTED_PANEL_EVENT_COUNT = 22;
+const EXPECTED_PANEL_EVENT_COUNT = 23;
 
 /**
  * Asserts the three repository contract files agree on v1.0.0 and that the

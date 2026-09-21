@@ -20,10 +20,10 @@ describe('adapter domain catalog', () => {
     ]);
   });
 
-  it('assigns every one of the 79 panel operations a domain exactly once', () => {
+  it('assigns every one of the 80 panel operations a domain exactly once', () => {
     const keys = Object.keys(PANEL_OPERATION_DOMAIN);
-    expect(keys).toHaveLength(79);
-    expect(PANEL_OPERATION_IDS).toHaveLength(79);
+    expect(keys).toHaveLength(80);
+    expect(PANEL_OPERATION_IDS).toHaveLength(80);
     for (const id of PANEL_OPERATION_IDS) {
       expect(PANEL_OPERATION_DOMAIN[id], `no domain for operation ${id}`).toBeTruthy();
     }
@@ -37,10 +37,10 @@ describe('adapter domain catalog', () => {
     }
   });
 
-  it('assigns every one of the 22 panel events a domain exactly once', () => {
+  it('assigns every one of the 23 panel events a domain exactly once', () => {
     const keys = Object.keys(PANEL_EVENT_DOMAIN);
-    expect(keys).toHaveLength(22);
-    expect(PANEL_EVENT_NAMES).toHaveLength(22);
+    expect(keys).toHaveLength(23);
+    expect(PANEL_EVENT_NAMES).toHaveLength(23);
     for (const name of PANEL_EVENT_NAMES) {
       expect(PANEL_EVENT_DOMAIN[name], `no domain for event ${name}`).toBeTruthy();
     }

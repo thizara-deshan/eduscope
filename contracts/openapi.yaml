@@ -669,6 +669,24 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
+  /recordings/{recordingId}/thumbnail.jpg:
+    get:
+      tags: [recordings]
+      operationId: getRecordingThumbnail
+      summary: Authenticated cached library thumbnail from the 10-second mark
+      description: |
+        Returns a compact JPEG generated from the primary derived recording at
+        10 seconds. Recordings shorter than 10 seconds use their midpoint.
+        Generation is serialized and cached on disk to protect the device CPU.
+      parameters: [{ $ref: '#/components/parameters/recordingId' }]
+      responses:
+        '200':
+          description: Cached recording thumbnail.
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
   # ─────────────────────────── USB export ───────────────────────────
   /exports/targets:
     get:

@@ -298,6 +298,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   lifecycle.register(recordingExecutor);
   registerRecordingRoutes(app, authService, recordingExecutor);
 
+  const mediaRunner = options.mediaRunner ?? new ArgvWorker();
   const artifactExecutor = new ArtifactExecutor({
     get db(): DrizzleDb {
       return app.db;
@@ -305,7 +306,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     clock,
     ids,
     bus,
-    runner: options.mediaRunner ?? new ArgvWorker(),
+    runner: mediaRunner,
     recordingsRoot: config.recordingsRoot,
     runtimeDir: config.runtimeDir,
     logger: { warn: (message, meta) => app.log.warn(meta ?? {}, message) },
@@ -330,6 +331,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return app.db;
     },
     recordingsRoot: config.recordingsRoot,
+    runner: mediaRunner,
   });
 
   const storageProbe = new StorageProbe({

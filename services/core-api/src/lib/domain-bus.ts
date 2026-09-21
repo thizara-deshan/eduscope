@@ -1,4 +1,4 @@
-import type { AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UsbVolumesPayload } from '@eduscope/shared';
+import type { AiCountdownPayload, AiQuestionPayload, AiSetPayload, AudioControlPayload, AudioLevelsPayload, ChannelStatePayload, DeviceHealthPayload, ExportJobPayload, FirmwareUpdate, QuizPublicationPayload, QuizResponsesPayload, QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload, SourcesStatusPayload, StorageStatusPayload, SystemAlert, TranscriptSegmentPayload, UsbVolumesPayload } from '@eduscope/shared';
 import type { PmAudioLevelData, PmStatus, PmThumbnailAnswerData, PmThumbnailErrorData, PmThumbnailIceData } from '../modules/recording/pm/types.js';
 
 /**
@@ -28,6 +28,7 @@ export interface CoreDomainEvents {
   'channel.state': ChannelStatePayload;
   'sources.status': SourcesStatusPayload;
   'audio.levels': AudioLevelsPayload;
+  'transcript.segment': TranscriptSegmentPayload;
   'audio.control': AudioControlPayload;
   'export.job': ExportJobPayload;
   'usb.volumes': UsbVolumesPayload;

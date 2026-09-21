@@ -26,10 +26,10 @@ describe('v1.0.0 contract baseline', () => {
     expect(() => zEventEnvelope.parse(sampleEventEnvelope)).not.toThrow();
   });
 
-  it('partitions exactly 79 panel operations, 4 server-side-only operations, and 22 panel events', () => {
-    expect(PANEL_OPERATION_IDS.length).toBe(79);
+  it('partitions exactly 80 panel operations, 4 server-side-only operations, and 23 panel events', () => {
+    expect(PANEL_OPERATION_IDS.length).toBe(80);
     expect(SERVER_SIDE_ONLY_OPERATION_IDS.length).toBe(4);
-    expect(PANEL_EVENT_NAMES.length).toBe(22);
+    expect(PANEL_EVENT_NAMES.length).toBe(23);
   });
 
   it('assertV1Contracts passes against the current repository contract files', () => {

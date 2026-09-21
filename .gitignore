@@ -2,6 +2,12 @@ node_modules/
 dist/
 build/
 .next/
+# Device-local runtime assets and deployed release trees.
+models/
+releases/
+current
+__pycache__/
+*.py[cod]
 .env
 *.log
 revamp-guide/
@@ -19,4 +25,3 @@ feedback.json
 heatmap.json
 projects/
 docs/superpowers/
-

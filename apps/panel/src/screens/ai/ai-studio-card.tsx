@@ -2,6 +2,7 @@ import type { IntervalMinutes } from "@eduscope/shared";
 import { useTicker } from "../../hooks/use-ticker.js";
 import { useOverlays } from "../../overlays/overlay-host.js";
 import { useAiStudio } from "../../ai/use-ai-studio.js";
+import { useWsStore } from "../../store/ws-store.js";
 import { QuestionsModal } from "./questions-modal.js";
 import { QuizJoinChip } from "./quiz-join-chip.js";
 import "../../ai/ai.css";
@@ -24,6 +25,7 @@ function formatRemaining(ms: number | null): string {
  */
 export function AiStudioCard() {
   const studio = useAiStudio();
+  const captions = useWsStore((state) => state.captions);
   const overlays = useOverlays();
   // INV-G-7: the countdown ticks LOCALLY from the absolute `nextAt` — this is
   // the only per-second re-render in the card, never a WS subscription.
@@ -210,6 +212,20 @@ export function AiStudioCard() {
           </div>
         ) : null}
       </div>
+
+      <footer className="us-studio__captions" aria-label="Live captions">
+        <span className="us-studio__captions-label">Live captions</span>
+        <div
+          className="us-studio__captions-text"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="ai-live-captions"
+        >
+          {captions.length > 0
+            ? captions.map((caption) => caption.text).join(" ")
+            : "Captions will appear here while you speak."}
+        </div>
+      </footer>
     </section>
   );
 }

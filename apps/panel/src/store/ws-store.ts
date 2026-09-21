@@ -6,7 +6,7 @@ import type {
   QuizPublicationPayload, QuizResponsesPayload,
   QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload,
   SourceRoleId, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UploadJobPayload,
-  UploadPartPayload, UsbVolumesPayload,
+  TranscriptSegmentPayload, UploadPartPayload, UsbVolumesPayload,
 } from '@eduscope/shared';
 import type { AdapterDomain } from '@eduscope/api-client';
 import { DOMAIN_SLICE_KEYS, hasSeqGap, isStale } from './connection.js';
@@ -23,6 +23,8 @@ export interface WsState {
   recording: RecordingStatePayload | null;
   audioControls: Partial<Record<SourceRoleId, AudioControlPayload>>;
   lastSegment: RecordingSegmentPayload | null;
+  /** Finalized live captions only; bounded to the two newest utterances. */
+  captions: TranscriptSegmentPayload[];
   expectedShutdown: boolean;
   sources: Partial<Record<SourcesStatusPayload['roleId'], SourcesStatusPayload>>;
   channels: Partial<Record<ChannelStatePayload['channelId'], ChannelStatePayload>>;
@@ -84,7 +86,7 @@ export interface WsState {
 }
 
 const EMPTY = {
-  recording: null, audioControls: {}, lastSegment: null, expectedShutdown: false,
+  recording: null, audioControls: {}, lastSegment: null, captions: [], expectedShutdown: false,
   sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
@@ -130,7 +132,15 @@ export const useWsStore = create<WsState>((set, get) => ({
     // over every registered selector.
     const patch = ((): Partial<WsState> => {
       switch (envelope.event) {
-        case 'recording.state': return { recording: envelope.payload };
+        case 'recording.state': {
+          const active = envelope.payload.state === 'recording' || envelope.payload.state === 'paused';
+          const sameSession = envelope.payload.sessionId === get().recording?.sessionId;
+          return { recording: envelope.payload, captions: active && sameSession ? get().captions : [] };
+        }
+        case 'transcript.segment': {
+          if (envelope.payload.sessionId !== get().recording?.sessionId) return {};
+          return { captions: [...get().captions.slice(-1), envelope.payload] };
+        }
         case 'audio.control':
           return {
             audioControls: {

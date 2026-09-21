@@ -191,6 +191,16 @@ export function createRecordingsOperations(ctx: RestContext) {
       return new Blob([`mock media bytes for ${recordingId}`], { type: 'video/mp4' });
     },
 
+    getRecordingThumbnail: async (recordingId: Ulid): Promise<Blob> => {
+      const row = seed.recordings.find((recording) => recording.id === recordingId);
+      if (!row) throw new ProblemError({ status: 404, code: 'not-found', title: `Unknown recording: ${recordingId}` });
+      const me = currentUser(ctx);
+      if (!isAdmin(ctx) && row.ownerUserId !== me.id) {
+        throw new ProblemError({ status: 403, code: 'not-authorized', title: 'You do not have access to this recording' });
+      }
+      return new Blob([], { type: 'image/jpeg' });
+    },
+
     listExportTargets: async (): Promise<UsbVolume[]> => {
       const volumes = seed.usbVolumes.map((v) => validated(zUsbVolume, v));
       world.emit('usb.volumes', { volumes });

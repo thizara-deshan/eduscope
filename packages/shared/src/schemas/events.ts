@@ -111,6 +111,15 @@ export const zAudioLevelsPayload = z.object({
   rms: z.number().min(0).max(1),
 });
 
+/** §2.23 — finalized STT utterance for bounded live captions. */
+export const zTranscriptSegmentPayload = z.object({
+  sessionId: zUlid,
+  startOffsetMs: z.number().int().nonnegative(),
+  endOffsetMs: z.number().int().nonnegative(),
+  text: z.string(),
+  confidence: z.number().min(0).max(1).nullable(),
+});
+
 /** §2.7 — appliedState is the truth the UI shows (INV-AC-1). */
 export const zAudioControlPayload = z.object({
   roleId: zSourceRoleId,
@@ -257,6 +266,7 @@ export type RecordingArtifactPayload = z.infer<typeof zRecordingArtifactPayload>
 export type ChannelStatePayload = z.infer<typeof zChannelStatePayload>;
 export type SourcesStatusPayload = z.infer<typeof zSourcesStatusPayload>;
 export type AudioLevelsPayload = z.infer<typeof zAudioLevelsPayload>;
+export type TranscriptSegmentPayload = z.infer<typeof zTranscriptSegmentPayload>;
 export type AudioControlPayload = z.infer<typeof zAudioControlPayload>;
 export type StorageStatusPayload = z.infer<typeof zStorageStatusPayload>;
 export type DeviceHealthPayload = z.infer<typeof zDeviceHealthPayload>;
@@ -280,6 +290,7 @@ export const zPanelServerEvent = z.discriminatedUnion('event', [
   z.object({ event: z.literal('channel.state'), payload: zChannelStatePayload }),
   z.object({ event: z.literal('sources.status'), payload: zSourcesStatusPayload }),
   z.object({ event: z.literal('audio.levels'), payload: zAudioLevelsPayload }),
+  z.object({ event: z.literal('transcript.segment'), payload: zTranscriptSegmentPayload }),
   z.object({ event: z.literal('audio.control'), payload: zAudioControlPayload }),
   z.object({ event: z.literal('storage.status'), payload: zStorageStatusPayload }),
   z.object({ event: z.literal('device.health'), payload: zDeviceHealthPayload }),
@@ -309,6 +320,7 @@ export const PANEL_EVENT_NAMES = [
   'channel.state',
   'sources.status',
   'audio.levels',
+  'transcript.segment',
   'audio.control',
   'storage.status',
   'device.health',

@@ -305,6 +305,16 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | Frequency | On state change |
 | Consumers | Firmware admin page progress + rollback outcome (AD-5) |
 
+### 2.23 `transcript.segment` *(live captions)*
+
+| | |
+|---|---|
+| Direction | core-api → authenticated panel connections |
+| Payload | `{sessionId, startOffsetMs, endOffsetMs, text, confidence}` |
+| Emitter | AI ingest after the finalized STT segment is persisted |
+| Frequency | Once per finalized utterance while recording |
+| Consumers | AI Studio live-caption footer; panel retains only the two newest utterances |
+
 ---
 
 ## 3. WebRTC preview signaling (A-17) — separate socket

@@ -3,6 +3,7 @@ import type { Recording } from '@eduscope/shared';
 import { RecordingBadge } from './recording-badge.js';
 import { recordingBadge, type RecordingBadgeLive } from './use-recording-badge.js';
 import { formatBytes, formatDateTime, formatDuration } from './format.js';
+import { RecordingThumbnail } from './recording-thumbnail.js';
 import './library.css';
 
 const DELETE_REASON_COPY: Record<string, string> = {
@@ -66,6 +67,7 @@ export function RecordingRow({
           aria-label={`Select ${rec.title}`}
         />
       ) : null}
+      {!isTombstone ? <RecordingThumbnail recordingId={rec.id} /> : null}
       <button
         type="button"
         className="us-reclist__body"

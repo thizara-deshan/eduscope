@@ -127,9 +127,9 @@ afterAll(async () => {
 });
 
 describe('B-38 exact REST ownership gate', () => {
-  it('partitions exactly 79 B-owned and four server-only operations', () => {
-    expect(allContractOperations).toHaveLength(83);
-    expect(panelOperations).toHaveLength(79);
+  it('partitions exactly 80 B-owned and four server-only operations', () => {
+    expect(allContractOperations).toHaveLength(84);
+    expect(panelOperations).toHaveLength(80);
     expect(panelOperations.map(({ id }) => id).sort()).toEqual([...PANEL_OPERATION_IDS].sort());
   });
 

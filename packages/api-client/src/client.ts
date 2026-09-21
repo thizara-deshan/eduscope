@@ -99,6 +99,8 @@ export interface EduscopeClient {
   retryMergeRecording(recordingId: Ulid): Promise<CommandAccepted>;
   /** Media bytes (openapi.yaml: 200 Blob, 206 partial-content on Range). */
   getRecordingMedia(recordingId: Ulid, fileId: Ulid, query?: { download?: boolean }): Promise<Blob>;
+  /** Compact cached JPEG sampled at 10 seconds for the recording library. */
+  getRecordingThumbnail(recordingId: Ulid): Promise<Blob>;
   listExportTargets(): Promise<UsbVolume[]>;
   /** 202 payload is the queued ExportJob itself, not a bare CommandAccepted. */
   createExport(body: ExportCreateRequest): Promise<ExportJob>;

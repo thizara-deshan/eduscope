@@ -41,6 +41,7 @@ export const OPERATION_ROUTE = {
   deleteRecording: ['DELETE', '/recordings/{recordingId}'],
   retryMergeRecording: ['POST', '/recordings/{recordingId}/retry-merge'],
   getRecordingMedia: ['GET', '/recordings/{recordingId}/files/{fileId}/media'],
+  getRecordingThumbnail: ['GET', '/recordings/{recordingId}/thumbnail.jpg'],
   listExportTargets: ['GET', '/exports/targets'],
   createExport: ['POST', '/exports'],
   getExport: ['GET', '/exports/{exportId}'],

@@ -1,5 +1,5 @@
 import { unlinkSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import type { CommandAccepted, RecordingArtifactPayload } from '@eduscope/shared';
 import { TIMERS } from '@eduscope/shared';
 import { eq } from 'drizzle-orm';
@@ -88,6 +88,11 @@ export function deleteRecordingInternal(
     } catch {
       // already missing on disk — the row is still marked deleted below.
     }
+  }
+  try {
+    unlinkSync(join(recordingsRoot, 'sessions', recording.sessionId, 'thumbnail-10s.jpg'));
+  } catch {
+    // The cache is optional and may never have been generated.
   }
 
   const now = clock.now();

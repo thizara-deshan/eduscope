@@ -2108,6 +2108,37 @@ export type GetRecordingMediaResponses = {
 
 export type GetRecordingMediaResponse = GetRecordingMediaResponses[keyof GetRecordingMediaResponses];
 
+export type GetRecordingThumbnailData = {
+    body?: never;
+    path: {
+        recordingId: Ulid;
+    };
+    query?: never;
+    url: '/recordings/{recordingId}/thumbnail.jpg';
+};
+
+export type GetRecordingThumbnailErrors = {
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    403: Problem;
+    /**
+     * Named error (never a silent no-op — R-04, INV-SB-3).
+     */
+    404: Problem;
+};
+
+export type GetRecordingThumbnailError = GetRecordingThumbnailErrors[keyof GetRecordingThumbnailErrors];
+
+export type GetRecordingThumbnailResponses = {
+    /**
+     * Cached recording thumbnail.
+     */
+    200: Blob | File;
+};
+
+export type GetRecordingThumbnailResponse = GetRecordingThumbnailResponses[keyof GetRecordingThumbnailResponses];
+
 export type ListExportTargetsData = {
     body?: never;
     path?: never;

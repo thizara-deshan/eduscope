@@ -18,9 +18,9 @@ export const PANEL_OPERATION_IDS = [
   // sources (8)
   'listSourceRoles', 'getSourcesStatus', 'getSourcePreview', 'listPhysicalInputs', 'updatePhysicalInput',
   'listSourceBindings', 'updateSourceBinding', 'listAudioControls', 'updateAudioControl',
-  // recordings + exports (9)
+  // recordings + exports (10)
   'listRecordings', 'getRecording', 'deleteRecording', 'retryMergeRecording',
-  'getRecordingMedia', 'listExportTargets', 'createExport', 'getExport', 'cancelExport',
+  'getRecordingMedia', 'getRecordingThumbnail', 'listExportTargets', 'createExport', 'getExport', 'cancelExport',
   // uploads (3)
   'listUploadJobs', 'getUploadJob', 'requeueUploadJob',
   // provisioning (2)
