@@ -64,8 +64,16 @@ class KioskPolicyTest(unittest.TestCase):
         launcher = (KIOSK / "user-launcher.sh").read_text()
         self.assertIn("xhost +SI:localuser:eduscope-pipeline", launcher)
         self.assertIn("snap/chromium/common/edus-kiosk", launcher)
+        self.assertIn("display-hotplug-watch.sh", launcher)
+        self.assertIn('kill "$browser_pid" "$watcher_pid"', launcher)
         self.assertIn("wmctrl -ir \"$window\" -e 0,3840,0,1920,1080", launcher)
         self.assertIn("wmctrl -ir \"$window\" -b add,fullscreen", launcher)
+
+    def test_hotplug_watcher_reapplies_layout_after_drm_change(self):
+        watcher = (KIOSK / "display-hotplug-watch.sh").read_text()
+        self.assertIn("udevadm monitor --udev --subsystem-match=drm", watcher)
+        self.assertIn('[[ "$event" == UDEV*change*drm/card* ]]', watcher)
+        self.assertIn('"$layout" --manifest "$manifest" --profile "$profile"', watcher)
 
 
 if __name__ == "__main__":

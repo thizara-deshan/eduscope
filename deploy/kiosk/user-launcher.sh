@@ -14,6 +14,8 @@ done
 /usr/bin/xdpyinfo -display "$DISPLAY" >/dev/null 2>&1
 /usr/bin/xhost +SI:localuser:eduscope-pipeline >/dev/null
 /opt/eduscope/current/deploy/kiosk/xrandr-layout.sh --manifest "$manifest" --profile "$profile"
+/opt/eduscope/current/deploy/kiosk/display-hotplug-watch.sh &
+watcher_pid=$!
 /usr/bin/mkdir -p -- "$profile_dir"
 
 flags=("--user-data-dir=$profile_dir")
@@ -22,7 +24,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done <"$flags_file"
 /snap/bin/chromium "${flags[@]}" &
 browser_pid=$!
-trap 'kill "$browser_pid" 2>/dev/null || true' EXIT INT TERM
+trap 'kill "$browser_pid" "$watcher_pid" 2>/dev/null || true' EXIT INT TERM
 
 window=
 for ((attempt=0; attempt<60; attempt++)); do

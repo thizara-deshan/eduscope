@@ -2,7 +2,7 @@
 Description=Eduscope pipeline manager
 Requires=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket
 Wants=network-online.target
-After=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket network-online.target graphical.target
+After=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket network-online.target display-manager.service
 
 [Service]
 Type=simple

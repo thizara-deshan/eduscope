@@ -46,14 +46,16 @@ const envelope = (event: string, payload: unknown, seq: number) =>
 
 function renderDetail({
   getRecording,
+  getRecordingMedia = vi.fn(() => new Promise<never>(() => undefined)),
   viewer = lecturer,
 }: {
   getRecording: EduscopeClient['getRecording'];
+  getRecordingMedia?: EduscopeClient['getRecordingMedia'];
   viewer?: User;
 }) {
   useWsStore.getState().reset();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const client = { getRecording, getRecordingMedia: vi.fn(() => new Promise<never>(() => undefined)) } as unknown as EduscopeClient;
+  const client = { getRecording, getRecordingMedia } as unknown as EduscopeClient;
   const wrapper = ({ children }: { children: ReactNode }) => createElement(
     QueryClientProvider, { client: queryClient },
     createElement(ClientContext.Provider, { value: client },
@@ -103,6 +105,23 @@ describe('RecordingDetailScreen (S-22)', () => {
     await waitFor(() => expect(screen.getByText('Lecture 1')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'composite' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'camera-2' })).toBeInTheDocument();
+  });
+
+  it('plays the derived MP4 instead of the intermediate merged transport stream', async () => {
+    const getRecordingMedia = vi.fn(() => new Promise<never>(() => undefined));
+    renderDetail({
+      getRecordingMedia,
+      getRecording: vi.fn(() => Promise.resolve(detail({
+        segmentCount: 2,
+        files: [
+          { id: 'MERGED', recordingId: 'R1', segmentId: null, kind: 'merged', streamKey: 'main', container: 'mpegts', sizeBytes: 2_000, durationMs: 2_000, state: 'finalized', hasAudio: true, isUploadable: false },
+          { id: 'DERIVED', recordingId: 'R1', segmentId: null, kind: 'derived', streamKey: 'main', container: 'mp4', sizeBytes: 1_900, durationMs: 2_000, state: 'finalized', hasAudio: true, isUploadable: true },
+        ],
+      }))),
+    });
+
+    await waitFor(() => expect(getRecordingMedia).toHaveBeenCalledWith('R1', 'DERIVED'));
+    expect(getRecordingMedia).not.toHaveBeenCalledWith('R1', 'MERGED');
   });
 
   it('preparing', async () => {

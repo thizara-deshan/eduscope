@@ -53,10 +53,12 @@ export async function pushEnabledBindings(
   pm: {
     setPublisherBinding(id: PmPublisherId, body: { roleId?: string; address: string; credentials?: { username: string; password: string } }): Promise<PmPublisherCommandAccepted>;
     startPublisher(id: PmPublisherId): Promise<PmPublisherCommandAccepted>;
+    setProjectorConsumer(body: { mode: 'passthrough' }): Promise<unknown>;
   },
   secrets: { get(ref: string): string | null },
 ): Promise<void> {
   const bindings = db.select().from(sourceBindings).where(eq(sourceBindings.enabled, true)).all();
+  let presentationStarted = false;
   for (const binding of bindings) {
     if (!binding.physicalInputId) continue;
     const publisher = publishers[binding.roleId];
@@ -73,5 +75,10 @@ export async function pushEnabledBindings(
     }
     await pm.setPublisherBinding(publisher, { roleId: binding.roleId, address: physical.address, ...(credentials ? { credentials } : {}) });
     await pm.startPublisher(publisher);
+    if (binding.roleId === 'presentation') presentationStarted = true;
   }
+  // The projector is a managed, persistent room output. Restore its safe
+  // default after the presentation publisher is ready so a service restart
+  // cannot leave the physical projector displaying an empty desktop.
+  if (presentationStarted) await pm.setProjectorConsumer({ mode: 'passthrough' });
 }

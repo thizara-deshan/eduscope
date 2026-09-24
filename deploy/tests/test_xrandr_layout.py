@@ -64,7 +64,7 @@ class XrandrLayoutTest(unittest.TestCase):
         self.assertEqual(78, result.returncode)
         self.assertFalse(self.calls.exists())
 
-    def test_demo_uses_hdmi_projector_dp2_meeting_and_dp1_panel(self):
+    def test_demo_uses_current_projector_meeting_and_panel_mapping(self):
         fixture = self.root / "demo.txt"
         fixture.write_text(
             "HDMI-1 connected 1920x1080+0+0\n"
@@ -73,15 +73,30 @@ class XrandrLayoutTest(unittest.TestCase):
         )
         result = self.run_layout(fixture, "--profile", "demo-staging")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("multi-display acceptance open", result.stdout)
+        self.assertIn("optional meeting output connected", result.stdout)
         self.assertEqual([
-            "--output <HDMI-1> <--mode> <1920x1080> <--pos> <0x0> <--output> <DP-2> <--mode> <1920x1080> <--pos> <1920x0> <--output> <DP-1> <--mode> <1920x1080> <--pos> <3840x0> <--primary>",
+            "--output <DP-2> <--mode> <1920x1080> <--pos> <0x0> <--output> <DP-1> <--mode> <1920x1080> <--pos> <3840x0> <--primary> <--output> <HDMI-1> <--mode> <1920x1080> <--pos> <1920x0>",
             "map-to-output <HID 27c0:0818> <DP-1>",
         ], self.calls.read_text().splitlines())
 
-    def test_demo_rejects_a_topology_missing_any_required_output(self):
+    def test_demo_keeps_fixed_outputs_when_optional_meeting_is_disconnected(self):
+        fixture = self.root / "two-display-demo.txt"
+        fixture.write_text(
+            "HDMI-1 disconnected\n"
+            "DP-1 connected 1920x1080+3840+0\n"
+            "DP-2 connected 1920x1080+0+0\n"
+        )
+        result = self.run_layout(fixture, "--profile", "demo-staging")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("optional meeting output disconnected", result.stdout)
+        self.assertEqual([
+            "--output <DP-2> <--mode> <1920x1080> <--pos> <0x0> <--output> <DP-1> <--mode> <1920x1080> <--pos> <3840x0> <--primary> <--output> <HDMI-1> <--off>",
+            "map-to-output <HID 27c0:0818> <DP-1>",
+        ], self.calls.read_text().splitlines())
+
+    def test_demo_rejects_a_topology_missing_a_fixed_output(self):
         fixture = self.root / "bad-demo.txt"
-        fixture.write_text("HDMI-1 connected 1280x800+0+0\n")
+        fixture.write_text("HDMI-1 connected 1920x1080+0+0\nDP-1 connected 1920x1080+1920+0\n")
         result = self.run_layout(fixture, "--profile", "demo-staging")
         self.assertEqual(78, result.returncode)
         self.assertFalse(self.calls.exists())

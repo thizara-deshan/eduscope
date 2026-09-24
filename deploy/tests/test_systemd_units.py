@@ -101,9 +101,15 @@ class SystemdUnitsTest(unittest.TestCase):
         pipeline = self.read("eduscope-pipeline-manager.service")
         self.assertIn("/run/eduscope/slides", pipeline)
 
+    def test_core_api_can_write_artifact_merge_manifests(self):
+        core = self.read("eduscope-core-api.service")
+        self.assertIn("/run/eduscope/artifact", core)
+
     def test_pipeline_manager_can_access_rk3588_media_devices(self):
         pipeline = self.read("eduscope-pipeline-manager.service")
         self.assertIn("Environment=DISPLAY=:0", pipeline)
+        self.assertIn("After=media-eduscope.mount eduscope-runtime-config.service eduscope-helper.socket network-online.target display-manager.service", pipeline)
+        self.assertNotIn("graphical.target", pipeline)
         self.assertIn("DeviceAllow=char-drm rw", pipeline)
         self.assertIn("DeviceAllow=/dev/mpp_service rw", pipeline)
         self.assertIn("DeviceAllow=/dev/rga rw", pipeline)

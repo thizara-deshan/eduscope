@@ -35,6 +35,7 @@ d /run/eduscope/helper 0700 root root -
 d /run/eduscope/pipeline-manager 0750 eduscope-pipeline eduscope -
 d /run/eduscope/previews 0750 eduscope-pipeline eduscope -
 d /run/eduscope/slides 2750 eduscope-pipeline eduscope-media -
+d /run/eduscope/artifact 0750 eduscope-core eduscope-media -
 d /run/eduscope/relay 0710 eduscope-core eduscope -
 f /run/eduscope/relay/nginx-push.conf 0600 root root -
 d /var/lib/eduscope 0750 eduscope-core eduscope-media -

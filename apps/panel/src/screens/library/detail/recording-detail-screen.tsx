@@ -70,9 +70,12 @@ export function RecordingDetailScreen(): JSX.Element {
   const streamKeys = [...new Set(files.map((f) => f.streamKey))];
   const activeStreamKey = streamKey ?? streamKeys[0] ?? null;
   // While preparing/merge-failed there is no merged file yet — play a segment file (C-4/C-5).
+  // `merged` files are intermediate MPEG-TS artifacts. Chromium cannot play
+  // them through the Blob URL used by RecordingPlayer, so a completed
+  // recording must select the browser-ready derived MP4.
   const playableFiles = preparing || mergeFailed
     ? files.filter((f) => f.kind === 'segment')
-    : files.filter((f) => f.kind === 'merged' || f.kind === 'derived');
+    : files.filter((f) => f.kind === 'derived');
   const playingFile = playableFiles.find((f) => f.streamKey === activeStreamKey) ?? playableFiles[0] ?? null;
 
   const meta = [

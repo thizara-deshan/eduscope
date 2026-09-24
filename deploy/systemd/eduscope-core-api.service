@@ -24,7 +24,7 @@ ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/eduscope /run/eduscope/relay /media/eduscope
+ReadWritePaths=/var/lib/eduscope /run/eduscope/artifact /run/eduscope/relay /media/eduscope
 UMask=0007
 
 [Install]

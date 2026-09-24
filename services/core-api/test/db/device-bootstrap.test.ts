@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { openDatabase } from '../../src/db/client.js';
 import { loadDeviceBootstrap, seedBootstrapAdmin, pushEnabledBindings } from '../../src/db/device-bootstrap.js';
 import { migrate } from '../../src/db/migrate.js';
@@ -41,11 +42,25 @@ describe('device bootstrap', () => {
   });
 
   it('pushes all enabled current bindings at startup', async () => {
-    const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap); const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' }); const startPublisher = vi.fn().mockResolvedValue({ commandId: 'y' });
-    await pushEnabledBindings(core.db, { setPublisherBinding, startPublisher }, { get: () => null });
+    const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap); const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' }); const startPublisher = vi.fn().mockResolvedValue({ commandId: 'y' }); const setProjectorConsumer = vi.fn().mockResolvedValue({ consumerId: 'projector:main', state: 'running' });
+    await pushEnabledBindings(core.db, { setPublisherBinding, startPublisher, setProjectorConsumer }, { get: () => null });
     expect(setPublisherBinding).toHaveBeenCalledTimes(5);
     expect(startPublisher).toHaveBeenCalledTimes(5);
     expect(startPublisher.mock.calls.map(([publisherId]) => publisherId)).toEqual(['usb', 'rtsp', 'rtsp2', 'audio', 'audio']);
+    expect(setProjectorConsumer).toHaveBeenCalledOnce();
+    expect(setProjectorConsumer).toHaveBeenCalledWith({ mode: 'passthrough' });
+    expect(setProjectorConsumer.mock.invocationCallOrder[0]).toBeGreaterThan(startPublisher.mock.invocationCallOrder[0]!);
     expect(core.db.select().from(sourceBindings).all()).toHaveLength(5); core.close();
+  });
+
+  it('does not start the projector when the presentation binding is disabled', async () => {
+    const { core } = database(); seed(core, now, new UlidGenerator(), bootstrap);
+    core.db.update(sourceBindings).set({ enabled: false }).where(eq(sourceBindings.roleId, 'presentation')).run();
+    const setPublisherBinding = vi.fn().mockResolvedValue({ commandId: 'x' });
+    const startPublisher = vi.fn().mockResolvedValue({ commandId: 'y' });
+    const setProjectorConsumer = vi.fn();
+    await pushEnabledBindings(core.db, { setPublisherBinding, startPublisher, setProjectorConsumer }, { get: () => null });
+    expect(setProjectorConsumer).not.toHaveBeenCalled();
+    core.close();
   });
 });
