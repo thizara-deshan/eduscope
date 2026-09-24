@@ -10,6 +10,7 @@ SAMPLES_PER_MS = 16  # 16kHz mono
 
 class SpeechRecognizer(Protocol):
     def accept_waveform(self, pcm: bytes) -> bool: ...
+    def partial_result(self) -> Mapping[str, object]: ...
     def result(self) -> Mapping[str, object]: ...
     def final_result(self) -> Mapping[str, object]: ...
 
@@ -22,26 +23,52 @@ class RecognizedUtterance:
     confidence: float | None
 
 
+@dataclass(frozen=True)
+class RecognizedPartial:
+    start_sample: int
+    end_sample: int
+    text: str
+
+
 class RecognizerLoop:
     """Consumes 100ms PCM blocks, tracking `samplesConsumed` for the current
     capture span. `MIN_WORDS_PER_SEGMENT` filtering drops noise utterances
     ("uh") without touching the LLM — stt-service never calls the LLM at all
     (question-service does)."""
 
-    def __init__(self, recognizer: SpeechRecognizer, *, min_words: int = 3) -> None:
+    def __init__(self, recognizer: SpeechRecognizer, *, min_words: int = 3, partial_every_blocks: int = 3) -> None:
         self._recognizer = recognizer
         self._min_words = min_words
         self.samples_consumed = 0
         self._utterance_start_sample = 0
+        self._partial_every_blocks = partial_every_blocks
+        self._blocks_since_partial = 0
+        self._last_partial_text = ""
 
-    def accept_block(self, pcm: bytes) -> RecognizedUtterance | None:
+    def accept_block(self, pcm: bytes) -> tuple[RecognizedUtterance | None, RecognizedPartial | None]:
         is_final = self._recognizer.accept_waveform(pcm)
         self.samples_consumed += len(pcm) // 2
-        if not is_final:
-            return None
-        utterance = self._extract(self._recognizer.result())
-        self._utterance_start_sample = self.samples_consumed
-        return utterance
+        self._blocks_since_partial += 1
+        if is_final:
+            utterance = self._extract(self._recognizer.result())
+            self._utterance_start_sample = self.samples_consumed
+            self._blocks_since_partial = 0
+            self._last_partial_text = ""
+            return utterance, None
+        if self._blocks_since_partial < self._partial_every_blocks:
+            return None, None
+        self._blocks_since_partial = 0
+        raw = self._recognizer.partial_result()
+        text = raw.get("partial")
+        normalized = " ".join(text.split()) if isinstance(text, str) else ""
+        if not normalized or normalized == self._last_partial_text:
+            return None, None
+        self._last_partial_text = normalized
+        return None, RecognizedPartial(
+            start_sample=self._utterance_start_sample,
+            end_sample=self.samples_consumed,
+            text=normalized,
+        )
 
     def flush(self) -> RecognizedUtterance | None:
         utterance = self._extract(self._recognizer.final_result())
@@ -81,6 +108,9 @@ class VoskRecognizer:
 
     def result(self) -> Mapping[str, object]:
         return self._parse(self._kaldi_recognizer.Result())  # type: ignore[attr-defined]
+
+    def partial_result(self) -> Mapping[str, object]:
+        return self._parse(self._kaldi_recognizer.PartialResult())  # type: ignore[attr-defined]
 
     def final_result(self) -> Mapping[str, object]:
         return self._parse(self._kaldi_recognizer.FinalResult())  # type: ignore[attr-defined]

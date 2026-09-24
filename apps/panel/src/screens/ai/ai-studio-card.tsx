@@ -26,6 +26,7 @@ function formatRemaining(ms: number | null): string {
 export function AiStudioCard() {
   const studio = useAiStudio();
   const captions = useWsStore((state) => state.captions);
+  const partialCaption = useWsStore((state) => state.partialCaption);
   const overlays = useOverlays();
   // INV-G-7: the countdown ticks LOCALLY from the absolute `nextAt` — this is
   // the only per-second re-render in the card, never a WS subscription.
@@ -221,9 +222,9 @@ export function AiStudioCard() {
           aria-atomic="true"
           data-testid="ai-live-captions"
         >
-          {captions.length > 0
+          {partialCaption?.text ?? (captions.length > 0
             ? captions.map((caption) => caption.text).join(" ")
-            : "Captions will appear here while you speak."}
+            : "Captions will appear here while you speak.")}
         </div>
       </footer>
     </section>

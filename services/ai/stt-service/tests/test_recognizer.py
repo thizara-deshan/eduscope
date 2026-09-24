@@ -26,6 +26,9 @@ class FakeRecognizer:
     def result(self) -> dict:
         return self._results.pop(0)
 
+    def partial_result(self) -> dict:
+        return {"partial": ""}
+
     def final_result(self) -> dict:
         return self._results.pop(0)
 
@@ -46,7 +49,7 @@ def test_short_utterances_are_filtered_longer_ones_survive() -> None:
     recognizer = FakeRecognizer(is_final_sequence=[True, True, True, True], results=list(results))
     loop = RecognizerLoop(recognizer, min_words=3)
 
-    outcomes = [loop.accept_block(bytes(BLOCK_SIZE)) for _ in range(4)]
+    outcomes = [loop.accept_block(bytes(BLOCK_SIZE))[0] for _ in range(4)]
 
     assert outcomes[0] is None
     assert outcomes[1] is None
@@ -63,8 +66,8 @@ def test_confidence_is_nullable() -> None:
     )
     loop = RecognizerLoop(recognizer, min_words=3)
 
-    with_confidence = loop.accept_block(bytes(BLOCK_SIZE))
-    without_confidence = loop.accept_block(bytes(BLOCK_SIZE))
+    with_confidence = loop.accept_block(bytes(BLOCK_SIZE))[0]
+    without_confidence = loop.accept_block(bytes(BLOCK_SIZE))[0]
 
     assert with_confidence.confidence == 0.75
     assert without_confidence.confidence is None
@@ -78,9 +81,9 @@ def test_sample_bounds_are_monotonic_across_utterances() -> None:
     loop = RecognizerLoop(recognizer, min_words=3)
 
     loop.accept_block(bytes(BLOCK_SIZE))  # not final, no utterance
-    first = loop.accept_block(bytes(BLOCK_SIZE))
+    first = loop.accept_block(bytes(BLOCK_SIZE))[0]
     loop.accept_block(bytes(BLOCK_SIZE))  # not final, no utterance
-    second = loop.accept_block(bytes(BLOCK_SIZE))
+    second = loop.accept_block(bytes(BLOCK_SIZE))[0]
 
     assert first.start_sample == 0
     assert first.end_sample == 2 * (BLOCK_SIZE // 2)
@@ -135,12 +138,16 @@ class TestVoskRecognizerAdapter:
             def Result(self) -> str:
                 return '{"text": "one two three"}'
 
+            def PartialResult(self) -> str:
+                return '{"partial": "one two"}'
+
             def FinalResult(self) -> str:
                 return '{"text": "final words here"}'
 
         adapter = VoskRecognizer(RawKaldi())
         assert adapter.accept_waveform(b"\x00\x00") is True
         assert adapter.result() == {"text": "one two three"}
+        assert adapter.partial_result() == {"partial": "one two"}
         assert adapter.final_result() == {"text": "final words here"}
 
     def test_invalid_json_result_yields_empty_mapping(self) -> None:
@@ -151,9 +158,35 @@ class TestVoskRecognizerAdapter:
             def Result(self) -> str:
                 return "not json"
 
+            def PartialResult(self) -> str:
+                return "not json"
+
             def FinalResult(self) -> str:
                 return ""
 
         adapter = VoskRecognizer(BrokenKaldi())
         assert adapter.result() == {}
+        assert adapter.partial_result() == {}
         assert adapter.final_result() == {}
+
+
+def test_partial_results_are_throttled_and_deduplicated() -> None:
+    class PartialRecognizer:
+        def __init__(self) -> None:
+            self.partials = iter([{"partial": "hello"}, {"partial": "hello"}, {"partial": "hello class"}])
+
+        def accept_waveform(self, pcm: bytes) -> bool:
+            return False
+
+        def partial_result(self) -> dict:
+            return next(self.partials)
+
+        def result(self) -> dict:
+            return {}
+
+        def final_result(self) -> dict:
+            return {}
+
+    loop = RecognizerLoop(PartialRecognizer(), partial_every_blocks=3)
+    outcomes = [loop.accept_block(bytes(BLOCK_SIZE))[1] for _ in range(9)]
+    assert [item.text for item in outcomes if item is not None] == ["hello", "hello class"]

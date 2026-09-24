@@ -86,7 +86,7 @@ describe('E-50 contract ownership and count audit', () => {
   });
 
   it('declares exactly 23 panel events', () => {
-    expect(PANEL_EVENT_NAMES.length).toBe(23);
+    expect(PANEL_EVENT_NAMES.length).toBe(24);
   });
 
   it('retains exactly five preview-signaling messages (compatibility inventory, no production client-domain mapping)', () => {

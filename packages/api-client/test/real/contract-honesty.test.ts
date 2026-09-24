@@ -46,7 +46,7 @@ describe('E-06 real-stack contract honesty', () => {
 
   it('advertises the closed browser surface and no server-only quiz-sync method', () => {
     expect(PANEL_OPERATION_IDS).toHaveLength(80);
-    expect(PANEL_EVENT_NAMES).toHaveLength(23);
+    expect(PANEL_EVENT_NAMES).toHaveLength(24);
     expect(stack.capabilities).toEqual({
       panelOperations: 80,
       studentOperations: 3,

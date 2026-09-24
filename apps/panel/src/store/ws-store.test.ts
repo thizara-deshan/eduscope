@@ -101,6 +101,25 @@ describe('ws store', () => {
     expect(useWsStore.getState().captions).toEqual([]);
   });
 
+  it('replaces partial captions in place and clears them on finalization', () => {
+    const sessionId = '01J00000000000000000000001';
+    const s = useWsStore.getState();
+    s.ingest(envelope('recording.state', { state: 'recording', sessionId }, 0));
+    s.ingest(envelope('transcript.partial', {
+      sessionId, startOffsetMs: 0, endOffsetMs: 300, text: 'energy is',
+    }, 1));
+    s.ingest(envelope('transcript.partial', {
+      sessionId, startOffsetMs: 0, endOffsetMs: 600, text: 'energy is conserved',
+    }, 2));
+    expect(useWsStore.getState().partialCaption?.text).toBe('energy is conserved');
+
+    s.ingest(envelope('transcript.segment', {
+      sessionId, startOffsetMs: 0, endOffsetMs: 900, text: 'Energy is conserved.', confidence: 0.9,
+    }, 3));
+    expect(useWsStore.getState().partialCaption).toBeNull();
+    expect(useWsStore.getState().captions.at(-1)?.text).toBe('Energy is conserved.');
+  });
+
   it('drops cleared alerts rather than growing forever on a weeks-long uptime', () => {
     const s = useWsStore.getState();
     s.ingest(envelope('system.alert', { id: 'A1', code: 'source.offline', clearedAt: null }, 0));

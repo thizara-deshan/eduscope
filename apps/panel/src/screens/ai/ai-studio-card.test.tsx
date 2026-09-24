@@ -81,6 +81,18 @@ describe('AiStudioCard', () => {
     );
   });
 
+  it('shows the latest partial hypothesis immediately in the single-line footer', () => {
+    renderCard();
+    act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown(), 0)));
+    act(() => useWsStore.getState().ingest(envelope('transcript.partial', {
+      sessionId: '01J00000000000000000000001',
+      startOffsetMs: 0,
+      endOffsetMs: 600,
+      text: 'Energy cannot be',
+    }, 1)));
+    expect(screen.getByTestId('ai-live-captions')).toHaveTextContent('Energy cannot be');
+  });
+
   it('generating: the button reads Generating… and is disabled', () => {
     renderCard();
     act(() => useWsStore.getState().ingest(envelope('ai.countdown', countdown({ state: 'generating' }), 0)));

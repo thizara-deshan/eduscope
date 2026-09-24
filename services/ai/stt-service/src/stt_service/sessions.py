@@ -8,7 +8,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .events import SttSegmentEvent, SttStateEvent
+from .events import SttPartialEvent, SttSegmentEvent, SttStateEvent
 from .reader import DropOldestPcmRing
 from .recognizer import RecognizedUtterance, RecognizerLoop, SpeechRecognizer
 
@@ -230,7 +230,14 @@ class SttSessionController:
                 degraded = False
                 self._state = "listening"
                 self._broker.publish("evt.stt.state", SttStateEvent(sessionId=session_id, state="listening"))
-            utterance = recognizer_loop.accept_block(block)
+            utterance, partial = recognizer_loop.accept_block(block)
+            if partial is not None:
+                self._broker.publish("evt.stt.partial", SttPartialEvent(
+                    sessionId=session_id,
+                    startOffsetMs=self._anchor_offset_ms + partial.start_sample // SAMPLES_PER_MS,
+                    endOffsetMs=self._anchor_offset_ms + partial.end_sample // SAMPLES_PER_MS,
+                    text=partial.text,
+                ))
             if utterance is not None:
                 self._emit_segment(utterance)
 

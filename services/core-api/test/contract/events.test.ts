@@ -19,6 +19,7 @@ const PANEL_SAMPLES: Record<PanelEventName, unknown> = {
   'sources.status': { roleId: 'presentation', state: 'online', detail: null, since: AT, inputId: ID },
   'audio.levels': { roleId: 'mic-lecturer', rms: 0.5 },
   'transcript.segment': { sessionId: ID, startOffsetMs: 0, endOffsetMs: 1000, text: 'Live caption', confidence: 0.9 },
+  'transcript.partial': { sessionId: ID, startOffsetMs: 0, endOffsetMs: 500, text: 'Live' },
   'audio.control': { roleId: 'mic-lecturer', gain: 80, muted: false, appliedState: 'applied', lastError: null },
   'storage.status': { pressure: 'ok', freeBytes: 10, totalBytes: 20, policy: { maxAgeDays: 14, warningThresholdPct: 80, criticalThresholdPct: 90, earlyDeleteOrder: 'uploaded-oldest-first', neverDeleteUnuploaded: true, refuseStartWhenCritical: true } },
   'device.health': { captureCardState: 'present', publisherStates: {}, ntpSynced: true, clockOffsetMs: 0, diskHealth: 'good', lastBootAt: AT },
@@ -38,8 +39,8 @@ const PANEL_SAMPLES: Record<PanelEventName, unknown> = {
 };
 
 describe('B-38 exact event ownership gate', () => {
-  it('exercises exactly all 23 panel payload union members', () => {
-    expect(PANEL_EVENT_NAMES).toHaveLength(23);
+  it('exercises exactly all 24 panel payload union members', () => {
+    expect(PANEL_EVENT_NAMES).toHaveLength(24);
     expect(Object.keys(PANEL_SAMPLES).sort()).toEqual([...PANEL_EVENT_NAMES].sort());
     for (const event of PANEL_EVENT_NAMES) {
       expect(zPanelServerEvent.safeParse({ event, payload: PANEL_SAMPLES[event] }).success, event).toBe(true);

@@ -28,6 +28,9 @@ class ScriptedRecognizer:
     def result(self) -> dict:
         return self._results.pop(0) if self._results else {}
 
+    def partial_result(self) -> dict:
+        return {"partial": ""}
+
     def final_result(self) -> dict:
         return self._results.pop(0) if self._results else {}
 

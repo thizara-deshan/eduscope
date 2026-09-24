@@ -224,6 +224,11 @@ export class AiIngest implements LifecycleComponent {
       try {
         const response = await this.#deps.stt.openEventStream(signal);
         for await (const frame of parseAiSseStream(response.body!, signal)) {
+          if (frame.event === 'evt.stt.partial') {
+            const data = frame.data as { startOffsetMs: number; endOffsetMs: number; text: string };
+            this.#deps.bus.publish('transcript.partial', { sessionId, ...data });
+            continue;
+          }
           if (frame.event !== 'evt.stt.segment') continue;
           const data = frame.data as {
             startOffsetMs: number;

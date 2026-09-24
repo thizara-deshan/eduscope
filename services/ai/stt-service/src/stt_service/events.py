@@ -19,6 +19,16 @@ class SttSegmentEvent(BaseModel):
     modelVersion: str
 
 
+class SttPartialEvent(BaseModel):
+    """Ephemeral, throttled recognition hypothesis for low-latency captions."""
+
+    model_config = ConfigDict(extra="forbid")
+    sessionId: str
+    startOffsetMs: int
+    endOffsetMs: int
+    text: str
+
+
 class SttStateEvent(BaseModel):
     """`evt.stt.state` (§1.4) — e.g. `degraded{no-audio}` when the shm reader
     has delivered no samples for `NO_AUDIO_AFTER_SEC`, back to `listening` on

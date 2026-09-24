@@ -6,7 +6,7 @@ import type {
   QuizPublicationPayload, QuizResponsesPayload,
   QuizSessionPayload, RecordingArtifactPayload, RecordingSegmentPayload, RecordingStatePayload,
   SourceRoleId, SourcesStatusPayload, StorageStatusPayload, SystemAlert, UploadJobPayload,
-  TranscriptSegmentPayload, UploadPartPayload, UsbVolumesPayload,
+  TranscriptPartialPayload, TranscriptSegmentPayload, UploadPartPayload, UsbVolumesPayload,
 } from '@eduscope/shared';
 import type { AdapterDomain } from '@eduscope/api-client';
 import { DOMAIN_SLICE_KEYS, hasSeqGap, isStale } from './connection.js';
@@ -25,6 +25,8 @@ export interface WsState {
   lastSegment: RecordingSegmentPayload | null;
   /** Finalized live captions only; bounded to the two newest utterances. */
   captions: TranscriptSegmentPayload[];
+  /** Latest ephemeral Vosk hypothesis; replaced in place and never retained. */
+  partialCaption: TranscriptPartialPayload | null;
   expectedShutdown: boolean;
   sources: Partial<Record<SourcesStatusPayload['roleId'], SourcesStatusPayload>>;
   channels: Partial<Record<ChannelStatePayload['channelId'], ChannelStatePayload>>;
@@ -86,7 +88,7 @@ export interface WsState {
 }
 
 const EMPTY = {
-  recording: null, audioControls: {}, lastSegment: null, captions: [], expectedShutdown: false,
+  recording: null, audioControls: {}, lastSegment: null, captions: [], partialCaption: null, expectedShutdown: false,
   sources: {}, channels: {}, storage: null, deviceHealth: null,
   aiCountdown: null, aiSet: null, questions: {}, quizSession: null, publications: {}, responses: null, alerts: {},
   artifacts: {}, uploadJobs: {}, uploadParts: {}, exportJobs: {}, usbVolumes: null,
@@ -135,11 +137,19 @@ export const useWsStore = create<WsState>((set, get) => ({
         case 'recording.state': {
           const active = envelope.payload.state === 'recording' || envelope.payload.state === 'paused';
           const sameSession = envelope.payload.sessionId === get().recording?.sessionId;
-          return { recording: envelope.payload, captions: active && sameSession ? get().captions : [] };
+          return {
+            recording: envelope.payload,
+            captions: active && sameSession ? get().captions : [],
+            partialCaption: envelope.payload.state === 'recording' && sameSession ? get().partialCaption : null,
+          };
+        }
+        case 'transcript.partial': {
+          if (envelope.payload.sessionId !== get().recording?.sessionId) return {};
+          return { partialCaption: envelope.payload };
         }
         case 'transcript.segment': {
           if (envelope.payload.sessionId !== get().recording?.sessionId) return {};
-          return { captions: [...get().captions.slice(-1), envelope.payload] };
+          return { captions: [...get().captions.slice(-1), envelope.payload], partialCaption: null };
         }
         case 'audio.control':
           return {

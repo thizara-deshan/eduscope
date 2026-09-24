@@ -39,6 +39,7 @@ const SAMPLES: Record<PanelEventName, unknown> = {
   'sources.status': { roleId: 'presentation', state: 'online', detail: null, since: AT, inputId: id() },
   'audio.levels': { roleId: 'mic-lecturer', rms: 0.42 },
   'transcript.segment': { sessionId: id(), startOffsetMs: 0, endOffsetMs: 1000, text: 'Live caption', confidence: 0.9 },
+  'transcript.partial': { sessionId: id(), startOffsetMs: 0, endOffsetMs: 500, text: 'Live' },
   'audio.control': { roleId: 'mic-lecturer', gain: 80, muted: false, appliedState: 'applied', lastError: null },
   'storage.status': {
     pressure: 'ok', freeBytes: 500_000_000_000, totalBytes: 1_000_000_000_000,
@@ -131,7 +132,7 @@ async function waitFor(check: () => boolean, timeoutMs = 3000): Promise<void> {
   }
 }
 
-describe('panel events contract (events.md §2 — all 23 PANEL_EVENT_NAMES)', () => {
+describe('panel events contract (events.md §2 — all 24 PANEL_EVENT_NAMES)', () => {
   let testApp: TestApp | undefined;
 
   afterEach(async () => {
@@ -141,9 +142,9 @@ describe('panel events contract (events.md §2 — all 23 PANEL_EVENT_NAMES)', (
     testApp = undefined;
   });
 
-  it('declares exactly 23 panel event names', () => {
-    expect(PANEL_EVENT_NAMES.length).toBe(23);
-    expect(Object.keys(SAMPLES).length).toBe(23);
+  it('declares exactly 24 panel event names', () => {
+    expect(PANEL_EVENT_NAMES.length).toBe(24);
+    expect(Object.keys(SAMPLES).length).toBe(24);
   });
 
   it('serializes a contract-valid envelope for every PANEL_EVENT_NAMES member through the real hub', async () => {

@@ -157,6 +157,7 @@ export const PANEL_EVENT_DOMAIN = {
   'sources.status': 'sourcesAudio',
   'audio.levels': 'sourcesAudio',
   'transcript.segment': 'aiQuiz',
+  'transcript.partial': 'aiQuiz',
   'audio.control': 'sourcesAudio',
   'storage.status': 'storage',
   'device.health': 'provisioningHealth',

@@ -85,6 +85,9 @@ class _FixtureRecognizer:
     def result(self) -> dict:
         return {"text": _STT_PHRASE, "confidence": _STT_CONFIDENCE}
 
+    def partial_result(self) -> dict:
+        return {"partial": _STT_PHRASE}
+
     def final_result(self) -> dict:
         return {"text": _STT_PHRASE, "confidence": _STT_CONFIDENCE}
 

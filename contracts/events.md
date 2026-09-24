@@ -315,6 +315,16 @@ Zod: `PanelServerEvent` (discriminated union over `event`).
 | Frequency | Once per finalized utterance while recording |
 | Consumers | AI Studio live-caption footer; panel retains only the two newest utterances |
 
+### 2.24 `transcript.partial` *(low-latency live captions)*
+
+| | |
+|---|---|
+| Direction | core-api → authenticated panel connections |
+| Payload | `{sessionId, startOffsetMs, endOffsetMs, text}` |
+| Emitter | AI ingest from a changed Vosk partial hypothesis, throttled to at most ~3.3 Hz |
+| Frequency | While speech is in progress; ephemeral and never persisted |
+| Consumers | AI Studio single-line live-caption footer; replaced by the finalized segment |
+
 ---
 
 ## 3. WebRTC preview signaling (A-17) — separate socket

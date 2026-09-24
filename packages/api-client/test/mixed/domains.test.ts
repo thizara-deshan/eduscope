@@ -39,8 +39,8 @@ describe('adapter domain catalog', () => {
 
   it('assigns every one of the 23 panel events a domain exactly once', () => {
     const keys = Object.keys(PANEL_EVENT_DOMAIN);
-    expect(keys).toHaveLength(23);
-    expect(PANEL_EVENT_NAMES).toHaveLength(23);
+    expect(keys).toHaveLength(24);
+    expect(PANEL_EVENT_NAMES).toHaveLength(24);
     for (const name of PANEL_EVENT_NAMES) {
       expect(PANEL_EVENT_DOMAIN[name], `no domain for event ${name}`).toBeTruthy();
     }

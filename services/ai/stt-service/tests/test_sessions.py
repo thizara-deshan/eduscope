@@ -34,6 +34,9 @@ class ScriptedRecognizer:
     def result(self) -> dict:
         return self._results.pop(0)
 
+    def partial_result(self) -> dict:
+        return {"partial": ""}
+
     def final_result(self) -> dict:
         return self._results.pop(0)
 
@@ -43,6 +46,9 @@ class CrashingRecognizer:
         raise RuntimeError("acoustic model died")
 
     def result(self) -> dict:
+        return {}
+
+    def partial_result(self) -> dict:
         return {}
 
     def final_result(self) -> dict:
